@@ -4,9 +4,11 @@ import '../../models/quote_contract_model.dart';
 import '../../models/contract_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/common/loading_indicator.dart';
+import '../../widgets/common/support_fab_wrapper.dart';
 import 'quote_detail_screen.dart';
 import 'contract_detail_screen.dart';
 import '../../utils/snackbar_helper.dart';
+import 'payment_screen.dart';
 
 class QuotesContractsScreen extends StatefulWidget {
   const QuotesContractsScreen({super.key});
@@ -81,113 +83,125 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mes Devis et Contrats'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(80),
-          child: Column(
-            children: [
-              // Message de swipe subtil au-dessus des onglets
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.swipe_outlined,
-                      size: 16,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Glissez pour naviguer entre les sections',
-                      style: TextStyle(
-                        fontSize: 12,
+    return SupportFabWrapper(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Mes Devis et Contrats'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(80),
+            child: Column(
+              children: [
+                // Message de swipe subtil au-dessus des onglets
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.swipe_outlined,
+                        size: 16,
                         color: Colors.white.withOpacity(0.7),
-                        fontStyle: FontStyle.italic,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        'Glissez pour naviguer entre les sections',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.7),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicator: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0a543d).withOpacity(0.3),
-                        blurRadius: 8,
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicatorPadding: const EdgeInsets.all(4),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: const Color(0xFF0a543d),
-                  labelStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  unselectedLabelStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  tabs: [
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.description_outlined, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Devis (${_quotes.length})'),
-                        ],
+                  child: TabBar(
+                    controller: _tabController,
+                    indicator: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
                       ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0a543d).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.assignment_outlined, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Contrats (${_contracts.length})'),
-                        ],
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicatorPadding: const EdgeInsets.all(4),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: const Color(0xFF0a543d),
+                    labelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    tabs: [
+                      Tab(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.description_outlined, size: 18),
+                            const SizedBox(width: 6),
+                            Text('Devis (${_quotes.length})'),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      Tab(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.assignment_outlined, size: 18),
+                            const SizedBox(width: 6),
+                            Text('Contrats (${_contracts.length})'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+              fit: BoxFit.cover,
+              opacity: 0.4,
+            ),
+          ),
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // Onglet Devis
+              _buildQuotesTab(),
+              // Onglet Contrats
+              _buildContractsTab(),
             ],
           ),
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          // Onglet Devis
-          _buildQuotesTab(),
-          // Onglet Contrats
-          _buildContractsTab(),
-        ],
       ),
     );
   }
@@ -217,16 +231,35 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
 
     if (_quotes.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.description_outlined, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'Aucun devis trouvé',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-          ],
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.description_outlined,
+                  size: 64, color: const Color(0xFF0a543d).withOpacity(0.6)),
+              const SizedBox(height: 16),
+              Text(
+                'Aucun devis trouvé',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[700]),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -269,16 +302,35 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
 
     if (_contracts.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.assignment_outlined, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'Aucun contrat trouvé',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-          ],
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.assignment_outlined,
+                  size: 64, color: const Color(0xFF0a543d).withOpacity(0.6)),
+              const SizedBox(height: 16),
+              Text(
+                'Aucun contrat trouvé',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[700]),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -349,6 +401,64 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
                   ),
                 ],
               ),
+              // Badge de statut de paiement pour les devis acceptés
+              if (quote.status == 'accepted' &&
+                  quote.paymentStatus != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: quote.paymentStatus == 'paid'
+                            ? Colors.green.withOpacity(0.2)
+                            : quote.paymentStatus == 'deferred'
+                                ? Colors.blue.withOpacity(0.2)
+                                : Colors.orange.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            quote.paymentStatus == 'paid'
+                                ? Icons.check_circle
+                                : quote.paymentStatus == 'deferred'
+                                    ? Icons.schedule
+                                    : Icons.hourglass_empty,
+                            size: 14,
+                            color: quote.paymentStatus == 'paid'
+                                ? Colors.green.shade700
+                                : quote.paymentStatus == 'deferred'
+                                    ? Colors.blue.shade700
+                                    : Colors.orange.shade700,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            quote.paymentStatus == 'paid'
+                                ? 'Payé'
+                                : quote.paymentStatus == 'deferred'
+                                    ? 'Paiement reporté'
+                                    : 'Paiement en attente',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: quote.paymentStatus == 'paid'
+                                  ? Colors.green.shade700
+                                  : quote.paymentStatus == 'deferred'
+                                      ? Colors.blue.shade700
+                                      : Colors.orange.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 quote.title,
@@ -422,12 +532,349 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
   }
 
   Future<void> _acceptQuote(String quoteId) async {
+    // Premier dialog: choisir entre exécution immédiate ou planification
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Accepter le devis'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Comment souhaitez-vous procéder ?',
+              style: TextStyle(fontSize: 14, color: Colors.black54),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.pop(context, 'immediate'),
+                icon: const Icon(Icons.flash_on, color: Colors.white),
+                label: const Text('Exécuter immédiatement'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0a543d),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Le technicien est sur place',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context, 'schedule'),
+                icon: const Icon(Icons.calendar_today),
+                label: const Text('Planifier pour plus tard'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0a543d),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: const BorderSide(color: Color(0xFF0a543d)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Choisir une date et heure',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null) return;
+
+    if (choice == 'immediate') {
+      await _processAcceptQuote(quoteId, executeNow: true);
+    } else {
+      await _showScheduleDialog(quoteId);
+    }
+  }
+
+  Future<void> _showScheduleDialog(String quoteId) async {
+    DateTime? selectedDate;
+    TimeOfDay? selectedTime;
+    final secondContactController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Planifier l\'intervention'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Veuillez remplir les informations suivantes :',
+                  style: TextStyle(fontSize: 14, color: Colors.black54),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: secondContactController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Second contact',
+                    hintText: 'Optionnel',
+                    prefixIcon: const Icon(Icons.phone, size: 20),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  readOnly: true,
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now().add(const Duration(days: 1)),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      locale: const Locale('fr', 'FR'),
+                    );
+                    if (date != null) {
+                      setDialogState(() => selectedDate = date);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Date',
+                    hintText: selectedDate == null
+                        ? 'Sélectionner'
+                        : DateFormat('dd/MM/yyyy').format(selectedDate!),
+                    prefixIcon: const Icon(Icons.calendar_today, size: 20),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  readOnly: true,
+                  enabled: selectedDate != null,
+                  onTap: selectedDate == null
+                      ? null
+                      : () async {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.now(),
+                          );
+                          if (time != null) {
+                            setDialogState(() => selectedTime = time);
+                          }
+                        },
+                  decoration: InputDecoration(
+                    labelText: 'Heure',
+                    hintText: selectedTime == null
+                        ? 'Sélectionner'
+                        : selectedTime!.format(context),
+                    prefixIcon: Icon(Icons.access_time,
+                        size: 20,
+                        color: selectedDate == null ? Colors.grey : null),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: selectedDate != null && selectedTime != null
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0a543d),
+              ),
+              child: const Text('Confirmer'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || selectedDate == null || selectedTime == null)
+      return;
+
+    final scheduledDateTime = DateTime(
+      selectedDate!.year,
+      selectedDate!.month,
+      selectedDate!.day,
+      selectedTime!.hour,
+      selectedTime!.minute,
+    );
+
+    final secondContact = secondContactController.text.trim();
+    await _processAcceptQuote(
+      quoteId,
+      scheduledDate: scheduledDateTime,
+      secondContact: secondContact.isNotEmpty ? secondContact : null,
+    );
+  }
+
+  Future<void> _processAcceptQuote(
+    String quoteId, {
+    DateTime? scheduledDate,
+    bool executeNow = false,
+    String? secondContact,
+  }) async {
     try {
-      await _apiService.acceptQuote(quoteId);
+      await _apiService.acceptQuote(
+        quoteId,
+        scheduledDate: scheduledDate,
+        executeNow: executeNow,
+        secondContact: secondContact,
+      );
       if (mounted) {
+        // Si c'est une intervention planifiée pour plus tard
+        if (!executeNow && scheduledDate != null) {
+          // Afficher confirmation avec date planifiée, pas de redirection paiement
+          final formattedDate =
+              '${scheduledDate.day.toString().padLeft(2, '0')}/${scheduledDate.month.toString().padLeft(2, '0')}/${scheduledDate.year}';
+          final formattedTime =
+              '${scheduledDate.hour.toString().padLeft(2, '0')}:${scheduledDate.minute.toString().padLeft(2, '0')}';
+
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              icon:
+                  const Icon(Icons.check_circle, color: Colors.green, size: 48),
+              title: const Text('Devis accepté'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Votre intervention est planifiée pour :',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0a543d).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.calendar_today,
+                            color: Color(0xFF0a543d)),
+                        const SizedBox(width: 8),
+                        Text(
+                          '$formattedDate à $formattedTime',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Color(0xFF0a543d),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Le paiement sera effectué le jour de l\'intervention.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0a543d),
+                  ),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+
+          _loadQuotes();
+          return;
+        }
+
+        // Exécution immédiate → rediriger vers paiement
         SnackBarHelper.showSuccess(context, 'Devis accepté avec succès',
             emoji: '✓');
-        _loadQuotes(); // Rafraîchir la liste
+
+        // 🛒 Récupérer la liste des commandes pour trouver celle qui vient d'être créée
+        try {
+          final ordersResponse = await _apiService.get('/orders');
+          print('🔍 DEBUG Orders response: $ordersResponse');
+
+          final orders =
+              (ordersResponse['data'] as List?)?.cast<Map<String, dynamic>>() ??
+                  [];
+          print('🔍 DEBUG Nombre de commandes: ${orders.length}');
+
+          if (orders.isNotEmpty) {
+            print('🔍 DEBUG Première commande: ${orders.first}');
+          }
+
+          final quoteIdInt = int.tryParse(quoteId);
+          print('🔍 DEBUG Recherche commande pour quoteId: $quoteIdInt');
+
+          // Trouver la commande la plus récente liée à ce devis
+          final recentOrder = orders.firstWhere(
+            (order) {
+              final orderQuoteId = order['quoteId'];
+              print('🔍 DEBUG Order ${order['id']}: quoteId=$orderQuoteId');
+              return orderQuoteId == quoteIdInt ||
+                  orderQuoteId.toString() == quoteId;
+            },
+            orElse: () => <String, dynamic>{},
+          );
+
+          print('🔍 DEBUG Commande trouvée: $recentOrder');
+
+          if (recentOrder.isNotEmpty && recentOrder['id'] != null) {
+            print(
+                '✅ Navigation vers paiement pour commande ${recentOrder['id']}');
+            // Naviguer directement vers l'écran de paiement
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PaymentScreen(
+                  invoiceId: recentOrder['id'].toString(),
+                  invoiceNumber: recentOrder['reference'] ?? 'N/A',
+                  amount: (recentOrder['totalAmount'] ?? 0).toDouble(),
+                ),
+              ),
+            ).then((_) => _loadQuotes()); // Rafraîchir après retour du paiement
+          } else {
+            print('⚠️  Aucune commande trouvée, rafraîchissement normal');
+            // Si pas de commande trouvée, rafraîchir normalement
+            _loadQuotes();
+          }
+        } catch (e) {
+          print('⚠️  Erreur récupération commande: $e');
+          // En cas d'erreur, rafraîchir normalement
+          _loadQuotes();
+        }
       }
     } catch (e) {
       if (mounted) {

@@ -29,7 +29,7 @@ class _SplashScreenState extends State<SplashScreen>
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
-    );
+    )..repeat(); // Animation en boucle pour les points de chargement
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
@@ -54,8 +54,6 @@ class _SplashScreenState extends State<SplashScreen>
         curve: const Interval(0.3, 0.8, curve: Curves.easeOutCubic),
       ),
     );
-
-    _animationController.forward();
   }
 
   Future<void> _checkAuthentication() async {
@@ -125,171 +123,201 @@ class _SplashScreenState extends State<SplashScreen>
       body: Container(
         height: size.height,
         width: size.width,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0a543d),
-              Color(0xFF0d6b4d),
-              Color(0xFF0f7d59),
-            ],
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/image_smart_maintenance.jpeg'),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Colors.black.withOpacity(0.3),
+              BlendMode.darken,
+            ),
           ),
         ),
-        child: SafeArea(
-          child: AnimatedBuilder(
-            animation: _animationController,
-            builder: (context, child) {
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF0a543d).withOpacity(0.7),
+                const Color(0xFF0d6b4d).withOpacity(0.6),
+                const Color(0xFF0f7d59).withOpacity(0.5),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+          ),
+          child: SafeArea(
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Spacer(),
 
-                  // Logo avec animation
-                  FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: ScaleTransition(
-                      scale: _scaleAnimation,
-                      child: Container(
-                        padding: const EdgeInsets.all(32),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(40),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.3),
-                            width: 3,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 40,
-                              offset: const Offset(0, 15),
-                            ),
-                          ],
-                        ),
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          width: 120,
-                          height: 120,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 48),
-
-                  // Titre avec animation
-                  SlideTransition(
-                    position: _slideAnimation,
-                    child: FadeTransition(
+                    // Logo avec animation et effet glass
+                    FadeTransition(
                       opacity: _fadeAnimation,
-                      child: Column(
-                        children: [
-                          Text(
-                            'Smart Maintenance',
-                            style: GoogleFonts.poppins(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 1.5,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black.withOpacity(0.4),
-                                  offset: const Offset(0, 6),
-                                  blurRadius: 15,
+                      child: ScaleTransition(
+                        scale: _scaleAnimation,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.25),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withOpacity(0.15),
+                                  blurRadius: 30,
+                                  spreadRadius: 5,
                                 ),
                               ],
                             ),
-                            textAlign: TextAlign.center,
+                            child: Image.asset(
+                              'assets/images/logo_smart_nom.png',
+                              width: 420,
+                              fit: BoxFit.contain,
+                            ),
                           ),
-                          const SizedBox(height: 12),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 48),
+
+                    // Titre avec animation
+                    SlideTransition(
+                      position: _slideAnimation,
+                      child: FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: Column(
+                          children: [
+                            Text(
+                              'Smart Maintenance',
+                              style: GoogleFonts.poppins(
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 1.5,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.4),
+                                    offset: const Offset(0, 6),
+                                    blurRadius: 15,
+                                  ),
+                                ],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Votre solution de maintenance',
+                              style: GoogleFonts.poppins(
+                                fontSize: 15,
+                                color: Colors.white.withOpacity(0.9),
+                                fontWeight: FontWeight.w400,
+                                letterSpacing: 0.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const Spacer(),
+
+                    // Indicateur de chargement moderne
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(3, (index) {
+                              return AnimatedBuilder(
+                                animation: _animationController,
+                                builder: (context, child) {
+                                  final delay = index * 0.2;
+                                  final progress =
+                                      (_animationController.value + delay) %
+                                          1.0;
+                                  final scale = 0.5 +
+                                      (0.5 * (1 - (progress - 0.5).abs() * 2));
+                                  final opacity = 0.3 +
+                                      (0.7 * (1 - (progress - 0.5).abs() * 2));
+
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 6),
+                                    width: 14,
+                                    height: 14,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(opacity),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.white.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
+                                    ),
+                                    transform: Matrix4.identity()..scale(scale),
+                                  );
+                                },
+                              );
+                            }),
+                          ),
+                          const SizedBox(height: 20),
                           Text(
-                            'Votre solution de maintenance',
+                            'Chargement...',
                             style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              color: Colors.white.withOpacity(0.9),
-                              fontWeight: FontWeight.w400,
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.8),
+                              fontWeight: FontWeight.w500,
                               letterSpacing: 0.5,
                             ),
-                            textAlign: TextAlign.center,
                           ),
                         ],
                       ),
                     ),
-                  ),
 
-                  const Spacer(),
+                    const SizedBox(height: 60),
 
-                  // Indicateur de chargement moderne
-                  FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 50,
-                          height: 50,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
-                              width: 2,
+                    // Footer
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: Column(
+                        children: [
+                          Text(
+                            'Smart Maintenance by MCT © 2026',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: Colors.white.withOpacity(0.7),
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.5,
                             ),
                           ),
-                          child: const CircularProgressIndicator(
-                            strokeWidth: 3,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Version 1.0.0',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.white.withOpacity(0.5),
+                              fontWeight: FontWeight.w400,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Chargement...',
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.8),
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 60),
-
-                  // Footer
-                  FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Column(
-                      children: [
-                        Text(
-                          'MCT Maintenance',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: Colors.white.withOpacity(0.7),
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Version 1.0.0',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: Colors.white.withOpacity(0.5),
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 40),
-                ],
-              );
-            },
+                    const SizedBox(height: 40),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),

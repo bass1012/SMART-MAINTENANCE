@@ -1,6 +1,11 @@
 const { Contract, User } = require('../../models');
 const { Op } = require('sequelize');
 const { notifyNewContract } = require('../../services/notificationHelpers');
+const { sendEmail } = require('../../services/emailService');
+const {
+  sendContractSubscribedEmail,
+  sendContractExpiringEmail
+} = require('../../services/emailHelper');
 
 // Contract Controller - Implementation complète
 const getAllContracts = async (req, res) => {
@@ -128,6 +133,13 @@ const createContract = async (req, res) => {
       if (createdContract.customer) {
         await notifyNewContract(createdContract, createdContract.customer);
         console.log(`📧 Notification envoyée au client ${createdContract.customer.id} pour le contrat ${reference}`);
+        
+        // 📧 Email au client (souscription contrat - template professionnel)
+        await sendContractSubscribedEmail(
+          createdContract.get({ plain: true }),
+          createdContract.customer.get({ plain: true })
+        );
+        console.log('✅ Email professionnel souscription contrat envoyé au client');
       }
     } catch (notifError) {
       console.error('Erreur lors de l\'envoi de la notification:', notifError);

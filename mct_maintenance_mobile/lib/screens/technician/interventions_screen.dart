@@ -7,6 +7,7 @@ import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/screens/technician/intervention_detail_screen.dart';
 import 'package:mct_maintenance_mobile/screens/technician/view_report_screen.dart';
 import 'package:mct_maintenance_mobile/screens/technician/create_report_screen.dart';
+import 'package:mct_maintenance_mobile/screens/technician/diagnostic_report_screen.dart';
 import '../../utils/test_keys.dart';
 import '../../utils/test_keys.dart';
 
@@ -56,7 +57,9 @@ class _TechnicianInterventionsScreenState
       if (mounted) {
         setState(() {
           // Convertir les données API en format attendu
-          _allInterventions = (response['data'] as List? ?? []).map((item) {
+          _allInterventions = (response['data'] as List? ?? [])
+              .where((item) => item != null) // Filtrer les items null
+              .map((item) {
             // Formatter la date et l'heure depuis scheduled_date
             String formattedDate = '';
             String formattedTime = '';
@@ -129,7 +132,8 @@ class _TechnicianInterventionsScreenState
 
     setState(() {
       _filteredInterventions = _allInterventions
-          .where((intervention) => intervention['status'] == status)
+          .where((intervention) =>
+              intervention != null && intervention['status'] == status)
           .toList();
     });
   }
@@ -179,71 +183,106 @@ class _TechnicianInterventionsScreenState
           ],
         ),
       ),
-      body: _isLoading
-          ? const Center(child: LoadingIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadInterventions,
-              child: _filteredInterventions.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16.0),
-                      itemCount: _filteredInterventions.length,
-                      itemBuilder: (context, index) {
-                        final intervention = _filteredInterventions[index];
-                        return _buildInterventionCard(intervention);
-                      },
-                    ),
-            ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      body: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF0a543d), Color(0xFF0f7d59)],
+          // Image de fond
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.4,
+              child: Image.asset(
+                'assets/images/background_tech.png',
+                fit: BoxFit.cover,
               ),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.assignment_outlined,
-              size: 64,
-              color: Colors.white,
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Aucune intervention',
-            style: GoogleFonts.poppins(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Vous n\'avez pas d\'intervention dans cette catégorie',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
+          // Contenu
+          _isLoading
+              ? const Center(child: LoadingIndicator())
+              : RefreshIndicator(
+                  onRefresh: _loadInterventions,
+                  child: _filteredInterventions.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16.0),
+                          itemCount: _filteredInterventions.length,
+                          itemBuilder: (context, index) {
+                            final intervention = _filteredInterventions[index];
+                            return _buildInterventionCard(intervention);
+                          },
+                        ),
+                ),
         ],
       ),
     );
   }
 
+  Widget _buildEmptyState() {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.95),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0a543d), Color(0xFF0f7d59)],
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.assignment_outlined,
+                size: 64,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Aucune intervention',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Vous n\'avez pas d\'intervention dans cette catégorie',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildInterventionCard(Map<String, dynamic> intervention) {
-    final status = intervention['status'] as String;
-    final priority = intervention['priority'] as String;
+    // Vérification de sécurité
+    if (intervention == null) {
+      return const SizedBox.shrink();
+    }
+
+    final status = intervention['status'] as String? ?? 'pending';
+    final priority = intervention['priority'] as String? ?? 'medium';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -566,13 +605,34 @@ class _TechnicianInterventionsScreenState
                                 ),
                               );
                             } else {
-                              // Naviguer vers l'écran de création du rapport
+                              // Déterminer le type d'intervention pour choisir l'écran approprié
+                              final interventionType = intervention['type']?.toString().toLowerCase() ?? '';
+                              final isDiagnostic = interventionType.contains('diagnostic') || 
+                                                   interventionType.contains('depannage') ||
+                                                   interventionType.contains('dépannage') ||
+                                                   interventionType.contains('reparation') ||
+                                                   interventionType.contains('réparation') ||
+                                                   interventionType.contains('urgence');
+
+                              Widget reportScreen;
+                              if (isDiagnostic) {
+                                // Utiliser le nouveau écran de diagnostic
+                                reportScreen = DiagnosticReportScreen(
+                                  interventionId: intervention['id'],
+                                  intervention: intervention,
+                                );
+                              } else {
+                                // Utiliser l'ancien écran pour maintenance
+                                reportScreen = CreateReportScreen(
+                                  intervention: intervention,
+                                );
+                              }
+
+                              // Naviguer vers l'écran approprié
                               final result = await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => CreateReportScreen(
-                                    intervention: intervention,
-                                  ),
+                                  builder: (context) => reportScreen,
                                 ),
                               );
 
@@ -586,7 +646,17 @@ class _TechnicianInterventionsScreenState
                           label: Text(
                             intervention['report_submitted_at'] != null
                                 ? 'Voir rapport'
-                                : 'Créer rapport',
+                                : () {
+                                    // Déterminer le texte du bouton selon le type
+                                    final interventionType = intervention['type']?.toString().toLowerCase() ?? '';
+                                    final isDiagnostic = interventionType.contains('diagnostic') || 
+                                                         interventionType.contains('depannage') ||
+                                                         interventionType.contains('dépannage') ||
+                                                         interventionType.contains('reparation') ||
+                                                         interventionType.contains('réparation') ||
+                                                         interventionType.contains('urgence');
+                                    return isDiagnostic ? 'Créer rapport diagnostic' : 'Créer rapport';
+                                  }(),
                             style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.w600),
                           ),

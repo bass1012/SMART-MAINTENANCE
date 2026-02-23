@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mct_maintenance_mobile/screens/technician/report_summary_screen.dart';
@@ -28,6 +29,12 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   final TextEditingController _observationsController = TextEditingController();
   final TextEditingController _durationController = TextEditingController();
 
+  // Mesures techniques
+  final TextEditingController _pressionController = TextEditingController();
+  final TextEditingController _temperatureController = TextEditingController();
+  final TextEditingController _intensiteController = TextEditingController();
+  final TextEditingController _tensionController = TextEditingController();
+
   // Matériaux utilisés
   List<Map<String, dynamic>> _materials = [];
 
@@ -35,10 +42,94 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   List<XFile> _photos = [];
 
   @override
+  void initState() {
+    super.initState();
+    _loadExistingReportData();
+  }
+
+  void _loadExistingReportData() {
+    // Charger les données existantes du rapport si présentes
+    if (widget.intervention['report_data'] != null) {
+      try {
+        final reportData = widget.intervention['report_data'];
+        print('🔍 Type de report_data: ${reportData.runtimeType}');
+        print('🔍 Contenu de report_data: $reportData');
+
+        Map<String, dynamic> data = {};
+
+        if (reportData is String && reportData.isNotEmpty) {
+          // Parser la chaîne JSON
+          data = json.decode(reportData);
+          print('✅ Report data parsé depuis String: $data');
+        } else if (reportData is Map) {
+          data = Map<String, dynamic>.from(reportData);
+          print('✅ Report data depuis Map: $data');
+        }
+
+        if (data.isNotEmpty) {
+          // Pré-remplir les champs
+          _workDescriptionController.text = data['work_description'] ?? '';
+          _observationsController.text = data['observations'] ?? '';
+          _durationController.text = data['duration']?.toString() ?? '';
+
+          // Charger les mesures techniques
+          _pressionController.text = data['pression']?.toString() ?? '';
+          _temperatureController.text = data['temperature']?.toString() ?? '';
+          _intensiteController.text = data['intensite']?.toString() ?? '';
+          _tensionController.text = data['tension']?.toString() ?? '';
+
+          print('✅ Champs pré-remplis:');
+          print('  - work_description: ${_workDescriptionController.text}');
+          print('  - observations: ${_observationsController.text}');
+          print('  - duration: ${_durationController.text}');
+          print('  - pression: ${_pressionController.text}');
+          print('  - temperature: ${_temperatureController.text}');
+          print('  - intensite: ${_intensiteController.text}');
+          print('  - tension: ${_tensionController.text}');
+
+          // Charger les matériaux
+          if (data['materials_used'] != null) {
+            if (data['materials_used'] is List) {
+              _materials = List<Map<String, dynamic>>.from(
+                (data['materials_used'] as List).map((item) {
+                  if (item is Map) {
+                    return Map<String, dynamic>.from(item);
+                  }
+                  return {
+                    'name': item.toString(),
+                    'quantity': 1,
+                    'unit': 'unité'
+                  };
+                }),
+              );
+              print('✅ ${_materials.length} matériaux chargés');
+            }
+          }
+
+          // Forcer le rebuild pour afficher les données
+          setState(() {});
+        } else {
+          print('⚠️ Report data vide après parsing');
+        }
+      } catch (e, stackTrace) {
+        print('❌ Erreur lors du chargement des données du rapport: $e');
+        print('❌ Stack trace: $stackTrace');
+      }
+    } else {
+      print('⚠️ Aucune report_data trouvée dans l\'intervention');
+      print('🔍 Clés disponibles: ${widget.intervention.keys.toList()}');
+    }
+  }
+
+  @override
   void dispose() {
     _workDescriptionController.dispose();
     _observationsController.dispose();
     _durationController.dispose();
+    _pressionController.dispose();
+    _temperatureController.dispose();
+    _intensiteController.dispose();
+    _tensionController.dispose();
     super.dispose();
   }
 
@@ -179,6 +270,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           : 0,
       'observations': _observationsController.text.trim(),
       'photos': photoPaths,
+      // Mesures techniques
+      'pression': _pressionController.text.trim(),
+      'temperature': _temperatureController.text.trim(),
+      'intensite': _intensiteController.text.trim(),
+      'tension': _tensionController.text.trim(),
     };
 
     // Naviguer vers l'écran de récapitulatif
@@ -295,6 +391,92 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                           fillColor: Colors.white,
                           suffixText: 'min',
                         ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Mesures techniques
+                      const Text(
+                        'Mesures Techniques',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _pressionController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Pression',
+                                hintText: 'Ex: 12.5',
+                                border: OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Colors.white,
+                                suffixText: 'bar',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _temperatureController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Température',
+                                hintText: 'Ex: 22',
+                                border: OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Colors.white,
+                                suffixText: '°C',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _intensiteController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Intensité',
+                                hintText: 'Ex: 5.2',
+                                border: OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Colors.white,
+                                suffixText: 'A',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _tensionController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Tension',
+                                hintText: 'Ex: 220',
+                                border: OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Colors.white,
+                                suffixText: 'V',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 24),
 

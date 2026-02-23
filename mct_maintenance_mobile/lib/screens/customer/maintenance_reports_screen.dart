@@ -3,12 +3,14 @@ import 'package:intl/intl.dart';
 import '../../models/maintenance_report_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/common/loading_indicator.dart';
+import '../../widgets/common/support_fab_wrapper.dart';
 
 class MaintenanceReportsScreen extends StatefulWidget {
   const MaintenanceReportsScreen({super.key});
 
   @override
-  State<MaintenanceReportsScreen> createState() => _MaintenanceReportsScreenState();
+  State<MaintenanceReportsScreen> createState() =>
+      _MaintenanceReportsScreenState();
 }
 
 class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
@@ -44,31 +46,44 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rapports de Maintenance'),
+    return SupportFabWrapper(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Rapports de Maintenance'),
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+              fit: BoxFit.cover,
+              opacity: 0.4,
+            ),
+          ),
+          child: _isLoading
+              ? const Center(child: LoadingIndicator())
+              : _error != null
+                  ? Center(child: Text('Erreur: $_error'))
+                  : _reports.isEmpty
+                      ? const Center(
+                          child: Text('Aucun rapport de maintenance trouvé'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _reports.length,
+                          itemBuilder: (context, index) {
+                            final report = _reports[index];
+                            return _buildReportCard(report);
+                          },
+                        ),
+        ),
       ),
-      body: _isLoading
-          ? const Center(child: LoadingIndicator())
-          : _error != null
-              ? Center(child: Text('Erreur: $_error'))
-              : _reports.isEmpty
-                  ? const Center(child: Text('Aucun rapport de maintenance trouvé'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _reports.length,
-                      itemBuilder: (context, index) {
-                        final report = _reports[index];
-                        return _buildReportCard(report);
-                      },
-                    ),
     );
   }
 
   Widget _buildReportCard(MaintenanceReport report) {
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
     final statusColor = _getStatusColor(report.status);
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
@@ -143,7 +158,8 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
                   Icons.check_circle_outline,
                   'Terminé le: ${dateFormat.format(report.completedDate!)}',
                 ),
-              if (report.technicianNotes != null && report.technicianNotes!.isNotEmpty)
+              if (report.technicianNotes != null &&
+                  report.technicianNotes!.isNotEmpty)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -161,6 +177,9 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
                     ),
                   ],
                 ),
+              // Mesures techniques
+              if (_hasTechnicalMeasures(report))
+                _buildTechnicalMeasuresSection(report),
               if (report.imageUrls != null && report.imageUrls!.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -179,7 +198,8 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
                               width: 80,
                               height: 80,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
                                 width: 80,
                                 height: 80,
                                 color: Colors.grey[200],
@@ -248,5 +268,82 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
       default:
         return status;
     }
+  }
+
+  bool _hasTechnicalMeasures(MaintenanceReport report) {
+    return (report.pression != null && report.pression!.isNotEmpty) ||
+        (report.temperature != null && report.temperature!.isNotEmpty) ||
+        (report.intensite != null && report.intensite!.isNotEmpty) ||
+        (report.tension != null && report.tension!.isNotEmpty);
+  }
+
+  Widget _buildTechnicalMeasuresSection(MaintenanceReport report) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.speed, color: Colors.orange.shade700, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Mesures Techniques',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: [
+              if (report.pression != null && report.pression!.isNotEmpty)
+                _buildMeasureChip(
+                    Icons.compress, 'Pression', '${report.pression} bar'),
+              if (report.temperature != null && report.temperature!.isNotEmpty)
+                _buildMeasureChip(
+                    Icons.thermostat, 'Temp.', '${report.temperature} °C'),
+              if (report.intensite != null && report.intensite!.isNotEmpty)
+                _buildMeasureChip(Icons.electrical_services, 'Intensité',
+                    '${report.intensite} A'),
+              if (report.tension != null && report.tension!.isNotEmpty)
+                _buildMeasureChip(Icons.bolt, 'Tension', '${report.tension} V'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeasureChip(IconData icon, String label, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: Colors.orange.shade700),
+        const SizedBox(width: 4),
+        Text(
+          '$label: ',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: Colors.orange.shade900,
+          ),
+        ),
+      ],
+    );
   }
 }

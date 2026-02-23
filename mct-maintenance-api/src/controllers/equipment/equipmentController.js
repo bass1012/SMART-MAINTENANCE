@@ -92,7 +92,6 @@ const getEquipment = async (req, res) => {
 const createEquipment = async (req, res) => {
   try {
     const {
-      customer_id,
       name,
       type,
       brand,
@@ -106,17 +105,23 @@ const createEquipment = async (req, res) => {
       notes
     } = req.body;
 
+    // Utiliser l'ID de l'utilisateur connecté comme customer_id
+    const customer_id = req.user.id;
+
     // Validation
-    if (!customer_id || !name || !type) {
+    if (!type) {
       return res.status(400).json({
         success: false,
-        message: 'Les champs customer_id, name et type sont requis'
+        message: 'Le champ type est requis'
       });
     }
 
+    // Générer automatiquement le nom si non fourni
+    const equipmentName = name || `${type}${brand ? ' ' + brand : ''}${model ? ' ' + model : ''}`;
+
     const equipment = await Equipment.create({
       customer_id,
-      name,
+      name: equipmentName,
       type,
       brand,
       model,
@@ -156,8 +161,15 @@ const updateEquipment = async (req, res) => {
       });
     }
 
+    // Vérifier que l'équipement appartient à l'utilisateur connecté
+    if (equipment.customer_id !== req.user.id) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Non autorisé à modifier cet équipement' 
+      });
+    }
+
     const {
-      customer_id,
       name,
       type,
       brand,
@@ -173,9 +185,13 @@ const updateEquipment = async (req, res) => {
       notes
     } = req.body;
 
+    // Générer automatiquement le nom si non fourni et que type/brand/model changent
+    const updatedName = name || (type || brand || model ? 
+      `${type || equipment.type}${brand ? ' ' + brand : (equipment.brand ? ' ' + equipment.brand : '')}${model ? ' ' + model : (equipment.model ? ' ' + equipment.model : '')}` 
+      : equipment.name);
+
     await equipment.update({
-      customer_id,
-      name,
+      name: updatedName,
       type,
       brand,
       model,
@@ -217,6 +233,14 @@ const deleteEquipment = async (req, res) => {
       });
     }
 
+    // Vérifier que l'équipement appartient à l'utilisateur connecté
+    if (equipment.customer_id !== req.user.id) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Non autorisé à supprimer cet équipement' 
+      });
+    }
+
     await equipment.destroy(); // Soft delete grâce à paranoid: true
 
     res.json({ 
@@ -233,9 +257,36 @@ const deleteEquipment = async (req, res) => {
   }
 };
 
+// Get equipments for current customer
+const getMyEquipments = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const equipments = await Equipment.findAll({
+      where: {
+        customer_id: userId
+      },
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      data: equipments
+    });
+  } catch (err) {
+    console.error('Error fetching my equipments:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Erreur lors du chargement de vos équipements', 
+      error: err.message 
+    });
+  }
+};
+
 module.exports = {
   listEquipments,
   getEquipment,
+  getMyEquipments,
   createEquipment,
   updateEquipment,
   deleteEquipment

@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { body, query, param } = require('express-validator');
 const quoteController = require('../controllers/quote/quoteController');
+const quoteWorkflowController = require('../controllers/quoteWorkflowController');
 
 /**
  * @swagger
@@ -32,6 +33,15 @@ const quoteController = require('../controllers/quote/quoteController');
  */
 router.get('/', authenticate, quoteController.getAllQuotes);
 
+/**
+ * Créer un devis à partir d'un rapport de diagnostic
+ * POST /api/quotes/from-report
+ */
+router.post('/from-report', 
+  authenticate, 
+  authorize('admin'), 
+  quoteWorkflowController.createQuoteFromReport
+);
 
 // Générer le PDF d'un devis
 router.get('/:id/pdf', authenticate, quoteController.generateQuotePdf);

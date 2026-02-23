@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
 import '../../utils/snackbar_helper.dart';
+import '../../widgets/common/support_fab_wrapper.dart';
 import 'order_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -330,125 +331,154 @@ class _HistoryScreenState extends State<HistoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Historique'),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadHistory,
-            tooltip: 'Actualiser',
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(80),
-          child: Column(
-            children: [
-              // Titre subtil au-dessus des onglets
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.swipe_outlined,
-                      size: 16,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Glissez pour naviguer entre les sections',
-                      style: TextStyle(
-                        fontSize: 12,
+    return SupportFabWrapper(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Historique'),
+          elevation: 0,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadHistory,
+              tooltip: 'Actualiser',
+            ),
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(80),
+            child: Column(
+              children: [
+                // Titre subtil au-dessus des onglets
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.swipe_outlined,
+                        size: 16,
                         color: Colors.white.withOpacity(0.7),
-                        fontStyle: FontStyle.italic,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        'Glissez pour naviguer entre les sections',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.7),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicator: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0a543d).withOpacity(0.3),
-                        blurRadius: 8,
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicatorPadding: const EdgeInsets.all(4),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: const Color(0xFF0a543d),
-                  labelStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                  child: TabBar(
+                    controller: _tabController,
+                    indicator: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0a543d).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicatorPadding: const EdgeInsets.all(4),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: const Color(0xFF0a543d),
+                    labelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    tabs: const [
+                      Tab(text: 'Interventions'),
+                      Tab(text: 'Commandes'),
+                      Tab(text: 'Devis'),
+                    ],
                   ),
-                  unselectedLabelStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  tabs: const [
-                    Tab(text: 'Interventions'),
-                    Tab(text: 'Commandes'),
-                    Tab(text: 'Devis'),
-                  ],
                 ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildHistoryList(_interventions),
-                _buildHistoryList(_orders),
-                _buildHistoryList(_quotes),
+                const SizedBox(height: 8),
               ],
             ),
+          ),
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+              fit: BoxFit.cover,
+              opacity: 0.4,
+            ),
+          ),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildHistoryList(_interventions),
+                    _buildHistoryList(_orders),
+                    _buildHistoryList(_quotes),
+                  ],
+                ),
+        ),
+      ),
     );
   }
 
   Widget _buildHistoryList(List<HistoryItem> items) {
     if (items.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'Aucun historique',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade600,
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-            ),
-          ],
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.history,
+                  size: 64, color: const Color(0xFF0a543d).withOpacity(0.6)),
+              const SizedBox(height: 16),
+              Text(
+                'Aucun historique',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

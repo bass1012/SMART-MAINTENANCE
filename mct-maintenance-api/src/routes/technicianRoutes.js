@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
-const { Intervention, User, CustomerProfile } = require('../models');
+const { Intervention, User, CustomerProfile, DiagnosticReport } = require('../models');
 const { Op } = require('sequelize');
 const technicianController = require('../controllers/technician/technicianController');
 
@@ -219,9 +219,19 @@ router.get('/interventions', async (req, res) => {
       where,
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone'],
+          attributes: ['id', 'first_name', 'last_name'],
+          required: false,
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone']
+          }]
+        },
+        {
+          model: DiagnosticReport,
+          as: 'diagnosticReports',
           required: false
         }
       ],
@@ -234,31 +244,47 @@ router.get('/interventions', async (req, res) => {
     const formattedInterventions = interventions.map(intervention => {
       const customer = intervention.customer;
       
-      // Essayer de récupérer le nom depuis customer ou construire depuis email
+      // Essayer de récupérer le nom depuis customer (CustomerProfile)
       let customerName = 'Client inconnu';
+      let customerPhone = '';
       if (customer) {
         if (customer.first_name && customer.last_name) {
           customerName = `${customer.first_name} ${customer.last_name}`;
-        } else {
-          customerName = customer.email || 'Client inconnu';
+        } else if (customer.user) {
+          customerName = customer.user.email || 'Client inconnu';
         }
+        customerPhone = customer.user?.phone || '';
+      }
+      
+      // Extraire date et heure de scheduled_date
+      let dateStr = '';
+      let timeStr = '';
+      if (intervention.scheduled_date) {
+        const scheduledDate = new Date(intervention.scheduled_date);
+        dateStr = scheduledDate.toLocaleDateString('fr-FR');
+        timeStr = scheduledDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       }
       
       return {
         id: intervention.id,
         title: intervention.title,
         description: intervention.description,
-        customer_name: customerName,
+        customer: customerName, // Nom du client pour l'affichage
+        customer_name: customerName, // Alias
         address: intervention.address || '',
+        date: dateStr, // Format attendu par l'app mobile
+        time: timeStr, // Format attendu par l'app mobile
         scheduled_date: intervention.scheduled_date,
-        scheduled_time: intervention.scheduled_date ? 
-          new Date(intervention.scheduled_date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '',
+        scheduled_time: timeStr,
         status: intervention.status,
         priority: intervention.priority,
         type: intervention.intervention_type || 'repair',
-        customer_phone: customer?.phone || '',
+        intervention_type: intervention.intervention_type || 'repair',
+        climatiseur_type: intervention.climatiseur_type || null,
+        customer_phone: customerPhone,
         report_data: intervention.report_data || null,
-        report_submitted_at: intervention.report_submitted_at || null
+        report_submitted_at: intervention.report_submitted_at || null,
+        diagnosticReports: intervention.diagnosticReports || []
       };
     });
     
@@ -437,9 +463,16 @@ router.get('/calendar', async (req, res) => {
       where,
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone'],
+          attributes: ['id', 'first_name', 'last_name'],
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['phone', 'email']
+            }
+          ],
           required: false
         }
       ],
@@ -453,12 +486,10 @@ router.get('/calendar', async (req, res) => {
       const customer = intervention.customer;
       
       let customerName = 'Client inconnu';
+      let customerPhone = null;
       if (customer) {
-        if (customer.first_name && customer.last_name) {
-          customerName = `${customer.first_name} ${customer.last_name}`;
-        } else {
-          customerName = customer.email || 'Client inconnu';
-        }
+        customerName = `${customer.first_name} ${customer.last_name}`;
+        customerPhone = customer.user?.phone || null;
       }
       
       return {
@@ -516,19 +547,14 @@ router.get('/reports', async (req, res, next) => {
     // Récupérer les interventions avec rapport
     const interventions = await Intervention.findAll({
       where,
+      order: [['report_submitted_at', 'DESC']],
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name'],
-          include: [{
-            model: CustomerProfile,
-            as: 'customerProfile',
-            attributes: ['first_name', 'last_name']
-          }]
+          attributes: ['id', 'first_name', 'last_name', 'company_name']
         }
-      ],
-      order: [['report_submitted_at', 'DESC']],
+      ]
     });
 
     // Formater les données pour le mobile
@@ -538,19 +564,21 @@ router.get('/reports', async (req, res, next) => {
           JSON.parse(intervention.report_data) : intervention.report_data) 
         : {};
 
-      // Enrichir le customer
-      const customer = intervention.customer;
-      const customerName = customer ? 
-        (customer.customerProfile ? 
-          `${customer.customerProfile.first_name} ${customer.customerProfile.last_name}` :
-          `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || customer.email
-        ) : 'Client inconnu';
+      // Récupérer le nom du client (customer est CustomerProfile)
+      const customerProfile = intervention.customer;
+      const customerName = customerProfile ? 
+        `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() :
+        'Client non renseigné';
+      const customerCompany = customerProfile?.company_name || '';
 
       return {
         id: intervention.id,
         intervention_title: intervention.title,
-        customer_name: customerName,
         address: intervention.address || 'Non spécifiée',
+        customer_name: customerName || 'Client non renseigné',
+        customer_phone: '',
+        customer_email: '',
+        customer_company: customerCompany,
         created_at: intervention.report_submitted_at,
         date: intervention.report_submitted_at,
         status: reportData.status || 'submitted',
@@ -560,6 +588,11 @@ router.get('/reports', async (req, res, next) => {
         observations: reportData.observations || '',
         photos_count: reportData.photos_count || 0,
         total_cost: 0, // À calculer si besoin
+        // Mesures techniques
+        pression: reportData.pression || '',
+        temperature: reportData.temperature || '',
+        intensite: reportData.intensite || '',
+        tension: reportData.tension || '',
       };
     });
 
@@ -806,20 +839,6 @@ router.get('/reviews', async (req, res) => {
         status: 'completed',
         rating: { [Op.not]: null }
       },
-      include: [
-        {
-          model: User,
-          as: 'customer',
-          attributes: ['id', 'email'],
-          include: [
-            {
-              model: CustomerProfile,
-              as: 'customerProfile',
-              attributes: ['first_name', 'last_name']
-            }
-          ]
-        }
-      ],
       order: [['completed_at', 'DESC']]
     });
 
@@ -833,15 +852,9 @@ router.get('/reviews', async (req, res) => {
       sumRatings += rating;
       ratingsBreakdown[rating]++;
 
-      const customerName = intervention.customer?.customerProfile
-        ? `${intervention.customer.customerProfile.first_name} ${intervention.customer.customerProfile.last_name}`
-        : intervention.customer?.email || 'Client';
-
       return {
         id: intervention.id,
-        customer_name: customerName,
         rating: rating,
-        review: intervention.review,
         intervention_title: intervention.title,
         date: intervention.completed_at,
         created_at: intervention.updated_at

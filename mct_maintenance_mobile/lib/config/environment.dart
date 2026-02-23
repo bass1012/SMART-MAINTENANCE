@@ -4,12 +4,15 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 // Configuration des environnements
 enum Environment { development, staging, production }
 
-// Configuration des lieux (Bureau / Maison)
-enum Location { office, home }
+// Configuration des lieux (Bureau / Maison / Ngrok pour accès distant)
+enum Location { office, home, ngrok }
 
 // 🔧 CONFIGURATION RAPIDE - Changez cette ligne selon votre lieu
+// - Location.office : Au bureau (WiFi bureau)
+// - Location.home : À la maison (WiFi maison)
+// - Location.ngrok : Accès distant via ngrok (4G, autre réseau)
 const Location currentLocation =
-    Location.office; // Changez en Location.office au bureau
+    Location.ngrok; // Changez en Location.ngrok pour accès distant
 
 // Configuration par défaut (développement)
 const Environment env = Environment.development;
@@ -17,10 +20,18 @@ const Environment env = Environment.development;
 /// Configuration de l'application
 class AppConfig {
   // Configuration des IPs selon le lieu
+  // ⚠️ Pour ngrok: lancez `ngrok http 3000` et copiez l'URL ici (sans le https://)
   static const Map<Location, String> _locationIPs = {
     Location.office: '192.168.1.139', // IP du bureau
-    Location.home: '192.168.1.6', // IP de la maison
+    Location.home: '192.168.1.4', // IP de la maison
+    Location.ngrok: 'https://unlanguid-lauran-nonanimatingly.ngrok-free.dev', // URL ngrok (ex: abc123.ngrok-free.app)
   };
+
+  // URL ngrok complète (à mettre à jour après chaque lancement de ngrok)
+  // Lancez: ngrok http 3000
+  // Copiez l'URL "Forwarding" ici
+  static const String ngrokUrl =
+      'https://unlanguid-lauran-nonanimatingly.ngrok-free.dev';
 
   // Configuration des environnements
   // IMPORTANT: Remplacez xxx par l'adresse IP de votre machine à la maison
@@ -29,7 +40,10 @@ class AppConfig {
   // - Windows: cmd > ipconfig
   // - Linux: ifconfig ou ip addr
   static Map<Environment, String> get _baseUrls => {
-        Environment.development: 'http://${_locationIPs[currentLocation]}:3000',
+        Environment.development:
+            currentLocation == Location.ngrok && ngrokUrl.isNotEmpty
+                ? ngrokUrl
+                : 'http://${_locationIPs[currentLocation]}:3000',
         Environment.staging: 'https://staging.votreserveur.com',
         Environment.production: 'https://api.votreserveur.com',
       };
@@ -52,8 +66,12 @@ class AppConfig {
 
   // Obtenir l'URL de base en fonction de l'environnement et de la plateforme
   static String get baseUrl {
-    // Sur Android, utiliser 10.0.2.2 au lieu de localhost
-    if (!kIsWeb && Platform.isAndroid) {
+    // Si ngrok est configuré, l'utiliser en priorité
+    if (currentLocation == Location.ngrok && ngrokUrl.isNotEmpty) {
+      return ngrokUrl;
+    }
+    // Sur Android émulateur, utiliser 10.0.2.2 au lieu de localhost
+    if (!kIsWeb && Platform.isAndroid && currentLocation != Location.ngrok) {
       return _androidBaseUrls[env] ??
           _androidBaseUrls[Environment.development]!;
     }
@@ -75,7 +93,7 @@ class AppConfig {
 /// Configuration des requêtes API
 class ApiConfig {
   // Timeout des requêtes
-  static const Duration timeout = Duration(seconds: 15);
+  static const Duration timeout = Duration(seconds: 30);
 
   // Activer/désactiver les logs en mode debug
   static const bool debugLogs = true;

@@ -53,30 +53,11 @@ class FCMService {
     }
 
     try {
-      // Construire le corps avec type et priorité
-      const priorityEmoji = {
-        low: '🔵',
-        medium: '🟡', 
-        high: '🟠',
-        urgent: '🔴'
-      }[data.priority] || '🔵';
-
-      const typeLabel = {
-        promotion: '🎁 Promotion',
-        maintenance_tip: '💡 Conseil',
-        maintenance_reminder: '⏰ Rappel',
-        announcement: '📢 Annonce',
-        alert: '⚠️ Alerte',
-        general: 'ℹ️ Info'
-      }[data.type] || 'ℹ️ Notification';
-
-      const bodyWithContext = `${typeLabel} ${priorityEmoji}\n${notification.body || 'Nouvelle notification'}`;
-
       const message = {
         token: fcmToken,
         notification: {
           title: notification.title || 'MCT Maintenance',
-          body: bodyWithContext
+          body: notification.body || 'Nouvelle notification'
         },
         data: {
           ...data,

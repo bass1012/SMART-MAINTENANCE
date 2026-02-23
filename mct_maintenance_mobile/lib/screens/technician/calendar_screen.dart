@@ -150,21 +150,34 @@ class _TechnicianCalendarScreenState extends State<TechnicianCalendarScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Container(
-            margin: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+          // Image de fond
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.4,
+              child: Image.asset(
+                'assets/images/background_tech.png',
+                fit: BoxFit.cover,
+              ),
             ),
+          ),
+          // Contenu
+          Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -289,6 +302,8 @@ class _TechnicianCalendarScreenState extends State<TechnicianCalendarScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _buildAllEventsListGroupedByDate(),
           ),
+        ],
+      ),
         ],
       ),
     );
@@ -680,8 +695,8 @@ class _TechnicianCalendarScreenState extends State<TechnicianCalendarScreen> {
                 _buildDetailItem(
                   icon: Icons.flag,
                   label: 'Statut',
-                  value: _getStatusLabel(intervention['status']),
-                  color: _getStatusColor(intervention['status']),
+                  value: _getStatusLabel(intervention['status'] ?? 'pending'),
+                  color: _getStatusColor(intervention['status'] ?? 'pending'),
                 ),
                 const SizedBox(height: 16),
                 _buildDetailItem(

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
+import 'package:mct_maintenance_mobile/widgets/common/support_fab_wrapper.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -359,451 +360,478 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Mon Profil',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            fontSize: 20,
-          ),
-        ),
-        backgroundColor: const Color(0xFF0a543d),
-        elevation: 0,
-        actions: [
-          if (!_isEditing && !_isLoading)
-            Container(
-              margin: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.edit, size: 20),
-                ),
-                onPressed: () {
-                  setState(() => _isEditing = true);
-                },
-              ),
+    return SupportFabWrapper(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'Mon Profil',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 20,
             ),
-        ],
-      ),
-      body: _isLoading
-          ? Center(
-              child: CircularProgressIndicator(
-                color: const Color(0xFF0a543d),
-              ),
-            )
-          : SingleChildScrollView(
-              child: Column(
-                children: [
-                  // En-tête moderne avec gradient
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF0a543d),
-                          Color(0xFF0d6b4d),
-                          Color(0xFF0f7d59),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.only(
-                        bottomLeft: Radius.circular(32),
-                        bottomRight: Radius.circular(32),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0xFF0a543d),
-                          blurRadius: 20,
-                          offset: Offset(0, 8),
-                          spreadRadius: -8,
-                        ),
-                      ],
+          ),
+          backgroundColor: const Color(0xFF0a543d),
+          elevation: 0,
+          actions: [
+            if (!_isEditing && !_isLoading)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                child: IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Column(
-                      children: [
-                        // Avatar avec ombre et effet glassmorphism
-                        Stack(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.3),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: _buildAvatar(),
+                    child: const Icon(Icons.edit, size: 20),
+                  ),
+                  onPressed: () {
+                    setState(() => _isEditing = true);
+                  },
+                ),
+              ),
+          ],
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+              fit: BoxFit.cover,
+              opacity: 0.4,
+            ),
+          ),
+          child: _isLoading
+              ? Center(
+                  child: CircularProgressIndicator(
+                    color: const Color(0xFF0a543d),
+                  ),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      // En-tête moderne avec gradient
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFF0a543d),
+                              Color(0xFF0d6b4d),
+                              Color(0xFF0f7d59),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.only(
+                            bottomLeft: Radius.circular(32),
+                            bottomRight: Radius.circular(32),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0xFF0a543d),
+                              blurRadius: 20,
+                              offset: Offset(0, 8),
+                              spreadRadius: -8,
                             ),
-                            if (_isEditing)
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            // Avatar avec ombre et effet glassmorphism
+                            Stack(
+                              children: [
+                                Container(
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF0a543d),
-                                        Color(0xFF0d6b4d)
-                                      ],
-                                    ),
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.black.withOpacity(0.3),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
+                                        blurRadius: 20,
+                                        offset: const Offset(0, 10),
                                       ),
                                     ],
                                   ),
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.camera_alt,
-                                      size: 20,
-                                      color: Colors.white,
+                                  child: _buildAvatar(),
+                                ),
+                                if (_isEditing)
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFF0a543d),
+                                            Color(0xFF0d6b4d)
+                                          ],
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.3),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: IconButton(
+                                        icon: const Icon(
+                                          Icons.camera_alt,
+                                          size: 20,
+                                          color: Colors.white,
+                                        ),
+                                        onPressed: _pickImage,
+                                      ),
                                     ),
-                                    onPressed: _pickImage,
                                   ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            if (!_isEditing) ...[
+                              Text(
+                                '${_user?.firstName ?? ''} ${_user?.lastName ?? ''}'
+                                    .trim(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        if (!_isEditing) ...[
-                          Text(
-                            '${_user?.firstName ?? ''} ${_user?.lastName ?? ''}'
-                                .trim(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _user?.email ?? '',
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-
-                  // Formulaire avec cards modernes
-                  Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Informations personnelles
-                          _buildSectionTitle('Informations personnelles'),
-                          const SizedBox(height: 16),
-
-                          _buildTextField(
-                            controller: _firstNameController,
-                            label: 'Prénom',
-                            icon: Icons.person_outline,
-                            enabled: _isEditing,
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Le prénom est requis';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          _buildTextField(
-                            controller: _lastNameController,
-                            label: 'Nom',
-                            icon: Icons.person_outline,
-                            enabled: _isEditing,
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Le nom est requis';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Coordonnées
-                          _buildSectionTitle('Coordonnées'),
-                          const SizedBox(height: 16),
-
-                          _buildTextField(
-                            controller: _emailController,
-                            label: 'Email',
-                            icon: Icons.email_outlined,
-                            enabled: _isEditing,
-                            keyboardType: TextInputType.emailAddress,
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'L\'email est requis';
-                              }
-                              if (!value.contains('@')) {
-                                return 'Email invalide';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          _buildTextField(
-                            controller: _phoneController,
-                            label: 'Téléphone',
-                            icon: Icons.phone_outlined,
-                            enabled: _isEditing,
-                            keyboardType: TextInputType.phone,
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Le téléphone est requis';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Géolocalisation
-                          _buildSectionTitle('Localisation'),
-                          const SizedBox(height: 16),
-
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _latitudeController,
-                                  label: 'Latitude',
-                                  icon: Icons.location_on_outlined,
-                                  enabled: false,
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                          decimal: true),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _longitudeController,
-                                  label: 'Longitude',
-                                  icon: Icons.location_on_outlined,
-                                  enabled: false,
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                          decimal: true),
+                              const SizedBox(height: 6),
+                              Text(
+                                _user?.email ?? '',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 15,
+                                  color: Colors.white70,
                                 ),
                               ),
                             ],
-                          ),
+                          ],
+                        ),
+                      ),
 
-                          if (_isEditing) ...[
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: _isLoadingLocation
-                                  ? null
-                                  : _getCurrentLocation,
-                              icon: _isLoadingLocation
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.white),
-                                      ),
-                                    )
-                                  : const Icon(Icons.my_location),
-                              label: Text(_isLoadingLocation
-                                  ? 'Récupération...'
-                                  : 'Obtenir ma position actuelle'),
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size(double.infinity, 48),
+                      // Formulaire avec cards modernes
+                      Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Informations personnelles
+                              _buildSectionTitle('Informations personnelles'),
+                              const SizedBox(height: 16),
+
+                              _buildTextField(
+                                controller: _firstNameController,
+                                label: 'Prénom',
+                                icon: Icons.person_outline,
+                                enabled: _isEditing,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Le prénom est requis';
+                                  }
+                                  return null;
+                                },
                               ),
-                            ),
-                          ],
-                          const SizedBox(height: 24),
+                              const SizedBox(height: 16),
 
-                          // Informations du compte
-                          _buildSectionTitle('Informations du compte'),
-                          const SizedBox(height: 16),
+                              _buildTextField(
+                                controller: _lastNameController,
+                                label: 'Nom',
+                                icon: Icons.person_outline,
+                                enabled: _isEditing,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Le nom est requis';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 24),
 
-                          _buildInfoCard(
-                            icon: Icons.badge_outlined,
-                            label: 'Rôle',
-                            value: _getRoleLabel(_user?.role ?? ''),
-                          ),
-                          const SizedBox(height: 12),
+                              // Coordonnées
+                              _buildSectionTitle('Coordonnées'),
+                              const SizedBox(height: 16),
 
-                          _buildInfoCard(
-                            icon: Icons.verified_outlined,
-                            label: 'Statut',
-                            value: _getStatusLabel(_user?.status ?? ''),
-                          ),
-                          const SizedBox(height: 12),
+                              _buildTextField(
+                                controller: _emailController,
+                                label: 'Email',
+                                icon: Icons.email_outlined,
+                                enabled: _isEditing,
+                                keyboardType: TextInputType.emailAddress,
+                                validator: (value) {
+                                  // Email optionnel mais doit être valide si fourni
+                                  if (value != null &&
+                                      value.trim().isNotEmpty) {
+                                    if (!value.contains('@')) {
+                                      return 'Email invalide';
+                                    }
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
 
-                          _buildInfoCard(
-                            icon: Icons.calendar_today_outlined,
-                            label: 'Membre depuis',
-                            value: _formatDate(_user?.createdAt),
-                          ),
-                          const SizedBox(height: 24),
+                              _buildTextField(
+                                controller: _phoneController,
+                                label: 'Téléphone',
+                                icon: Icons.phone_outlined,
+                                enabled: _isEditing,
+                                keyboardType: TextInputType.phone,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Le téléphone est requis';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 24),
 
-                          // Actions rapides
-                          if (!_isEditing) ...[
-                            _buildSectionTitle('Actions'),
-                            const SizedBox(height: 16),
-                            _buildActionButton(
-                              icon: Icons.lock_outline,
-                              label: 'Changer le mot de passe',
-                              onTap: _showChangePasswordDialog,
-                            ),
-                            const SizedBox(height: 12),
-                            _buildActionButton(
-                              icon: Icons.delete_outline,
-                              label: 'Supprimer mon compte',
-                              color: Colors.red,
-                              onTap: _showDeleteAccountDialog,
-                            ),
-                          ],
+                              // Géolocalisation
+                              _buildSectionTitle('Localisation'),
+                              const SizedBox(height: 16),
 
-                          // Boutons d'action modernes en mode édition
-                          if (_isEditing) ...[
-                            const SizedBox(height: 32),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Container(
-                                    height: 54,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: const Color(0xFF0a543d),
-                                        width: 2,
-                                      ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildTextField(
+                                      controller: _latitudeController,
+                                      label: 'Latitude',
+                                      icon: Icons.location_on_outlined,
+                                      enabled: false,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
                                     ),
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        onTap: _isSaving
-                                            ? null
-                                            : () {
-                                                setState(() {
-                                                  _isEditing = false;
-                                                  // Restaurer les valeurs originales
-                                                  _firstNameController.text =
-                                                      _user?.firstName ?? '';
-                                                  _lastNameController.text =
-                                                      _user?.lastName ?? '';
-                                                  _emailController.text =
-                                                      _user?.email ?? '';
-                                                  _phoneController.text =
-                                                      _user?.phone ?? '';
-                                                  _latitudeController.text =
-                                                      _user?.latitude
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildTextField(
+                                      controller: _longitudeController,
+                                      label: 'Longitude',
+                                      icon: Icons.location_on_outlined,
+                                      enabled: false,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              if (_isEditing) ...[
+                                const SizedBox(height: 12),
+                                ElevatedButton.icon(
+                                  onPressed: _isLoadingLocation
+                                      ? null
+                                      : _getCurrentLocation,
+                                  icon: _isLoadingLocation
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                    Colors.white),
+                                          ),
+                                        )
+                                      : const Icon(Icons.my_location),
+                                  label: Text(_isLoadingLocation
+                                      ? 'Récupération...'
+                                      : 'Obtenir ma position actuelle'),
+                                  style: ElevatedButton.styleFrom(
+                                    minimumSize:
+                                        const Size(double.infinity, 48),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 24),
+
+                              // Informations du compte
+                              _buildSectionTitle('Informations du compte'),
+                              const SizedBox(height: 16),
+
+                              _buildInfoCard(
+                                icon: Icons.badge_outlined,
+                                label: 'Rôle',
+                                value: _getRoleLabel(_user?.role ?? ''),
+                              ),
+                              const SizedBox(height: 12),
+
+                              _buildInfoCard(
+                                icon: Icons.verified_outlined,
+                                label: 'Statut',
+                                value: _getStatusLabel(_user?.status ?? ''),
+                              ),
+                              const SizedBox(height: 12),
+
+                              _buildInfoCard(
+                                icon: Icons.calendar_today_outlined,
+                                label: 'Membre depuis',
+                                value: _formatDate(_user?.createdAt),
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Actions rapides
+                              if (!_isEditing) ...[
+                                _buildSectionTitle('Actions'),
+                                const SizedBox(height: 16),
+                                _buildActionButton(
+                                  icon: Icons.lock_outline,
+                                  label: 'Changer le mot de passe',
+                                  onTap: _showChangePasswordDialog,
+                                ),
+                                const SizedBox(height: 12),
+                                _buildActionButton(
+                                  icon: Icons.delete_outline,
+                                  label: 'Supprimer mon compte',
+                                  color: Colors.red,
+                                  onTap: _showDeleteAccountDialog,
+                                ),
+                              ],
+
+                              // Boutons d'action modernes en mode édition
+                              if (_isEditing) ...[
+                                const SizedBox(height: 32),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        height: 54,
+                                        decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: const Color(0xFF0a543d),
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap: _isSaving
+                                                ? null
+                                                : () {
+                                                    setState(() {
+                                                      _isEditing = false;
+                                                      // Restaurer les valeurs originales
+                                                      _firstNameController
+                                                              .text =
+                                                          _user?.firstName ??
+                                                              '';
+                                                      _lastNameController.text =
+                                                          _user?.lastName ?? '';
+                                                      _emailController.text =
+                                                          _user?.email ?? '';
+                                                      _phoneController.text =
+                                                          _user?.phone ?? '';
+                                                      _latitudeController
+                                                          .text = _user
+                                                              ?.latitude
                                                               ?.toString() ??
                                                           '';
-                                                  _longitudeController.text =
-                                                      _user?.longitude
+                                                      _longitudeController
+                                                          .text = _user
+                                                              ?.longitude
                                                               ?.toString() ??
                                                           '';
-                                                  _selectedImage = null;
-                                                });
-                                              },
-                                        borderRadius: BorderRadius.circular(16),
-                                        child: Center(
-                                          child: Text(
-                                            'Annuler',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                              color: const Color(0xFF0a543d),
+                                                      _selectedImage = null;
+                                                    });
+                                                  },
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                            child: Center(
+                                              child: Text(
+                                                'Annuler',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                  color:
+                                                      const Color(0xFF0a543d),
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Container(
-                                    height: 54,
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF0a543d),
-                                          Color(0xFF0d6b4d)
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(16),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFF0a543d)
-                                              .withOpacity(0.4),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 6),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Container(
+                                        height: 54,
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFF0a543d),
+                                              Color(0xFF0d6b4d)
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF0a543d)
+                                                  .withOpacity(0.4),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 6),
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        onTap: _isSaving ? null : _saveProfile,
-                                        borderRadius: BorderRadius.circular(16),
-                                        child: Center(
-                                          child: _isSaving
-                                              ? const SizedBox(
-                                                  height: 24,
-                                                  width: 24,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                    strokeWidth: 2.5,
-                                                    valueColor:
-                                                        AlwaysStoppedAnimation<
-                                                                Color>(
-                                                            Colors.white),
-                                                  ),
-                                                )
-                                              : Text(
-                                                  'Enregistrer',
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap:
+                                                _isSaving ? null : _saveProfile,
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                            child: Center(
+                                              child: _isSaving
+                                                  ? const SizedBox(
+                                                      height: 24,
+                                                      width: 24,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        strokeWidth: 2.5,
+                                                        valueColor:
+                                                            AlwaysStoppedAnimation<
+                                                                    Color>(
+                                                                Colors.white),
+                                                      ),
+                                                    )
+                                                  : Text(
+                                                      'Enregistrer',
+                                                      style:
+                                                          GoogleFonts.poppins(
+                                                        fontSize: 16,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ],
-                            ),
-                          ],
 
-                          const SizedBox(height: 32),
-                        ],
+                              const SizedBox(height: 32),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+        ),
+      ),
     );
   }
 
@@ -1257,31 +1285,143 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showDeleteAccountDialog() {
+    final passwordController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Supprimer mon compte'),
-        content: const Text(
-          'Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.',
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red[700], size: 28),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Supprimer mon compte',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Cette action est irréversible !',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.red[700],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Toutes vos données seront définitivement supprimées :',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '• Votre profil et informations personnelles\n'
+              '• Vos interventions et historiques\n'
+              '• Vos équipements enregistrés\n'
+              '• Vos contrats et documents',
+              style: TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Pour confirmer, entrez votre mot de passe :',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                hintText: 'Mot de passe',
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.grey[50],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context);
+            },
             child: const Text('Annuler'),
           ),
           ElevatedButton(
-            onPressed: () {
-              // TODO: Implémenter la suppression du compte
-              Navigator.pop(context);
-              SnackBarHelper.showError(
-                context,
-                'Suppression de compte - À implémenter',
-              );
+            onPressed: () async {
+              final password = passwordController.text.trim();
+              final navigator = Navigator.of(context);
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+              if (password.isEmpty) {
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Veuillez entrer votre mot de passe'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              try {
+                // Utiliser email ou téléphone selon ce qui est disponible
+                final String contact = (_user?.email?.isNotEmpty == true)
+                    ? _user!.email!
+                    : (_user?.phone ?? '');
+
+                // Vérifier d'abord le mot de passe en essayant de se connecter
+                await _apiService.login(
+                  contact,
+                  password,
+                );
+
+                // Si la connexion réussit, supprimer le compte
+                await _apiService.deleteMyAccount();
+
+                // Fermer le dialog AVANT de dispose le controller
+                navigator.pop();
+
+                // Déconnecter (peut échouer car le compte est supprimé, on ignore l'erreur)
+                try {
+                  await _apiService.logout();
+                } catch (e) {
+                  // Ignorer l'erreur 401 du logout car le compte est déjà inactif
+                  print('ℹ️ Erreur logout ignorée (compte déjà supprimé): $e');
+                }
+
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Votre compte a été supprimé avec succès'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+
+                // Rediriger vers l'écran de login
+                navigator.pushNamedAndRemoveUntil(
+                  '/login',
+                  (route) => false,
+                );
+              } catch (e) {
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Erreur: ${e.toString()}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
             ),
-            child: const Text('Supprimer'),
+            child: const Text('Supprimer définitivement'),
           ),
         ],
       ),

@@ -14,6 +14,10 @@ class ApiService {
     ...corsHeaders,
   };
 
+  // Configuration
+  static const Duration apiTimeout = Duration(seconds: 30);
+  static const bool debugLogs = true;
+
   factory ApiService() {
     return _instance;
   }
@@ -22,7 +26,8 @@ class ApiService {
     // Configuration du client HTTP avec un délai d'attente
     final httpClient = HttpClient()
       ..connectionTimeout = apiTimeout
-      ..badCertificateCallback = (cert, host, port) => true; // Ne pas utiliser en production
+      ..badCertificateCallback =
+          (cert, host, port) => true; // Ne pas utiliser en production
     _client = IOClient(httpClient);
   }
 
@@ -56,7 +61,7 @@ class ApiService {
           .timeout(apiTimeout);
 
       final responseBody = await response.stream.bytesToString();
-      
+
       if (debugLogs) {
         print('API Response (${response.statusCode}): $responseBody');
       }
@@ -80,14 +85,35 @@ class ApiService {
   Future<http.Response> login(String email, String password) async {
     return _request(
       'POST',
-      'login',
+      'api/auth/login',
       body: {'email': email, 'password': password},
     );
   }
 
   // Méthode d'inscription
   Future<http.Response> register(Map<String, dynamic> data) async {
-    return _request('POST', 'register', body: data);
+    return _request('POST', 'api/auth/register', body: data);
+  }
+
+  // Vérifier le code de vérification email
+  Future<http.Response> verifyEmailCode(String email, String code) async {
+    return _request(
+      'POST',
+      'api/auth/verify-email-code',
+      body: {'email': email, 'code': code},
+    );
+  }
+
+  // Renvoyer le code de vérification
+  Future<http.Response> resendVerificationCode(
+    String email, {
+    String verificationMethod = 'auto',
+  }) async {
+    return _request(
+      'POST',
+      'api/auth/resend-verification-code',
+      body: {'email': email, 'method': verificationMethod},
+    );
   }
 
   // N'oubliez pas de fermer le client quand vous avez fini

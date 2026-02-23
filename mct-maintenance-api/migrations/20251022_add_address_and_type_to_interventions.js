@@ -2,21 +2,40 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.addColumn('interventions', 'address', {
-      type: Sequelize.STRING,
-      allowNull: true,
-      after: 'description'
-    });
+    const tableDesc = await queryInterface.describeTable('interventions');
+    
+    // Ajouter address seulement si elle n'existe pas
+    if (!tableDesc.address) {
+      await queryInterface.addColumn('interventions', 'address', {
+        type: Sequelize.STRING,
+        allowNull: true
+      });
+      console.log('✅ Column "address" added to interventions');
+    } else {
+      console.log('⚠️ Column "address" already exists, skipping...');
+    }
 
-    await queryInterface.addColumn('interventions', 'intervention_type', {
-      type: Sequelize.STRING,
-      allowNull: true,
-      after: 'priority'
-    });
+    // Ajouter intervention_type seulement si elle n'existe pas
+    if (!tableDesc.intervention_type) {
+      await queryInterface.addColumn('interventions', 'intervention_type', {
+        type: Sequelize.STRING,
+        allowNull: true
+      });
+      console.log('✅ Column "intervention_type" added to interventions');
+    } else {
+      console.log('⚠️ Column "intervention_type" already exists, skipping...');
+    }
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.removeColumn('interventions', 'address');
-    await queryInterface.removeColumn('interventions', 'intervention_type');
+    const tableDesc = await queryInterface.describeTable('interventions');
+    
+    if (tableDesc.address) {
+      await queryInterface.removeColumn('interventions', 'address');
+    }
+    
+    if (tableDesc.intervention_type) {
+      await queryInterface.removeColumn('interventions', 'intervention_type');
+    }
   }
 };

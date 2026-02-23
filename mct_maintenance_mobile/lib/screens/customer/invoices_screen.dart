@@ -1,4 +1,5 @@
 import '../../utils/snackbar_helper.dart';
+import '../../widgets/common/support_fab_wrapper.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -56,7 +57,19 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     try {
       final List<dynamic> ordersData = response['data'] ?? [];
 
+      print('🔍 DEBUG Invoices - Nombre de commandes: ${ordersData.length}');
+
       return ordersData.map((orderJson) {
+        // DEBUG: Afficher tous les champs de la première commande
+        if (ordersData.indexOf(orderJson) == 0) {
+          print('📦 DEBUG - Premier objet commande:');
+          print('   Keys disponibles: ${orderJson.keys.toList()}');
+          print('   payment_status: ${orderJson['payment_status']}');
+          print('   paymentStatus: ${orderJson['paymentStatus']}');
+          print('   status: ${orderJson['status']}');
+          print('   statut: ${orderJson['statut']}');
+        }
+
         // Convertir les commandes en factures
         final orderId = orderJson['id'].toString();
         final createdAt = DateTime.parse(orderJson['created_at'] ??
@@ -67,6 +80,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         double amount = 0.0;
         if (orderJson['totalAmount'] != null) {
           amount = double.tryParse(orderJson['totalAmount'].toString()) ?? 0.0;
+        } else if (orderJson['total_amount'] != null) {
+          amount = double.tryParse(orderJson['total_amount'].toString()) ?? 0.0;
         } else if (orderJson['montant_total'] != null) {
           amount =
               double.tryParse(orderJson['montant_total'].toString()) ?? 0.0;
@@ -76,6 +91,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           amount = double.tryParse(orderJson['amount'].toString()) ?? 0.0;
         }
 
+        // Récupérer le statut de paiement
+        // L'API renvoie paymentStatus en camelCase (pas payment_status)
+        String paymentStatus = orderJson['paymentStatus']?.toString() ??
+            orderJson['payment_status']?.toString() ??
+            orderJson['statut_paiement']?.toString() ??
+            'pending';
+
+        print('💳 Commande #$orderId - Payment Status brut: $paymentStatus');
+
+        final mappedStatus = _mapInvoiceStatus(paymentStatus, createdAt);
+        print('   ➡️ Status mappé: $mappedStatus');
+
         return Invoice(
           id: orderId,
           number: 'FACT-${DateTime.now().year}-${orderId.padLeft(3, '0')}',
@@ -83,32 +110,36 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           dueDate:
               createdAt.add(const Duration(days: 30)), // Échéance à 30 jours
           amount: amount,
-          status: _mapInvoiceStatus(
-              orderJson['statut_paiement'] ?? orderJson['statut'] ?? 'pending'),
+          status: mappedStatus,
           description: orderJson['notes'] ??
               orderJson['adresse_livraison'] ??
+              orderJson['shipping_address'] ??
               'Commande #$orderId',
         );
       }).toList();
     } catch (e) {
-      print('Erreur lors du parsing des factures: $e');
+      print('❌ Erreur lors du parsing des factures: $e');
       return [];
     }
   }
 
-  String _mapInvoiceStatus(String paymentStatus) {
+  String _mapInvoiceStatus(String paymentStatus, DateTime invoiceDate) {
     switch (paymentStatus.toLowerCase()) {
-      case 'paye':
       case 'paid':
+      case 'paye':
         return 'paid';
-      case 'en_attente':
+      case 'failed':
+      case 'refunded':
+        return 'cancelled';
       case 'pending':
+      case 'en_attente':
+        // Vérifier si la facture est en retard (plus de 30 jours)
+        final dueDate = invoiceDate.add(const Duration(days: 30));
+        if (DateTime.now().isAfter(dueDate)) {
+          return 'overdue';
+        }
         return 'pending';
-      case 'en_retard':
-      case 'overdue':
-        return 'overdue';
       default:
-        // Vérifier si la date d'échéance est dépassée
         return 'pending';
     }
   }
@@ -163,51 +194,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Mes Factures',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            fontSize: 20,
-          ),
-        ),
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF0a543d),
-                Color(0xFF0d6b4d),
-              ],
+    return SupportFabWrapper(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'Mes Factures',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 20,
             ),
           ),
-        ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            child: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.refresh, size: 20),
-              ),
-              onPressed: _loadInvoices,
-              tooltip: 'Actualiser',
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Statistiques modernes
-          Container(
-            padding: const EdgeInsets.all(20),
+          elevation: 0,
+          flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -218,102 +216,169 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 ],
               ),
             ),
-            child: Column(
-              children: [
-                Row(
+          ),
+          actions: [
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.refresh, size: 20),
+                ),
+                onPressed: _loadInvoices,
+                tooltip: 'Actualiser',
+              ),
+            ),
+          ],
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+              fit: BoxFit.cover,
+              opacity: 0.4,
+            ),
+          ),
+          child: Column(
+            children: [
+              // Statistiques modernes
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF0a543d),
+                      Color(0xFF0d6b4d),
+                    ],
+                  ),
+                ),
+                child: Column(
                   children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'Total',
-                        _invoices.length.toString(),
-                        Icons.receipt_long_outlined,
-                        const Color(0xFF2196F3),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Payées',
-                        _invoices
-                            .where((i) => i.status == 'paid')
-                            .length
-                            .toString(),
-                        Icons.check_circle_outline,
-                        const Color(0xFF4CAF50),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildStatCard(
-                        'En retard',
-                        _invoices
-                            .where((i) => i.status == 'overdue')
-                            .length
-                            .toString(),
-                        Icons.warning_amber_outlined,
-                        const Color(0xFFFF5252),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            'Total',
+                            _invoices.length.toString(),
+                            Icons.receipt_long_outlined,
+                            const Color(0xFF2196F3),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            'Payées',
+                            _invoices
+                                .where((i) => i.status == 'paid')
+                                .length
+                                .toString(),
+                            Icons.check_circle_outline,
+                            const Color(0xFF4CAF50),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            'En retard',
+                            _invoices
+                                .where((i) => i.status == 'overdue')
+                                .length
+                                .toString(),
+                            Icons.warning_amber_outlined,
+                            const Color(0xFFFF5252),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-
-          // Filtres modernes
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterChip(
-                      'Toutes', 'all', Icons.receipt_long_outlined),
-                  const SizedBox(width: 10),
-                  _buildFilterChip(
-                      'Payées', 'paid', Icons.check_circle_outline),
-                  const SizedBox(width: 10),
-                  _buildFilterChip('En attente', 'pending', Icons.schedule),
-                  const SizedBox(width: 10),
-                  _buildFilterChip(
-                      'En retard', 'overdue', Icons.warning_amber_outlined),
-                ],
               ),
-            ),
-          ),
 
-          // Liste des factures
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredInvoices.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.receipt_outlined,
-                                size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Aucune facture',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade600,
+              // Filtres modernes
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFilterChip(
+                          'Toutes', 'all', Icons.receipt_long_outlined),
+                      const SizedBox(width: 10),
+                      _buildFilterChip(
+                          'Payées', 'paid', Icons.check_circle_outline),
+                      const SizedBox(width: 10),
+                      _buildFilterChip('En attente', 'pending', Icons.schedule),
+                      const SizedBox(width: 10),
+                      _buildFilterChip(
+                          'En retard', 'overdue', Icons.warning_amber_outlined),
+                      const SizedBox(width: 10),
+                      _buildFilterChip(
+                          'Annulées', 'cancelled', Icons.cancel_outlined),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Liste des factures
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _filteredInvoices.isEmpty
+                        ? Center(
+                            child: Container(
+                              margin: const EdgeInsets.all(24),
+                              padding: const EdgeInsets.all(32),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.receipt_outlined,
+                                      size: 64,
+                                      color: const Color(0xFF0a543d)
+                                          .withOpacity(0.6)),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Aucune facture',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _filteredInvoices.length,
-                        itemBuilder: (context, index) {
-                          final invoice = _filteredInvoices[index];
-                          return _buildInvoiceCard(invoice);
-                        },
-                      ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _filteredInvoices.length,
+                            itemBuilder: (context, index) {
+                              final invoice = _filteredInvoices[index];
+                              return _buildInvoiceCard(invoice);
+                            },
+                          ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -597,6 +662,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         label = 'En retard';
         icon = Icons.warning;
         break;
+      case 'cancelled':
+        primaryColor = const Color(0xFF757575);
+        secondaryColor = const Color(0xFF9E9E9E);
+        label = 'Annulée';
+        icon = Icons.cancel;
+        break;
       default:
         primaryColor = const Color(0xFF9E9E9E);
         secondaryColor = const Color(0xFFBDBDBD);
@@ -737,11 +808,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               fontSize: 14,
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
             ),
           ),
         ],

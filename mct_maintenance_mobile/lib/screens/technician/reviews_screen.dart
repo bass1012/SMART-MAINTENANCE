@@ -105,29 +105,34 @@ class _TechnicianReviewsScreenState extends State<TechnicianReviewsScreen> {
       appBar: AppBar(
         title: const Text('Mes Évaluations'),
       ),
-      body: _isLoading
-          ? const Center(child: LoadingIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadReviews,
-              child: ListView(
-                padding: const EdgeInsets.all(16.0),
-                children: [
-                  _buildRatingsSummary(),
-                  const SizedBox(height: 24),
-                  _buildRatingsBreakdown(),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Avis récents',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ..._reviews.map((review) => _buildReviewCard(review)),
-                ],
+      body: Stack(
+        children: [
+          // Image de fond
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.4,
+              child: Image.asset(
+                'assets/images/background_tech.png',
+                fit: BoxFit.cover,
               ),
             ),
+          ),
+          // Contenu
+          _isLoading
+              ? const Center(child: LoadingIndicator())
+              : RefreshIndicator(
+                  onRefresh: _loadReviews,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16.0),
+                    children: [
+                      _buildRatingsSummary(),
+                      const SizedBox(height: 24),
+                      _buildRatingsBreakdown(),
+                    ],
+                  ),
+                ),
+        ],
+      ),
     );
   }
 

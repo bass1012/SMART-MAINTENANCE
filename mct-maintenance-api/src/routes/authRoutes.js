@@ -22,21 +22,36 @@ router.post('/verify-reset-code', verifyResetCodeValidation, authController.veri
 
 // Validation rules
 const registerValidation = [
-  body('email').isEmail().withMessage('Please provide a valid email'),
+  body('email')
+    .optional({ checkFalsy: true })
+    .isEmail()
+    .withMessage('Please provide a valid email'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
-  body('phone').optional().matches(/^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/).withMessage('Please provide a valid phone number'),
-  body('role').optional().isIn(['customer', 'technician']).withMessage('Invalid role'),
-  body('first_name').if(body('role').exists()).notEmpty().withMessage('First name is required'),
-  body('last_name').if(body('role').exists()).notEmpty().withMessage('Last name is required')
+  body('phone')
+    .optional({ checkFalsy: true })
+    .matches(/^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/)
+    .withMessage('Please provide a valid phone number'),
+  body('role').optional().isIn(['customer', 'technician', 'manager', 'admin']).withMessage('Invalid role'),
+  body('first_name').optional().trim().isLength({ min: 1 }).withMessage('First name is required'),
+  body('last_name').optional().trim().isLength({ min: 1 }).withMessage('Last name is required'),
+  // Custom validator: au moins email OU phone doit être fourni
+  body().custom((value, { req }) => {
+    const hasEmail = req.body.email && req.body.email.trim() !== '';
+    const hasPhone = req.body.phone && req.body.phone.trim() !== '';
+    if (!hasEmail && !hasPhone) {
+      throw new Error('Either email or phone number is required');
+    }
+    return true;
+  })
 ];
 
 const loginValidation = [
-  body('email').isEmail().withMessage('Please provide a valid email'),
+  body('email').notEmpty().withMessage('Email ou téléphone requis'),
   body('password').notEmpty().withMessage('Password is required')
 ];
 
 const forgotPasswordValidation = [
-  body('email').isEmail().withMessage('Please provide a valid email')
+  body('email').notEmpty().withMessage('Email ou téléphone requis')
 ];
 
 const updateProfileValidation = [
@@ -121,6 +136,16 @@ router.post('/register', registerValidation, authController.register);
  *         description: Invalid credentials
  */
 router.post('/login', loginValidation, authController.login);
+
+// Email verification routes
+router.post('/verify-email-code', [
+  body('email').isEmail().withMessage('Email valide requis'),
+  body('code').isLength({ min: 6, max: 6 }).withMessage('Code à 6 chiffres requis')
+], authController.verifyEmailCode);
+
+router.post('/resend-verification-code', [
+  body('email').isEmail().withMessage('Email valide requis')
+], authController.resendEmailVerificationCode);
 
 /**
  * @swagger
@@ -253,5 +278,23 @@ router.post('/logout', authenticate, authController.logout);
  * @access  Private
  */
 router.post('/fcm-token', authenticate, authController.updateFcmToken);
+
+/**
+ * @swagger
+ * /api/auth/delete-account:
+ *   delete:
+ *     summary: Delete my account (soft delete)
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Account deleted successfully
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ */
+router.delete('/delete-account', authenticate, authController.deleteMyAccount);
 
 module.exports = router;

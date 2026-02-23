@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../utils/snackbar_helper.dart';
+import 'diagnostic_payment_screen.dart';
 
 class InterventionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> intervention;
@@ -31,7 +32,10 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     Future.delayed(Duration.zero, () {
       print(
           '🔄 Rafraîchissement initial de l\'intervention #${_intervention['id']}');
-      _refreshIntervention();
+      _refreshIntervention().then((_) {
+        // Après le rafraîchissement, vérifier si on doit afficher le popup d'évaluation
+        _checkAndShowRatingDialog();
+      });
     });
 
     // Rafraîchir automatiquement toutes les 30 secondes si l'intervention n'est pas terminée
@@ -127,71 +131,315 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _refreshIntervention,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Titre et priorité
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _intervention['title'] ?? 'Sans titre',
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
+          : Container(
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage(
+                      'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+                  fit: BoxFit.cover,
+                  opacity: 0.4,
+                ),
+              ),
+              child: RefreshIndicator(
+                onRefresh: _refreshIntervention,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Titre et priorité
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _intervention['title'] ?? 'Sans titre',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildPriorityBadge(priority),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
+                          const SizedBox(width: 8),
+                          _buildPriorityBadge(priority),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
 
-                    // Suivi des étapes
-                    _buildProgressTracker(status),
-                    const SizedBox(height: 24),
+                      // Suivi des étapes
+                      _buildProgressTracker(status),
+                      const SizedBox(height: 24),
 
-                    // Informations principales
-                    _buildInfoCard(),
-                    const SizedBox(height: 16),
-
-                    // Description
-                    _buildDescriptionCard(),
-                    const SizedBox(height: 16),
-
-                    // Images
-                    if (_intervention['images'] != null &&
-                        (_intervention['images'] as List).isNotEmpty)
-                      _buildImagesCard(),
-
-                    if (_intervention['images'] != null &&
-                        (_intervention['images'] as List).isNotEmpty)
+                      // Informations principales
+                      _buildInfoCard(),
                       const SizedBox(height: 16),
 
-                    // Technicien
-                    if (_intervention['technician'] != null)
-                      _buildTechnicianCard(),
+                      // Description
+                      _buildDescriptionCard(),
+                      const SizedBox(height: 16),
 
-                    const SizedBox(height: 16),
+                      // Images
+                      if (_intervention['images'] != null &&
+                          (_intervention['images'] as List).isNotEmpty)
+                        _buildImagesCard(),
 
-                    // Dates
-                    _buildDatesCard(scheduledDate, completedDate),
+                      if (_intervention['images'] != null &&
+                          (_intervention['images'] as List).isNotEmpty)
+                        const SizedBox(height: 16),
 
-                    // Section notation du technicien si intervention terminée
-                    if (status == 'completed') const SizedBox(height: 16),
-                    if (status == 'completed') _buildRatingSection(),
-                  ],
+                      // Technicien
+                      if (_intervention['technician'] != null)
+                        _buildTechnicianCard(),
+
+                      // Offre d'entretien
+                      if (_intervention['maintenance_offer'] != null) ...[
+                        const SizedBox(height: 16),
+                        _buildMaintenanceOfferCard(),
+                      ],
+
+                      const SizedBox(height: 16),
+
+                      // Dates
+                      _buildDatesCard(scheduledDate, completedDate),
+
+                      // Section paiement si non payé
+                      if (_needsPayment()) ...[
+                        const SizedBox(height: 16),
+                        _buildPaymentSection(),
+                      ],
+
+                      // Bouton d'annulation si l'intervention peut être annulée
+                      if (_canCancel(status)) ...[
+                        const SizedBox(height: 16),
+                        _buildCancelButton(),
+                      ],
+
+                      // Section notation du technicien si intervention terminée
+                      if (status == 'completed') const SizedBox(height: 16),
+                      if (status == 'completed') _buildRatingSection(),
+                    ],
+                  ),
                 ),
               ),
             ),
     );
+  }
+
+  bool _canCancel(String status) {
+    // Le client peut annuler si l'intervention est en attente ou assignée
+    // mais pas encore acceptée, en cours ou terminée
+    return status == 'pending' || status == 'assigned';
+  }
+
+  bool _needsPayment() {
+    // Check if this intervention requires payment
+    final diagnosticPaid = _intervention['diagnostic_paid'] ?? false;
+    final diagnosticFee =
+        double.tryParse(_intervention['diagnostic_fee']?.toString() ?? '0') ??
+            0;
+    final isFree = _intervention['is_free_diagnosis'] ?? true;
+
+    // Needs payment if not free, has a fee, and not yet paid
+    return !isFree && diagnosticFee > 0 && !diagnosticPaid;
+  }
+
+  Widget _buildPaymentSection() {
+    final diagnosticFee =
+        double.tryParse(_intervention['diagnostic_fee']?.toString() ?? '0') ??
+            0;
+    final interventionType = _intervention['intervention_type'] ?? '';
+
+    String paymentLabel;
+    switch (interventionType) {
+      case 'repair':
+        paymentLabel = 'Paiement réparation';
+        break;
+      case 'installation':
+        paymentLabel = 'Paiement installation';
+        break;
+      default:
+        paymentLabel = 'Paiement diagnostic';
+    }
+
+    return Card(
+      elevation: 2,
+      color: Colors.orange.shade50,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.payment, color: Colors.orange.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  paymentLabel,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Montant à payer: ${diagnosticFee.toStringAsFixed(0)} FCFA',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Veuillez effectuer le paiement pour confirmer votre demande.',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DiagnosticPaymentScreen(
+                        interventionId: _intervention['id'],
+                        diagnosticFee: diagnosticFee,
+                      ),
+                    ),
+                  );
+                  if (result == true) {
+                    await _refreshIntervention();
+                  }
+                },
+                icon: const Icon(Icons.credit_card),
+                label: const Text('Payer maintenant'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCancelButton() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Actions',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Vous pouvez annuler cette demande si vous n\'en avez plus besoin.',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _showCancelConfirmation,
+                icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                label: const Text('Annuler cette intervention'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCancelConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.red.shade100,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.red.shade700,
+            size: 32,
+          ),
+        ),
+        title: const Text('Annuler l\'intervention ?'),
+        content: const Text(
+          'Êtes-vous sûr de vouloir annuler cette demande d\'intervention ? Cette action est irréversible.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Non, garder'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _cancelIntervention();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Oui, annuler'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _cancelIntervention() async {
+    setState(() => _isLoading = true);
+
+    try {
+      await _apiService.cancelIntervention(_intervention['id']);
+
+      if (mounted) {
+        SnackBarHelper.showSuccess(
+          context,
+          'Intervention annulée avec succès',
+          emoji: '✓',
+        );
+        // Rafraîchir les données
+        await _refreshIntervention();
+        // Retourner à la liste avec indication de mise à jour
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        SnackBarHelper.showError(context, 'Erreur: $e');
+      }
+    }
   }
 
   Widget _buildProgressTracker(String status) {
@@ -425,6 +673,17 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                 'Type',
                 _getTypeLabel(_intervention['intervention_type']),
               ),
+            if (_intervention['intervention_type'] != null &&
+                _intervention['intervention_type']
+                    .toString()
+                    .toLowerCase()
+                    .contains('installation') &&
+                _intervention['climatiseur_type'] != null)
+              _buildInfoRow(
+                Icons.ac_unit,
+                'Modèle',
+                _intervention['climatiseur_type'],
+              ),
             _buildInfoRow(
               Icons.format_list_numbered,
               'Nombre d\'équipements',
@@ -538,6 +797,103 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMaintenanceOfferCard() {
+    final offer = _intervention['maintenance_offer'];
+    if (offer == null) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF0a543d).withOpacity(0.3)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0a543d).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.local_offer,
+                      color: Color(0xFF0a543d),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Offre d\'entretien',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                offer['title'] ?? 'Offre',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0a543d),
+                ),
+              ),
+              if (offer['description'] != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  offer['description'],
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.monetization_on,
+                      size: 18, color: Colors.orange),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${offer['price']?.toString() ?? '0'} F CFA',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  if (offer['duration'] != null) ...[
+                    const SizedBox(width: 16),
+                    const Icon(Icons.schedule, size: 18, color: Colors.blue),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${offer['duration']} mois',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -989,6 +1345,23 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         ),
       ),
     );
+  }
+
+  // Vérifier et afficher le popup d'évaluation si nécessaire
+  void _checkAndShowRatingDialog() {
+    final status = _intervention['status'];
+    final hasRating = _intervention['rating'] != null;
+
+    // Afficher le popup seulement si l'intervention est terminée et pas encore évaluée
+    if (status == 'completed' && !hasRating && mounted) {
+      // Attendre un peu pour que l'écran soit bien chargé
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          print('⭐ Affichage automatique du popup d\'évaluation');
+          _showRatingDialog();
+        }
+      });
+    }
   }
 
   void _showRatingDialog() {

@@ -91,6 +91,11 @@ class ViewReportScreen extends StatelessWidget {
                       ),
                     const SizedBox(height: 24),
 
+                    // Mesures techniques
+                    if (_hasTechnicalMeasures(report))
+                      _buildTechnicalMeasuresSection(report),
+                    const SizedBox(height: 24),
+
                     // Matériaux utilisés
                     if (report['materials_used'] != null &&
                         (report['materials_used'] as List).isNotEmpty)
@@ -239,7 +244,7 @@ class ViewReportScreen extends StatelessWidget {
             const Divider(height: 24),
             _buildInfoRow('Titre', intervention['title'] ?? 'N/A'),
             const SizedBox(height: 8),
-            _buildInfoRow('Client', intervention['customer'] ?? 'N/A'),
+            _buildInfoRow('Client', _getCustomerName(intervention['customer'])),
             const SizedBox(height: 8),
             _buildInfoRow('Adresse', intervention['address'] ?? 'N/A'),
             const SizedBox(height: 8),
@@ -468,6 +473,12 @@ class ViewReportScreen extends StatelessWidget {
     final observations = report['observations'] ?? '';
     final workDescription = report['work_description'] ?? '';
 
+    // Mesures techniques
+    final pression = report['pression']?.toString() ?? '';
+    final temperature = report['temperature']?.toString() ?? '';
+    final intensite = report['intensite']?.toString() ?? '';
+    final tension = report['tension']?.toString() ?? '';
+
     // Créer le message de partage
     String materialsText = '';
     if (materials.isNotEmpty) {
@@ -486,6 +497,20 @@ class ViewReportScreen extends StatelessWidget {
       totalMaterials += (quantity * unitPrice);
     }
 
+    // Mesures techniques texte
+    String measuresText = '';
+    if (pression.isNotEmpty ||
+        temperature.isNotEmpty ||
+        intensite.isNotEmpty ||
+        tension.isNotEmpty) {
+      measuresText = '\n📊 Mesures techniques:\n';
+      if (pression.isNotEmpty) measuresText += '  • Pression: $pression bar\n';
+      if (temperature.isNotEmpty)
+        measuresText += '  • Température: $temperature °C\n';
+      if (intensite.isNotEmpty) measuresText += '  • Intensité: $intensite A\n';
+      if (tension.isNotEmpty) measuresText += '  • Tension: $tension V\n';
+    }
+
     final String shareText = '''
 🔧 RAPPORT D'INTERVENTION - MCT MAINTENANCE
 
@@ -497,7 +522,7 @@ ${intervention['title'] ?? 'Sans titre'}
 
 📝 Description des travaux:
 $workDescription
-
+$measuresText
 ${observations.isNotEmpty ? '💡 Observations:\n$observations\n' : ''}
 $materialsText
 ${materials.isNotEmpty ? '\n💰 Total matériaux: ${totalMaterials.toStringAsFixed(0)} FCFA\n' : ''}
@@ -520,6 +545,18 @@ Rapport officiel soumis
     );
   }
 
+  String _getCustomerName(dynamic customer) {
+    if (customer == null) return 'N/A';
+    if (customer is String) return customer;
+    if (customer is Map) {
+      final firstName = customer['first_name'] ?? '';
+      final lastName = customer['last_name'] ?? '';
+      final name = '$firstName $lastName'.trim();
+      return name.isNotEmpty ? name : (customer['email'] ?? 'N/A');
+    }
+    return 'N/A';
+  }
+
   String _formatDate(dynamic date) {
     if (date == null) return 'N/A';
 
@@ -538,5 +575,128 @@ Rapport officiel soumis
       print('❌ Erreur formatage date: $e, date=$date');
       return 'Date invalide';
     }
+  }
+
+  bool _hasTechnicalMeasures(Map<String, dynamic> report) {
+    final pression = report['pression']?.toString() ?? '';
+    final temperature = report['temperature']?.toString() ?? '';
+    final intensite = report['intensite']?.toString() ?? '';
+    final tension = report['tension']?.toString() ?? '';
+    return pression.isNotEmpty ||
+        temperature.isNotEmpty ||
+        intensite.isNotEmpty ||
+        tension.isNotEmpty;
+  }
+
+  Widget _buildTechnicalMeasuresSection(Map<String, dynamic> report) {
+    final pression = report['pression']?.toString() ?? '';
+    final temperature = report['temperature']?.toString() ?? '';
+    final intensite = report['intensite']?.toString() ?? '';
+    final tension = report['tension']?.toString() ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.speed, color: const Color(0xFF0a543d), size: 24),
+            const SizedBox(width: 8),
+            const Text(
+              'Mesures Techniques',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0a543d),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.shade200),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  if (pression.isNotEmpty)
+                    Expanded(
+                      child: _buildMeasureItem(
+                        Icons.compress,
+                        'Pression',
+                        '$pression bar',
+                      ),
+                    ),
+                  if (temperature.isNotEmpty)
+                    Expanded(
+                      child: _buildMeasureItem(
+                        Icons.thermostat,
+                        'Température',
+                        '$temperature °C',
+                      ),
+                    ),
+                ],
+              ),
+              if (intensite.isNotEmpty || tension.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    if (intensite.isNotEmpty)
+                      Expanded(
+                        child: _buildMeasureItem(
+                          Icons.electrical_services,
+                          'Intensité',
+                          '$intensite A',
+                        ),
+                      ),
+                    if (tension.isNotEmpty)
+                      Expanded(
+                        child: _buildMeasureItem(
+                          Icons.bolt,
+                          'Tension',
+                          '$tension V',
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMeasureItem(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.orange.shade700, size: 20),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }

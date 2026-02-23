@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/snackbar_helper.dart';
+import '../../widgets/common/support_fab_wrapper.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -52,481 +53,527 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Paramètres',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            fontSize: 20,
+    return SupportFabWrapper(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'Paramètres',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 20,
+            ),
           ),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF0a543d),
+                  Color(0xFF0d6b4d),
+                  Color(0xFF0f7d59)
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+          elevation: 0,
         ),
-        flexibleSpace: Container(
+        body: Container(
           decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF0a543d), Color(0xFF0d6b4d), Color(0xFF0f7d59)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+            image: DecorationImage(
+              image: AssetImage(
+                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+              fit: BoxFit.cover,
+              opacity: 0.4,
             ),
+          ),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Notifications
+              _buildSectionTitle('Notifications'),
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).shadowColor.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      title: Text(
+                        'Activer les notifications',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Recevoir toutes les notifications',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      value: _notificationsEnabled,
+                      onChanged: (value) {
+                        setState(() => _notificationsEnabled = value);
+                        _savePreference('notifications_enabled', value);
+                      },
+                      secondary: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.notifications_outlined,
+                            color: Colors.white, size: 20),
+                      ),
+                      activeColor: const Color(0xFF0a543d),
+                    ),
+                    Divider(height: 1),
+                    SwitchListTile(
+                      title: Text(
+                        'Notifications par email',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      value: _emailNotifications,
+                      onChanged: _notificationsEnabled
+                          ? (value) {
+                              setState(() => _emailNotifications = value);
+                              _savePreference('email_notifications', value);
+                            }
+                          : null,
+                      secondary: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.email_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      activeColor: const Color(0xFF0a543d),
+                    ),
+                    Divider(height: 1),
+                    SwitchListTile(
+                      title: Text(
+                        'Notifications par SMS',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      value: _smsNotifications,
+                      onChanged: _notificationsEnabled
+                          ? (value) {
+                              setState(() => _smsNotifications = value);
+                              _savePreference('sms_notifications', value);
+                            }
+                          : null,
+                      secondary: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.sms_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      activeColor: const Color(0xFF0a543d),
+                    ),
+                    Divider(height: 1),
+                    SwitchListTile(
+                      title: Text(
+                        'Notifications push',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      value: _pushNotifications,
+                      onChanged: _notificationsEnabled
+                          ? (value) {
+                              setState(() => _pushNotifications = value);
+                              _savePreference('push_notifications', value);
+                            }
+                          : null,
+                      secondary: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.phone_android_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      activeColor: const Color(0xFF0a543d),
+                    ),
+                    Divider(height: 1),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.tune,
+                            color: Colors.white, size: 20),
+                      ),
+                      title: Text(
+                        'Préférences Détaillées',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Gérer toutes vos préférences de notifications',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () {
+                        Navigator.pushNamed(context, '/notification-settings');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Préférences
+              _buildSectionTitle('Préférences'),
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).shadowColor.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.language_outlined,
+                            color: Colors.white, size: 20),
+                      ),
+                      title: Text(
+                        'Langue',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        _getLanguageLabel(_language),
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () => _showLanguageDialog(),
+                    ),
+                    Divider(height: 1),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.palette_outlined,
+                            color: Colors.white, size: 20),
+                      ),
+                      title: Text(
+                        'Thème',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        _getThemeLabel(_theme),
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () => _showThemeDialog(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Confidentialité et sécurité
+              _buildSectionTitle('Confidentialité et sécurité'),
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).shadowColor.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.privacy_tip_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      title: Text(
+                        'Politique de confidentialité',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () => _showPrivacyPolicy(),
+                    ),
+                    Divider(height: 1),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.description_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      title: Text(
+                        'Conditions d\'utilisation',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () => _showTermsOfService(),
+                    ),
+                    Divider(height: 1),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.security_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      title: Text(
+                        'Changer le mot de passe',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () => _showChangePasswordDialog(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // À propos
+              _buildSectionTitle('À propos'),
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).shadowColor.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.info_outline,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      title: Text(
+                        'Version de l\'application',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '1.0.0',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                    ),
+                    Divider(height: 1),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.update_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      title: Text(
+                        'Vérifier les mises à jour',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () {
+                        SnackBarHelper.showInfo(
+                          context,
+                          'Vous utilisez la dernière version',
+                          emoji: '✓',
+                        );
+                      },
+                    ),
+                    Divider(height: 1),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.article_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      title: Text(
+                        'Licences open source',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () {
+                        showLicensePage(context: context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Données
+              _buildSectionTitle('Données'),
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).shadowColor.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.cached_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      title: Text(
+                        'Vider le cache',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () => _showClearCacheDialog(),
+                    ),
+                    Divider(height: 1),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.download_outlined,
+                            color: Color(0xFF0a543d), size: 20),
+                      ),
+                      title: Text(
+                        'Télécharger mes données',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                      trailing: const Icon(Icons.chevron_right,
+                          color: Color(0xFF0a543d)),
+                      onTap: () => _exportUserData(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-        elevation: 0,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Notifications
-          _buildSectionTitle('Notifications'),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).shadowColor.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                SwitchListTile(
-                  title: Text(
-                    'Activer les notifications',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Recevoir toutes les notifications',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  value: _notificationsEnabled,
-                  onChanged: (value) {
-                    setState(() => _notificationsEnabled = value);
-                    _savePreference('notifications_enabled', value);
-                  },
-                  secondary: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.notifications_outlined,
-                        color: Colors.white, size: 20),
-                  ),
-                  activeColor: const Color(0xFF0a543d),
-                ),
-                Divider(height: 1),
-                SwitchListTile(
-                  title: Text(
-                    'Notifications par email',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  value: _emailNotifications,
-                  onChanged: _notificationsEnabled
-                      ? (value) {
-                          setState(() => _emailNotifications = value);
-                          _savePreference('email_notifications', value);
-                        }
-                      : null,
-                  secondary: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.email_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  activeColor: const Color(0xFF0a543d),
-                ),
-                Divider(height: 1),
-                SwitchListTile(
-                  title: Text(
-                    'Notifications par SMS',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  value: _smsNotifications,
-                  onChanged: _notificationsEnabled
-                      ? (value) {
-                          setState(() => _smsNotifications = value);
-                          _savePreference('sms_notifications', value);
-                        }
-                      : null,
-                  secondary: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.sms_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  activeColor: const Color(0xFF0a543d),
-                ),
-                Divider(height: 1),
-                SwitchListTile(
-                  title: Text(
-                    'Notifications push',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  value: _pushNotifications,
-                  onChanged: _notificationsEnabled
-                      ? (value) {
-                          setState(() => _pushNotifications = value);
-                          _savePreference('push_notifications', value);
-                        }
-                      : null,
-                  secondary: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.phone_android_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  activeColor: const Color(0xFF0a543d),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Préférences
-          _buildSectionTitle('Préférences'),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).shadowColor.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.language_outlined,
-                        color: Colors.white, size: 20),
-                  ),
-                  title: Text(
-                    'Langue',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    _getLanguageLabel(_language),
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () => _showLanguageDialog(),
-                ),
-                Divider(height: 1),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.palette_outlined,
-                        color: Colors.white, size: 20),
-                  ),
-                  title: Text(
-                    'Thème',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    _getThemeLabel(_theme),
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () => _showThemeDialog(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Confidentialité et sécurité
-          _buildSectionTitle('Confidentialité et sécurité'),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).shadowColor.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.privacy_tip_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  title: Text(
-                    'Politique de confidentialité',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () => _showPrivacyPolicy(),
-                ),
-                Divider(height: 1),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.description_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  title: Text(
-                    'Conditions d\'utilisation',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () => _showTermsOfService(),
-                ),
-                Divider(height: 1),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.security_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  title: Text(
-                    'Changer le mot de passe',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () => _showChangePasswordDialog(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // À propos
-          _buildSectionTitle('À propos'),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).shadowColor.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.info_outline,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  title: Text(
-                    'Version de l\'application',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '1.0.0',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                ),
-                Divider(height: 1),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.update_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  title: Text(
-                    'Vérifier les mises à jour',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () {
-                    SnackBarHelper.showInfo(
-                      context,
-                      'Vous utilisez la dernière version',
-                      emoji: '✓',
-                    );
-                  },
-                ),
-                Divider(height: 1),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.article_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  title: Text(
-                    'Licences open source',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () {
-                    showLicensePage(context: context);
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Données
-          _buildSectionTitle('Données'),
-          Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).shadowColor.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.cached_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  title: Text(
-                    'Vider le cache',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () => _showClearCacheDialog(),
-                ),
-                Divider(height: 1),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.download_outlined,
-                        color: Color(0xFF0a543d), size: 20),
-                  ),
-                  title: Text(
-                    'Télécharger mes données',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                  ),
-                  trailing:
-                      const Icon(Icons.chevron_right, color: Color(0xFF0a543d)),
-                  onTap: () => _exportUserData(),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

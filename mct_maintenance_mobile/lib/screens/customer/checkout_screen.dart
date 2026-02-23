@@ -1,20 +1,15 @@
 import '../../utils/snackbar_helper.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/common/loading_indicator.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../../services/cart_service.dart';
 import '../../services/api_service.dart';
-
-enum PaymentMethod {
-  wave,
-  orangeMoney,
-  moovMoney,
-  mtnMoney,
-  card,
-  cashOnDelivery,
-}
+import '../../services/payment_service.dart';
+import 'payment_status_screen.dart';
+import 'payment_webview_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
@@ -24,7 +19,6 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  PaymentMethod? _selectedPaymentMethod;
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
@@ -35,6 +29,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _isValidatingPromo = false;
   Map<String, dynamic>? _appliedPromo;
   double _discount = 0.0;
+  late final PaymentService _paymentService;
+
+  @override
+  void initState() {
+    super.initState();
+    final apiService = ApiService();
+    _paymentService = PaymentService(apiService);
+  }
 
   @override
   void dispose() {
@@ -205,14 +207,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  Future<void> _processPayment() async {
+  Future<void> _processPayment({bool isCash = false}) async {
     if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    if (_selectedPaymentMethod == null) {
-      SnackBarHelper.showWarning(
-          context, 'Veuillez sélectionner une méthode de paiement');
       return;
     }
 
@@ -235,11 +231,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'shipping_address': _addressController.text,
         'telephone': _phoneController.text,
         'notes': _notesController.text,
-        'payment_method': _getPaymentMethodString(_selectedPaymentMethod!),
-        'statut_paiement':
-            _selectedPaymentMethod == PaymentMethod.cashOnDelivery
-                ? 'en_attente'
-                : 'en_cours',
+        'payment_method': isCash ? 'Espèces à la livraison' : 'FineoPay',
+        'statut_paiement': isCash ? 'en_attente' : 'en_cours',
         if (_appliedPromo != null) ...{
           'promo_code': _appliedPromo!['code'],
           'promo_discount': _discount,
@@ -247,26 +240,91 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         },
       };
 
-      // Envoyer la commande à l'API
+      // Créer la commande
       final response = await apiService.post('/orders', orderData);
+      final orderId = response['data']['id'];
+      final totalAmount = response['data']['totalAmount'];
+      final reference = response['data']['reference'];
 
       if (mounted) {
-        // Vider le panier
-        cart.clear();
+        if (isCash) {
+          // Pour le paiement en espèces, juste confirmer
+          cart.clear();
+          SnackBarHelper.showSuccess(
+            context,
+            'Commande passée avec succès !',
+            emoji: '🎉',
+          );
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        } else {
+          // Pour FineoPay, initialiser le paiement
+          print('💳 Initialisation paiement FineoPay pour commande #$orderId');
+          final paymentData = await _paymentService.initializeOrderPayment(
+            orderId,
+            totalAmount.toDouble(),
+            reference,
+          );
 
-        // Afficher un message de succès
-        SnackBarHelper.showSuccess(
-          context,
-          _selectedPaymentMethod == PaymentMethod.cashOnDelivery
-              ? 'Commande passée avec succès !'
-              : 'Paiement en cours de traitement...',
-          emoji: '🎉',
-        );
+          final paymentUrl = paymentData['paymentUrl'];
+          print('🔗 URL de paiement reçue: $paymentUrl');
 
-        // Rediriger vers l'écran de confirmation
-        Navigator.of(context).popUntil((route) => route.isFirst);
+          if (paymentUrl != null && paymentUrl.toString().isNotEmpty) {
+            try {
+              print('📱 Ouverture du WebView pour le paiement...');
+
+              // Ouvrir le paiement dans un WebView intégré
+              final paymentResult = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PaymentWebViewScreen(
+                    paymentUrl: paymentUrl,
+                    title: 'Paiement commande #$reference',
+                    orderId: orderId,
+                  ),
+                ),
+              );
+
+              if (mounted) {
+                cart.clear();
+                if (paymentResult == true) {
+                  // Paiement réussi
+                  print('✅ Paiement réussi via WebView');
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => PaymentStatusScreen(
+                        orderId: orderId,
+                        orderReference: reference,
+                      ),
+                    ),
+                  );
+                } else {
+                  // Paiement annulé ou échoué - retourner à l'accueil
+                  print('❌ Paiement annulé ou échoué');
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                }
+              }
+            } catch (e) {
+              print('❌ Erreur lors du paiement: $e');
+              if (mounted) {
+                SnackBarHelper.showError(
+                  context,
+                  'Erreur lors du paiement: $e',
+                );
+              }
+            }
+          } else {
+            print('❌ URL de paiement manquante dans la réponse');
+            if (mounted) {
+              SnackBarHelper.showError(
+                context,
+                'URL de paiement manquante',
+              );
+            }
+          }
+        }
       }
     } catch (e) {
+      print('❌ Erreur traitement commande: $e');
       if (mounted) {
         SnackBarHelper.showError(context, 'Erreur: ${e.toString()}');
       }
@@ -274,23 +332,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (mounted) {
         setState(() => _isProcessing = false);
       }
-    }
-  }
-
-  String _getPaymentMethodString(PaymentMethod method) {
-    switch (method) {
-      case PaymentMethod.wave:
-        return 'Wave';
-      case PaymentMethod.orangeMoney:
-        return 'Orange Money';
-      case PaymentMethod.moovMoney:
-        return 'Moov Money';
-      case PaymentMethod.mtnMoney:
-        return 'MTN Money';
-      case PaymentMethod.card:
-        return 'Carte bancaire';
-      case PaymentMethod.cashOnDelivery:
-        return 'Espèces à la livraison';
     }
   }
 
@@ -456,13 +497,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           border: const OutlineInputBorder(),
                           hintText: 'Ex: PROMO2025',
                           suffixIcon: _isValidatingPromo
-                              ? const Padding(
+                              ? Padding(
                                   padding: EdgeInsets.all(12.0),
                                   child: SizedBox(
-                                    width: 20,
+                                    width: 40,
                                     height: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
+                                    child: ButtonLoadingIndicator(
+                                        color: Color(0xFF0a543d), size: 6.0),
                                   ),
                                 )
                               : null,
@@ -561,12 +602,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   prefixIcon: const Icon(Icons.location_on),
                   border: const OutlineInputBorder(),
                   suffixIcon: _isLoadingLocation
-                      ? const Padding(
+                      ? Padding(
                           padding: EdgeInsets.all(12.0),
                           child: SizedBox(
-                            width: 20,
+                            width: 40,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: ButtonLoadingIndicator(
+                              color: Color(0xFF0a543d),
+                              size: 6.0,
+                            ),
                           ),
                         )
                       : IconButton(
@@ -604,208 +648,193 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Méthodes de paiement
-              Text(
-                'Méthode de paiement',
-                style: GoogleFonts.nunitoSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              // Information FineoPay
+              _buildFineoPayInfo(),
               const SizedBox(height: 16),
 
-              // Mobile Money avec logos
-              _buildPaymentOptionWithLogo(
-                PaymentMethod.orangeMoney,
-                'Orange Money',
-                'assets/images/orange_money.png',
-              ),
-              _buildPaymentOptionWithLogo(
-                PaymentMethod.mtnMoney,
-                'MTN Mobile Money',
-                'assets/images/mtn_money.png',
-              ),
-              _buildPaymentOptionWithLogo(
-                PaymentMethod.moovMoney,
-                'Moov Money',
-                'assets/images/moov_money.png',
-              ),
-              _buildPaymentOptionWithLogo(
-                PaymentMethod.wave,
-                'Wave',
-                'assets/images/wave.png',
-              ),
-
-              const SizedBox(height: 8),
-              const Divider(),
-              const SizedBox(height: 8),
-
-              // Autres méthodes
-              _buildPaymentOption(
-                PaymentMethod.card,
-                'Carte bancaire',
-                Icons.credit_card,
-                Colors.purple,
-              ),
-              _buildPaymentOption(
-                PaymentMethod.cashOnDelivery,
-                'Espèces à la livraison',
-                Icons.money,
-                Colors.green,
-              ),
-
+              // Note de sécurité
+              _buildSecurityNote(),
               const SizedBox(height: 32),
 
-              // Bouton de paiement
+              // Bouton de paiement FineoPay
               SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton(
-                  onPressed: _isProcessing ? null : _processPayment,
-                  child: _isProcessing
-                      ? const CircularProgressIndicator(color: Colors.white)
+                child: ElevatedButton.icon(
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _processPayment(isCash: false),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: _isProcessing
+                      ? const SizedBox.shrink()
+                      : const Icon(Icons.credit_card),
+                  label: _isProcessing
+                      ? ButtonLoadingIndicator(color: Colors.white, size: 6.0)
                       : Text(
-                          _selectedPaymentMethod == PaymentMethod.cashOnDelivery
-                              ? 'Confirmer la commande'
-                              : 'Procéder au paiement',
-                          style: const TextStyle(fontSize: 16),
+                          'Payer ${(cart.totalAmount - _discount).toStringAsFixed(0)} FCFA',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+              const SizedBox(height: 12),
 
-  Widget _buildPaymentOption(
-    PaymentMethod method,
-    String title,
-    IconData icon,
-    Color color,
-  ) {
-    final isSelected = _selectedPaymentMethod == method;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: isSelected ? 4 : 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isSelected ? const Color(0xFF0a543d) : Colors.transparent,
-          width: 2,
-        ),
-      ),
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedPaymentMethod = method;
-          });
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.nunitoSans(
-                    fontSize: 16,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-              ),
-              if (isSelected)
-                const Icon(
-                  Icons.check_circle,
-                  color: Color(0xFF0a543d),
-                  size: 28,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Nouvelle méthode avec logo pour Mobile Money
-  Widget _buildPaymentOptionWithLogo(
-    PaymentMethod method,
-    String title,
-    String logoPath,
-  ) {
-    final isSelected = _selectedPaymentMethod == method;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: isSelected ? 4 : 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isSelected ? const Color(0xFF0a543d) : Colors.transparent,
-          width: 2,
-        ),
-      ),
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedPaymentMethod = method;
-          });
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // Logo de l'opérateur
-              Container(
-                width: 50,
+              // Bouton paiement en espèces
+              SizedBox(
+                width: double.infinity,
                 height: 50,
-                padding: const EdgeInsets.all(2),
-                child: Image.asset(
-                  logoPath,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Icon(
-                      Icons.phone_android,
-                      color: const Color(0xFF0a543d),
-                      size: 28,
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.nunitoSans(
-                    fontSize: 16,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                child: OutlinedButton.icon(
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _processPayment(isCash: true),
+                  icon: const Icon(Icons.money),
+                  label: const Text(
+                    'Payer en espèces à la livraison',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0a543d),
+                    side: const BorderSide(
+                      color: Color(0xFF0a543d),
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
-              if (isSelected)
-                const Icon(
-                  Icons.check_circle,
-                  color: Color(0xFF0a543d),
-                  size: 28,
-                ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFineoPayInfo() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.payment,
+                  color: Color(0xFF0a543d),
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Paiement sécurisé avec FineoPay',
+                  style: GoogleFonts.nunitoSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Modes de paiement disponibles :',
+              style: GoogleFonts.nunitoSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Logos Mobile Money
+            Row(
+              children: [
+                const SizedBox(width: 4),
+                Image.asset('assets/images/orange_money.png',
+                    height: 40, width: 40),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/mtn_money.png',
+                    height: 40, width: 40),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/moov_money.png',
+                    height: 40, width: 40),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/wave.png', height: 40, width: 40),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _buildPaymentOption(
+                Icons.credit_card, 'Carte bancaire', 'Visa, Mastercard'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentOption(IconData icon, String title, String subtitle) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Colors.grey.shade700,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.nunitoSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: GoogleFonts.nunitoSans(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSecurityNote() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.blue.shade200,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.security,
+            color: Colors.blue.shade700,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Vos informations de paiement sont sécurisées et cryptées',
+              style: GoogleFonts.nunitoSans(
+                fontSize: 12,
+                color: Colors.blue.shade900,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

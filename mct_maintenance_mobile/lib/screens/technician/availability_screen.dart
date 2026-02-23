@@ -87,11 +87,24 @@ class _TechnicianAvailabilityScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Disponibilités')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
+      body: Stack(
+        children: [
+          // Image de fond
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.4,
+              child: Image.asset(
+                'assets/images/background_tech_2.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          // Contenu
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -126,6 +139,8 @@ class _TechnicianAvailabilityScreenState
                     'Hors ligne', 'offline', Colors.grey, Icons.cancel),
               ],
             ),
+        ],
+      ),
     );
   }
 

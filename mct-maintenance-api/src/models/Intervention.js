@@ -32,6 +32,11 @@ const Intervention = sequelize.define('Intervention', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  climatiseur_type: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Type de climatiseur pour les interventions d\'installation (Mural, Allège, K7, Gainable, Armoire)'
+  },
   scheduled_date: {
     type: DataTypes.DATE,
     allowNull: false
@@ -69,6 +74,33 @@ const Intervention = sequelize.define('Intervention', {
     allowNull: true,
     defaultValue: 1
   },
+  maintenance_offer_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'maintenance_offers',
+      key: 'id'
+    },
+    comment: 'ID de l\'offre d\'entretien sélectionnée (pour les interventions de type maintenance)'
+  },
+  repair_service_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'repair_services',
+      key: 'id'
+    },
+    comment: 'ID du service de réparation sélectionné (pour les interventions de type repair)'
+  },
+  installation_service_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'installation_services',
+      key: 'id'
+    },
+    comment: 'ID du service d\'installation sélectionné (pour les interventions de type installation)'
+  },
   // Workflow timestamps
   accepted_at: {
     type: DataTypes.DATE,
@@ -103,14 +135,25 @@ const Intervention = sequelize.define('Intervention', {
   diagnostic_fee: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
-    defaultValue: 0.00,
-    comment: 'Coût du diagnostic (0 si gratuit, 4000 si payant)'
+    defaultValue: 0,
+    comment: 'Coût du diagnostic : 4000 FCFA pour diagnostic/réparation, 0 pour installation/entretien'
   },
   is_free_diagnosis: {
     type: DataTypes.BOOLEAN,
     allowNull: true,
+    defaultValue: true,
+    comment: 'false pour diagnostic/réparation (4000 FCFA obligatoire), true pour installation/entretien'
+  },
+  diagnostic_paid: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
     defaultValue: false,
-    comment: 'true si le client a un contrat (diagnostic gratuit), false sinon (4000 FCFA)'
+    comment: 'Indique si les frais de diagnostic ont été payés'
+  },
+  diagnostic_payment_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Date du paiement des frais de diagnostic'
   },
   // Évaluation client
   rating: {

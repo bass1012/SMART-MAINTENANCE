@@ -1,59 +1,64 @@
-const { sequelize } = require('../src/config/database');
+'use strict';
 
-async function addRatingColumns() {
-  try {
+module.exports = {
+  up: async (queryInterface, Sequelize) => {
     console.log('🔄 Ajout des colonnes rating et review à la table interventions...');
 
-    // Vérifier si les colonnes existent déjà
-    const [results] = await sequelize.query(`
-      PRAGMA table_info(interventions);
-    `);
+    try {
+      // Vérifier si les colonnes existent déjà
+      const tableDesc = await queryInterface.describeTable('interventions');
 
-    const columns = results.map(col => col.name);
-    const hasRating = columns.includes('rating');
-    const hasReview = columns.includes('review');
+      // Ajouter la colonne rating si elle n'existe pas
+      if (!tableDesc.rating) {
+        await queryInterface.addColumn('interventions', 'rating', {
+          type: Sequelize.INTEGER,
+          allowNull: true,
+          validate: {
+            min: 1,
+            max: 5
+          }
+        });
+        console.log('✅ Colonne rating ajoutée');
+      } else {
+        console.log('ℹ️  Colonne rating existe déjà');
+      }
 
-    if (hasRating && hasReview) {
-      console.log('✅ Les colonnes rating et review existent déjà');
-      return;
+      // Ajouter la colonne review si elle n'existe pas
+      if (!tableDesc.review) {
+        await queryInterface.addColumn('interventions', 'review', {
+          type: Sequelize.TEXT,
+          allowNull: true
+        });
+        console.log('✅ Colonne review ajoutée');
+      } else {
+        console.log('ℹ️  Colonne review existe déjà');
+      }
+
+      console.log('✅ Migration terminée avec succès');
+    } catch (error) {
+      console.error('❌ Erreur lors de la migration:', error);
+      throw error;
     }
+  },
 
-    // Ajouter la colonne rating si elle n'existe pas
-    if (!hasRating) {
-      await sequelize.query(`
-        ALTER TABLE interventions 
-        ADD COLUMN rating INTEGER CHECK(rating >= 1 AND rating <= 5);
-      `);
-      console.log('✅ Colonne rating ajoutée');
+  down: async (queryInterface, Sequelize) => {
+    console.log('🔄 Rollback des colonnes rating et review...');
+
+    try {
+      const tableDesc = await queryInterface.describeTable('interventions');
+
+      if (tableDesc.review) {
+        await queryInterface.removeColumn('interventions', 'review');
+        console.log('✅ Colonne review supprimée');
+      }
+
+      if (tableDesc.rating) {
+        await queryInterface.removeColumn('interventions', 'rating');
+        console.log('✅ Colonne rating supprimée');
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors du rollback:', error);
+      throw error;
     }
-
-    // Ajouter la colonne review si elle n'existe pas
-    if (!hasReview) {
-      await sequelize.query(`
-        ALTER TABLE interventions 
-        ADD COLUMN review TEXT;
-      `);
-      console.log('✅ Colonne review ajoutée');
-    }
-
-    console.log('✅ Migration terminée avec succès');
-  } catch (error) {
-    console.error('❌ Erreur lors de la migration:', error);
-    throw error;
   }
-}
-
-// Exécuter si appelé directement
-if (require.main === module) {
-  addRatingColumns()
-    .then(() => {
-      console.log('Migration terminée');
-      process.exit(0);
-    })
-    .catch(error => {
-      console.error('Erreur:', error);
-      process.exit(1);
-    });
-}
-
-module.exports = addRatingColumns;
+};

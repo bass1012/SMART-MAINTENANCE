@@ -2,6 +2,7 @@ import '../../utils/snackbar_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -95,6 +96,53 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
     }
+  }
+
+  /// Gérer le clic sur une notification
+  void _handleNotificationTap(Map<String, dynamic> notification) {
+    print('📱 Clic sur notification: ${notification['type']}');
+
+    // Extraire les données additionnelles du champ 'data' (JSON)
+    final Map<String, dynamic>? additionalData = notification['data'] is Map
+        ? Map<String, dynamic>.from(notification['data'])
+        : null;
+
+    print('   Données brutes: ${notification['data']}');
+    print('   Données extraites: $additionalData');
+
+    // Créer l'objet de données pour la navigation
+    final Map<String, dynamic> notificationData = {
+      'type': notification['type'],
+      'role': notification['role'],
+      // Essayer d'abord dans 'data', puis directement dans notification (pour compatibilité)
+      'interventionId': additionalData?['interventionId'] ??
+          additionalData?['intervention_id'] ??
+          notification['intervention_id'],
+      'quoteId': additionalData?['quoteId'] ??
+          additionalData?['quote_id'] ??
+          notification['quote_id'],
+      'orderId': additionalData?['orderId'] ??
+          additionalData?['order_id'] ??
+          notification['order_id'],
+      'complaintId': additionalData?['complaintId'] ??
+          additionalData?['complaint_id'] ??
+          notification['complaint_id'],
+      'subscriptionId': additionalData?['subscriptionId'] ??
+          additionalData?['subscription_id'] ??
+          notification['subscription_id'],
+      'paymentLink': additionalData?['paymentLink'] ??
+          additionalData?['payment_link'] ??
+          notification['payment_link'],
+    };
+
+    print('   Données finales pour navigation: $notificationData');
+
+    // Fermer l'écran de notifications avant de naviguer
+    Navigator.pop(context);
+
+    // Utiliser le service de navigation
+    final navigationService = NotificationNavigationService();
+    navigationService.navigateFromNotification(context, notificationData);
   }
 
   void _showDeleteAllConfirmation() {
@@ -340,9 +388,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
       child: InkWell(
         onTap: () {
+          // Marquer comme lu si non lu
           if (!isRead) {
             _markAsRead(notification['id']);
           }
+
+          // Naviguer vers le contenu de la notification
+          _handleNotificationTap(notification);
         },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
@@ -446,6 +498,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.receipt_long_outlined;
       case 'complaint':
         return Icons.report_problem_outlined;
+      case 'payment_confirmed':
+      case 'payment_success':
+      case 'payment_paid':
+        return Icons.check_circle_outline;
+      case 'payment_pending':
+        return Icons.schedule_outlined;
+      case 'payment_failed':
+        return Icons.error_outline;
+      case 'payment_refunded':
+        return Icons.money_off_outlined;
       case 'success':
         return Icons.check_circle_outline;
       case 'warning':
@@ -467,6 +529,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return [const Color(0xFF9C27B0), const Color(0xFF7B1FA2)];
       case 'complaint':
         return [const Color(0xFFFF9800), const Color(0xFFF57C00)];
+      case 'payment_confirmed':
+      case 'payment_success':
+      case 'payment_paid':
+        return [const Color(0xFF4CAF50), const Color(0xFF388E3C)]; // Vert
+      case 'payment_pending':
+        return [const Color(0xFFFF9800), const Color(0xFFF57C00)]; // Orange
+      case 'payment_failed':
+        return [const Color(0xFFF44336), const Color(0xFFD32F2F)]; // Rouge
+      case 'payment_refunded':
+        return [const Color(0xFF2196F3), const Color(0xFF1976D2)]; // Bleu
       case 'success':
         return [const Color(0xFF4CAF50), const Color(0xFF388E3C)];
       case 'warning':

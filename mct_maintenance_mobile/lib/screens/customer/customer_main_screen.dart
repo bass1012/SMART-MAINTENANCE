@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
 import 'package:mct_maintenance_mobile/models/dashboard_stats_model.dart';
 import 'package:mct_maintenance_mobile/screens/customer/complaints_screen.dart';
@@ -7,18 +8,22 @@ import 'package:mct_maintenance_mobile/screens/customer/maintenance_offers_scree
 import 'package:mct_maintenance_mobile/screens/customer/maintenance_reports_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/quotes_contracts_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/interventions_list_screen.dart';
+import 'package:mct_maintenance_mobile/screens/customer/equipments_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/shop_screen.dart';
+import '../admin/suggest_technicians_screen.dart';
 import '../../utils/snackbar_helper.dart';
 import 'package:mct_maintenance_mobile/screens/customer/invoices_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/support_screen.dart';
+import 'package:mct_maintenance_mobile/screens/customer/faq_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/history_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/profile_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/settings_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/notifications_screen.dart';
 import 'package:mct_maintenance_mobile/screens/auth/login_screen.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/services/fcm_service.dart';
+import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
-import '../../utils/test_keys.dart';
 
 class CustomerMainScreen extends StatefulWidget {
   const CustomerMainScreen({super.key});
@@ -37,22 +42,222 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
-    _loadUnreadNotifications();
+    // Retarder le chargement pour éviter les conflits de layout
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadDashboardData();
+        _loadUnreadNotifications();
+        _checkPendingNotifications();
+        _checkUnratedInterventions();
+        _checkPendingDiagnosticPayments();
+      }
+    });
+  }
+
+  /// Vérifier s'il y a des paiements de diagnostic en attente
+  Future<void> _checkPendingDiagnosticPayments() async {
+    print(
+        '💳 [CustomerMainScreen] Vérification paiements diagnostic en attente...');
+    // Attendre un peu pour ne pas surcharger au démarrage
+    await Future.delayed(const Duration(milliseconds: 3000));
+
+    if (!mounted) return;
+
+    try {
+      final pendingPayments = await _apiService.getPendingDiagnosticPayments();
+
+      print('✅ ${pendingPayments.length} paiement(s) en attente');
+
+      if (pendingPayments.isNotEmpty && mounted) {
+        _showPendingPaymentNotification(pendingPayments);
+      }
+    } catch (e) {
+      print('❌ Erreur vérification paiements: $e');
+    }
+  }
+
+  /// Afficher une notification pour les paiements en attente
+  void _showPendingPaymentNotification(
+      List<Map<String, dynamic>> pendingPayments) {
+    final count = pendingPayments.length;
+    final firstPayment = pendingPayments.first;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade100,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.orange.shade700,
+            size: 48,
+          ),
+        ),
+        title: Text(
+          count == 1 ? 'Paiement en attente' : '$count paiements en attente',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              count == 1
+                  ? 'Vous avez une demande d\'intervention en attente de paiement du diagnostic.'
+                  : 'Vous avez $count demandes d\'intervention en attente de paiement du diagnostic.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 18, color: Colors.grey.shade700),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Intervention #${firstPayment['id']}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Plus tard'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Naviguer vers la liste des interventions
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const InterventionsListScreen(),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0a543d),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Voir les interventions'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Vérifier s'il y a des interventions non notées
+  Future<void> _checkUnratedInterventions() async {
+    print(
+        '🔍 [CustomerMainScreen] Démarrage vérification interventions non notées...');
+    // Attendre que l'écran soit complètement chargé
+    await Future.delayed(const Duration(milliseconds: 2000));
+
+    if (!mounted) {
+      print('⚠️ Widget non monté, annulation vérification');
+      return;
+    }
+
+    try {
+      // Récupérer les interventions ignorées (Plus tard)
+      final prefs = await SharedPreferences.getInstance();
+      final ignoredIds =
+          prefs.getStringList('ignored_rating_interventions') ?? [];
+      print('📋 Interventions ignorées: $ignoredIds');
+
+      print('📞 Appel API getUnratedInterventions...');
+      final unratedInterventions = await _apiService.getUnratedInterventions();
+
+      print(
+          '✅ Réponse reçue: ${unratedInterventions.length} intervention(s) non notée(s)');
+      print('📋 Détails: $unratedInterventions');
+
+      // Filtrer les interventions ignorées
+      final filteredInterventions = unratedInterventions.where((intervention) {
+        final id = intervention['id'].toString();
+        return !ignoredIds.contains(id);
+      }).toList();
+
+      print(
+          '📋 Après filtrage: ${filteredInterventions.length} intervention(s) à noter');
+
+      if (filteredInterventions.isNotEmpty && mounted) {
+        print(
+            '🎯 Affichage popup pour intervention #${filteredInterventions.first['id']}');
+        // Afficher le popup pour la première intervention non notée
+        _showRatingDialog(filteredInterventions.first);
+      } else {
+        print('ℹ️ Aucune intervention à noter ou widget non monté');
+      }
+    } catch (e) {
+      print(
+          '❌ Erreur lors de la vérification des interventions non notées: $e');
+      print('📊 Stack trace: ${StackTrace.current}');
+    }
+  }
+
+  /// Vérifier s'il y a une notification en attente de traitement
+  Future<void> _checkPendingNotifications() async {
+    // Attendre que le widget soit monté
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
+    final fcmService = FCMService();
+    final notificationData = fcmService.getAndClearPendingNotification();
+
+    if (notificationData != null) {
+      print('📬 Notification en attente détectée, navigation...');
+      final navigationService = NotificationNavigationService();
+      navigationService.navigateFromNotification(context, notificationData);
+    }
   }
 
   Future<void> _loadDashboardData() async {
     try {
-      // Charger le profil et les statistiques en parallèle
-      final results = await Future.wait([
-        _apiService.getProfile(),
-        _apiService.getDashboardStats(),
-      ]);
+      // Charger d'abord le profil
+      final profileResponse = await _apiService.getProfile();
 
       if (mounted) {
         setState(() {
-          _user = UserModel.fromJson(results[0]['data']);
-          _stats = DashboardStats.fromJson(results[1]['data']);
+          _user = UserModel.fromJson(profileResponse['data']);
+          print('👤 User chargé: role=${_user?.role}');
+        });
+      }
+
+      // Ensuite charger les stats (peut échouer pour les admins)
+      try {
+        final statsResponse = await _apiService.getDashboardStats();
+        if (mounted) {
+          setState(() {
+            _stats = DashboardStats.fromJson(statsResponse['data']);
+          });
+        }
+      } catch (statsError) {
+        print('⚠️  Erreur stats (normal pour admin): $statsError');
+      }
+
+      // Recharger aussi les notifications
+      await _loadUnreadNotifications();
+
+      if (mounted) {
+        setState(() {
           _isLoading = false;
         });
       }
@@ -81,6 +286,21 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const SupportScreen(),
+            ),
+          );
+        },
+        backgroundColor: const Color(0xFF0a543d),
+        child: const Icon(
+          Icons.chat_bubble_outline,
+          color: Colors.white,
+        ),
+      ),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: const Color(0xFF0a543d),
@@ -113,82 +333,114 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
       ),
       body: _isLoading
           ? const Center(child: LoadingIndicator())
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // En-tête moderne avec gradient
-                  Container(
-                    width: double.infinity,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF0a543d),
-                          Color(0xFF0d6b4d),
-                          Color(0xFF0f7d59),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.only(
-                        bottomLeft: Radius.circular(32),
-                        bottomRight: Radius.circular(32),
-                      ),
-                    ),
-                    child: SafeArea(
-                      bottom: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 16),
-                            // Carte de bienvenue glassmorphism
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.3),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Row(
+          : Container(
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: const AssetImage(
+                      'assets/images/Maintenancier_SMART_Maintenance.png'),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black.withOpacity(0.4),
+                    BlendMode.darken,
+                  ),
+                ),
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      const Color(0xFF0a543d).withOpacity(0.30),
+                      const Color(0xFF0d6b4d).withOpacity(0.30),
+                      const Color(0xFF0f7d59).withOpacity(0.30),
+                      Colors.white.withOpacity(0.5),
+                    ],
+                    stops: const [0.0, 0.3, 0.5, 0.8],
+                  ),
+                ),
+                child: RefreshIndicator(
+                  onRefresh: _loadDashboardData,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // En-tête moderne avec effet glassmorphism
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.white.withOpacity(0.1),
+                                Colors.white.withOpacity(0.05),
+                              ],
+                            ),
+                            borderRadius: const BorderRadius.only(
+                              bottomLeft: Radius.circular(32),
+                              bottomRight: Radius.circular(32),
+                            ),
+                          ),
+                          child: SafeArea(
+                            bottom: false,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  const SizedBox(height: 16),
+                                  // Carte de bienvenue glassmorphism
                                   Container(
-                                    padding: const EdgeInsets.all(12),
+                                    padding: const EdgeInsets.all(20),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(14),
+                                      color: Colors.white.withOpacity(0.30),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.2),
+                                        width: 1.5,
+                                      ),
                                     ),
-                                    child: const Icon(
-                                      Icons.waving_hand,
-                                      color: Colors.white,
-                                      size: 32,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                    child: Row(
                                       children: [
-                                        Text(
-                                          'Bonjour,',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 14,
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
                                             color:
-                                                Colors.white.withOpacity(0.9),
-                                            fontWeight: FontWeight.w400,
+                                                Colors.white.withOpacity(0.2),
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                          ),
+                                          child: const Icon(
+                                            Icons.waving_hand,
+                                            color: Colors.white,
+                                            size: 32,
                                           ),
                                         ),
-                                        Text(
-                                          _user?.firstName ?? 'Client',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Bonjour,',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 14,
+                                                  color: Colors.white
+                                                      .withOpacity(0.9),
+                                                  fontWeight: FontWeight.w400,
+                                                ),
+                                              ),
+                                              Text(
+                                                _user?.firstName ?? 'Client',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
@@ -197,314 +449,403 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                                 ],
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
 
-                  const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                  // Section des statistiques
-                  if (_stats != null) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Text(
-                        'Mes Statistiques',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF0a543d),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              context,
-                              icon: Icons.build_circle_outlined,
-                              title: 'Interventions',
-                              value: '${_stats!.totalInterventions}',
-                              subtitle:
-                                  '${_stats!.pendingInterventions} en cours',
-                              color: Colors.blue,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              context,
-                              icon: Icons.description_outlined,
-                              title: 'Devis',
-                              value: '${_stats!.totalQuotes}',
-                              subtitle: '${_stats!.pendingQuotes} en attente',
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              context,
-                              icon: Icons.shopping_bag_outlined,
-                              title: 'Commandes',
-                              value: '${_stats!.totalOrders}',
-                              subtitle: 'Total',
-                              color: Colors.orange,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              context,
-                              icon: Icons.attach_money,
-                              title: 'Dépenses',
-                              value: '${_stats!.totalSpent.toStringAsFixed(0)}',
-                              subtitle: 'FCFA',
-                              color: Colors.purple,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
+                        // Bannière défilante - Horaires service client
+                        _buildScrollingBanner(),
 
-                  // Grille des fonctionnalités
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      'Services',
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF0a543d),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      children: [
-                        // Première ligne de cartes
-                        _buildFeatureCard(
-                          context,
-                          icon: Icons.engineering,
-                          title: 'Interventions',
-                          color: const Color(0xFF0a543d),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const InterventionsListScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildFeatureCard(
-                          context,
-                          icon: Icons.description_outlined,
-                          title: 'Devis et Contrat',
-                          color: const Color(0xFF0d6b4d),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const QuotesContractsScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        // Deuxième ligne de cartes
-                        _buildFeatureCard(
-                          context,
-                          icon: Icons.assignment_outlined,
-                          title: 'Rapport maintenance',
-                          color: const Color(0xFF0a543d),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const MaintenanceReportsScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildFeatureCard(
-                          context,
-                          icon: Icons.report_problem_outlined,
-                          title: 'Réclamation',
-                          color: const Color(0xFF0d6b4d),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const ComplaintsScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        // Troisième ligne de cartes
-                        _buildFeatureCard(
-                          context,
-                          icon: Icons.engineering_outlined,
-                          title: 'Offre entretien',
-                          color: const Color(0xFF0a543d),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const MaintenanceOffersScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildFeatureCard(
-                          context,
-                          icon: Icons.shopping_cart_outlined,
-                          title: 'Boutique',
-                          color: const Color(0xFF0d6b4d),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const ShopScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        // Quatrième ligne de cartes
-                        _buildFeatureCard(
-                          context,
-                          icon: Icons.history,
-                          title: 'Historique',
-                          color: const Color(0xFF0a543d),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const HistoryScreen(
-                                  initialTabIndex:
-                                      0, // Ouvrir sur le premier onglet (Interventions)
+                        const SizedBox(height: 24),
+
+                        // Grille des fonctionnalités
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            'Services',
+                            style: GoogleFonts.poppins(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
                                 ),
-                              ),
-                            );
-                          },
+                              ],
+                            ),
+                          ),
                         ),
-                        _buildFeatureCard(
-                          context,
-                          icon: Icons.receipt_long_outlined,
-                          title: 'Factures',
-                          color: const Color(0xFF0d6b4d),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const InvoicesScreen(),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: GridView.count(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 14,
+                            mainAxisSpacing: 14,
+                            children: [
+                              // Première ligne de cartes
+                              _buildFeatureCard(
+                                context,
+                                icon: Icons.engineering,
+                                title: 'Interventions',
+                                color: const Color(0xFF0a543d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const InterventionsListScreen(),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
+                              _buildFeatureCard(
+                                context,
+                                icon: Icons.description_outlined,
+                                title: 'Devis et Contrat',
+                                color: const Color(0xFF0d6b4d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const QuotesContractsScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildFeatureCard(
+                                context,
+                                icon: Icons.engineering_outlined,
+                                title: 'Nos Services',
+                                color: const Color(0xFF0a543d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const MaintenanceOffersScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildFeatureCard(
+                                context,
+                                icon: Icons.shopping_cart_outlined,
+                                title: 'Boutique',
+                                color: const Color(0xFF0d6b4d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const ShopScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              // Deuxième ligne de cartes
+                              _buildFeatureCard(
+                                context,
+                                icon: Icons.report_problem_outlined,
+                                title: 'Réclamation',
+                                color: const Color(0xFF0d6b4d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const ComplaintsScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              // Troisième ligne de cartes
+                              _buildFeatureCard(
+                                context,
+                                icon: Icons.devices_other,
+                                title: 'Mes équipements',
+                                color: const Color(0xFF0a543d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const EquipmentsScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+
+                              // Quatrième ligne de cartes
+                              _buildFeatureCard(
+                                context,
+                                icon: Icons.history,
+                                title: 'Historique',
+                                color: const Color(0xFF0a543d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const HistoryScreen(
+                                        initialTabIndex:
+                                            0, // Ouvrir sur le premier onglet (Interventions)
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
                         ),
+
+                        const SizedBox(height: 24),
+
+                        // Section des statistiques (déplacée ici)
+                        if (_stats != null) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text(
+                              'Mes Statistiques',
+                              style: GoogleFonts.poppins(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildStatCard(
+                                    context,
+                                    icon: Icons.build_circle_outlined,
+                                    title: 'Interventions',
+                                    value: '${_stats!.totalInterventions}',
+                                    subtitle:
+                                        '${_stats!.pendingInterventions} en cours',
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildStatCard(
+                                    context,
+                                    icon: Icons.description_outlined,
+                                    title: 'Devis',
+                                    value: '${_stats!.totalQuotes}',
+                                    subtitle:
+                                        '${_stats!.pendingQuotes} en attente',
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildStatCard(
+                                    context,
+                                    icon: Icons.shopping_bag_outlined,
+                                    title: 'Commandes',
+                                    value: '${_stats!.totalOrders}',
+                                    subtitle: 'Total',
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildStatCard(
+                                    context,
+                                    icon: Icons.attach_money,
+                                    title: 'Dépenses',
+                                    value:
+                                        '${_stats!.totalSpent.toStringAsFixed(0)}',
+                                    subtitle: 'FCFA',
+                                    color: Colors.purple,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+
+                        // Section des actions rapides
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            'Actions Rapides',
+                            style: GoogleFonts.poppins(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.95),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.6),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      const Color(0xFF0a543d).withOpacity(0.12),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                  spreadRadius: 0,
+                                ),
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                _buildQuickAction(
+                                  icon: Icons.receipt_long_outlined,
+                                  title: 'Voir mes factures',
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const InvoicesScreen(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  child: Divider(
+                                    height: 1,
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                                _buildQuickAction(
+                                  icon: Icons.help_outline,
+                                  title: 'FAQ',
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const FAQScreen(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                // Bouton test suggestions pour admins uniquement
+                                if (_user?.role == 'admin') ...[
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20),
+                                    child: Divider(
+                                      height: 1,
+                                      color: Colors.grey.shade200,
+                                    ),
+                                  ),
+                                  _buildQuickAction(
+                                    icon: Icons.person_search,
+                                    title: '🧪 Test Suggestions Techniciens',
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const SuggestTechniciansScreen(
+                                            interventionId: 122,
+                                            interventionTitle:
+                                                'Intervention test - Non assignée',
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 24),
-
-                  // Section des actions rapides
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      'Actions Rapides',
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF0a543d),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF0a543d).withOpacity(0.08),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                            spreadRadius: 0,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          _buildQuickAction(
-                            icon: Icons.receipt_long_outlined,
-                            title: 'Voir mes factures',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const InvoicesScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: Divider(
-                              height: 1,
-                              color: Colors.grey.shade200,
-                            ),
-                          ),
-                          _buildQuickAction(
-                            icon: Icons.chat_bubble_outline,
-                            title: 'Contacter le support',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const SupportScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                ),
               ),
             ),
+    );
+  }
+
+  Widget _buildScrollingBanner() {
+    // Vérifier l'heure actuelle
+    final now = DateTime.now();
+
+    // Définir les heures de début et de fin
+    final startTime = DateTime(now.year, now.month, now.day, 18, 30);
+    final endTime = DateTime(now.year, now.month, now.day, 08, 00);
+
+    // Afficher la bannière seulement entre 11h16 et 11h30
+    if (now.isBefore(startTime) || now.isAfter(endTime)) {
+      return const SizedBox.shrink(); // Ne rien afficher
+    }
+
+    return Container(
+      height: 40,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.orange.shade100,
+            Colors.amber.shade100,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.orange.shade300,
+          width: 1,
+        ),
+      ),
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: _ScrollingText(
+          text:
+              '   📞 Service Client disponible de 8h à 18h du lundi au vendredi   •   Samedi de 09h à 12h   •   ',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.orange.shade800,
+          ),
+        ),
+      ),
     );
   }
 
@@ -522,19 +863,23 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white,
-            color.withOpacity(0.05),
+            Colors.white.withOpacity(0.95),
+            color.withOpacity(0.08),
           ],
+        ),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.6),
+          width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.15),
+            color: color.withOpacity(0.2),
             blurRadius: 20,
             offset: const Offset(0, 8),
             spreadRadius: 0,
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -579,7 +924,7 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                   style: GoogleFonts.poppins(
                     fontWeight: FontWeight.w600,
                     fontSize: 13.5,
-                    color: Colors.black87,
+                    color: Colors.white,
                     height: 1.3,
                   ),
                 ),
@@ -1009,6 +1354,18 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
               },
             ),
             _buildModernMenuItem(
+              icon: Icons.assignment_outlined,
+              title: 'Rapport maintenance',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const MaintenanceReportsScreen()),
+                );
+              },
+            ),
+            _buildModernMenuItem(
               icon: Icons.help_outline,
               title: 'Aide & Support',
               onTap: () {
@@ -1147,6 +1504,288 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
       ),
     );
   }
+
+  /// Afficher le dialogue de notation pour une intervention
+  void _showRatingDialog(Map<String, dynamic> intervention) {
+    int rating = 0;
+    final reviewController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white,
+                  const Color(0xFF0a543d).withOpacity(0.02),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icône
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.star,
+                    size: 40,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Titre
+                Text(
+                  'Notez l\'intervention',
+                  style: GoogleFonts.poppins(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF0a543d),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Sous-titre avec info intervention
+                Text(
+                  'Intervention #${intervention['id']}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                if (intervention['title'] != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    intervention['title'],
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey[700],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: 24),
+
+                // Étoiles de notation
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    return GestureDetector(
+                      onTap: () {
+                        setDialogState(() {
+                          rating = index + 1;
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(
+                          index < rating ? Icons.star : Icons.star_border,
+                          size: 40,
+                          color:
+                              index < rating ? Colors.amber : Colors.grey[300],
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 24),
+
+                // Champ commentaire
+                TextField(
+                  controller: reviewController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Partagez votre expérience (optionnel)',
+                    hintStyle: GoogleFonts.poppins(
+                      color: Colors.grey[500],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF0a543d),
+                        width: 2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                  style: GoogleFonts.poppins(fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+
+                // Boutons
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () async {
+                          // Sauvegarder l'intervention comme ignorée
+                          final prefs = await SharedPreferences.getInstance();
+                          final ignoredIds = prefs.getStringList(
+                                  'ignored_rating_interventions') ??
+                              [];
+                          final interventionId = intervention['id'].toString();
+                          if (!ignoredIds.contains(interventionId)) {
+                            ignoredIds.add(interventionId);
+                            await prefs.setStringList(
+                                'ignored_rating_interventions', ignoredIds);
+                            print(
+                                '📌 Intervention #$interventionId ajoutée aux ignorées');
+                          }
+                          if (mounted) Navigator.pop(context);
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: Text(
+                          'Plus tard',
+                          style: GoogleFonts.poppins(
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: rating == 0
+                            ? null
+                            : () async {
+                                try {
+                                  await _apiService.rateIntervention(
+                                    intervention['id'],
+                                    rating,
+                                    reviewController.text.trim(),
+                                  );
+                                  if (mounted) {
+                                    Navigator.pop(context);
+                                    SnackBarHelper.showSuccess(
+                                      context,
+                                      'Merci pour votre évaluation !',
+                                      emoji: '⭐',
+                                    );
+                                    // Vérifier s'il y a d'autres interventions non notées
+                                    _checkUnratedInterventions();
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    SnackBarHelper.showError(
+                                      context,
+                                      'Erreur: $e',
+                                    );
+                                  }
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0a543d),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Envoyer',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-// Utilisation du modèle UserModel depuis le fichier user_model.dart
+// Widget pour le texte défilant animé
+class _ScrollingText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+
+  const _ScrollingText({
+    required this.text,
+    required this.style,
+  });
+
+  @override
+  State<_ScrollingText> createState() => _ScrollingTextState();
+}
+
+class _ScrollingTextState extends State<_ScrollingText>
+    with SingleTickerProviderStateMixin {
+  late ScrollController _scrollController;
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 840),
+    )..addListener(() {
+        if (_scrollController.hasClients) {
+          final maxScroll = _scrollController.position.maxScrollExtent;
+          final currentScroll = maxScroll * _animationController.value;
+          _scrollController.jumpTo(currentScroll);
+        }
+      });
+
+    // Démarrer l'animation en boucle
+    _animationController.repeat();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      controller: _scrollController,
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 100,
+      itemBuilder: (context, index) {
+        return Center(
+          child: Text(
+            widget.text,
+            style: widget.style,
+          ),
+        );
+      },
+    );
+  }
+}

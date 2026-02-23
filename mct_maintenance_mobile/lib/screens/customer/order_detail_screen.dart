@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import '../../services/api_service.dart';
+import '../../services/payment_service.dart';
 import '../../utils/snackbar_helper.dart';
+import 'payment_status_screen.dart';
+import 'payment_webview_screen.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -19,7 +22,15 @@ class OrderDetailScreen extends StatefulWidget {
 
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   final ApiService _apiService = ApiService();
+  late final PaymentService _paymentService;
   bool _isDownloading = false;
+  bool _isProcessingPayment = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _paymentService = PaymentService(_apiService);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +66,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
             // Total
             _buildTotalCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+
+            // Bouton de paiement (si non payé)
+            if (_shouldShowPaymentButton()) _buildPaymentButton(),
+            const SizedBox(height: 8),
 
             // Bouton de téléchargement
             SizedBox(
@@ -167,12 +182,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 'Mode de paiement',
                 widget.order['paymentMethod'] ??
                     widget.order['payment_method'] ??
-                    'N/A'),
+                    'Non spécifié'),
             _buildInfoRow(
                 'Adresse de livraison',
                 widget.order['shippingAddress'] ??
                     widget.order['shipping_address'] ??
-                    'N/A'),
+                    'Non spécifiée'),
             if (widget.order['notes'] != null &&
                 widget.order['notes'].toString().isNotEmpty)
               _buildInfoRow('Notes', widget.order['notes']),
@@ -367,6 +382,115 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (Match m) => '${m[1]} ',
         )} FCFA';
+  }
+
+  bool _shouldShowPaymentButton() {
+    final paymentStatus = widget.order['paymentStatus'] ??
+        widget.order['payment_status'] ??
+        'pending';
+    return paymentStatus.toString().toLowerCase() != 'paid';
+  }
+
+  Widget _buildPaymentButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _isProcessingPayment ? null : _handlePayment,
+        icon: _isProcessingPayment
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.credit_card),
+        label:
+            Text(_isProcessingPayment ? 'Traitement...' : 'Payer maintenant'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handlePayment() async {
+    setState(() => _isProcessingPayment = true);
+
+    try {
+      final orderId = int.parse(widget.order['id'].toString());
+
+      // Initialiser le paiement
+      final paymentData = await _paymentService.initializeOrderPayment(
+        orderId,
+        widget.order['totalAmount'].toDouble(),
+        widget.order['reference'],
+      );
+      final paymentUrl = paymentData['paymentUrl'] as String;
+
+      if (mounted) {
+        // Ouvrir le paiement dans un WebView intégré
+        final paymentResult = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PaymentWebViewScreen(
+              paymentUrl: paymentUrl,
+              title: 'Paiement commande #${widget.order['reference']}',
+              orderId: orderId,
+            ),
+          ),
+        );
+
+        if (mounted && paymentResult == true) {
+          // Naviguer vers l'écran de vérification du statut
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => PaymentStatusScreen(
+                orderId: orderId,
+                orderReference: widget.order['reference'],
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackBarHelper.showError(
+          context,
+          'Erreur lors de l\'initialisation du paiement: $e',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingPayment = false);
+      }
+    }
+  }
+
+  void _showPaymentInfo() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Paiement en cours'),
+        content: const Text(
+          'Vous allez être redirigé vers la page de paiement FineoPay.\n\n'
+          'Après avoir effectué votre paiement, revenez à l\'application '
+          'pour voir le statut mis à jour.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Compris'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _downloadInvoice() async {

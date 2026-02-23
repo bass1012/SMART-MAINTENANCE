@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/screens/technician/create_report_screen.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
+import 'package:intl/intl.dart';
 
 class TechnicianReportsScreen extends StatefulWidget {
   const TechnicianReportsScreen({super.key});
@@ -97,9 +99,10 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                         item['created_at']?.toString().split(' ')[0] ??
                         DateTime.now().toString().split(' ')[0],
                     'status': item['status'] ?? 'draft',
-                    'customer': item['customer_name'] ??
-                        item['customer']?['name'] ??
-                        'Client',
+                    'customer': item['customer_name'] ?? 'Client non renseigné',
+                    'customer_phone': item['customer_phone'] ?? '',
+                    'customer_email': item['customer_email'] ?? '',
+                    'customer_company': item['customer_company'] ?? '',
                     'address': item['address'] ?? 'Adresse non spécifiée',
                     'duration': item['duration']?.toString() ?? '0',
                     'description':
@@ -114,6 +117,11 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                     'cost': item['cost'] ?? item['total_cost'] ?? 0,
                     'photos':
                         item['photos_count'] ?? item['photos']?.length ?? 0,
+                    // Mesures techniques
+                    'pression': item['pression']?.toString() ?? '',
+                    'temperature': item['temperature']?.toString() ?? '',
+                    'intensite': item['intensite']?.toString() ?? '',
+                    'tension': item['tension']?.toString() ?? '',
                   })
               .toList();
           _applyFilter();
@@ -184,87 +192,92 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: LoadingIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadReports,
-              child: _filteredReports.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16.0),
-                      itemCount: _filteredReports.length,
-                      itemBuilder: (context, index) {
-                        final report = _filteredReports[index];
-                        return _buildReportCard(report);
-                      },
-                    ),
+      body: Stack(
+        children: [
+          // Image de fond
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.4,
+              child: Image.asset(
+                'assets/images/background_tech.png',
+                fit: BoxFit.cover,
+              ),
             ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF0a543d), Color(0xFF0f7d59)],
           ),
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF0a543d).withOpacity(0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () {
-            SnackBarHelper.showInfo(context, 'Nouveau rapport - À implémenter');
-          },
-          icon: const Icon(Icons.add),
-          label: Text('Nouveau rapport',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-        ),
+          // Contenu
+          _isLoading
+              ? const Center(child: LoadingIndicator())
+              : RefreshIndicator(
+                  onRefresh: _loadReports,
+                  child: _filteredReports.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16.0),
+                          itemCount: _filteredReports.length,
+                          itemBuilder: (context, index) {
+                            final report = _filteredReports[index];
+                            return _buildReportCard(report);
+                          },
+                        ),
+                ),
+        ],
       ),
     );
   }
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.grey.shade300, Colors.grey.shade100],
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.95),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.grey.shade300, Colors.grey.shade100],
+                ),
+                shape: BoxShape.circle,
               ),
-              shape: BoxShape.circle,
+              child: const Icon(
+                Icons.description_outlined,
+                size: 60,
+                color: Colors.white,
+              ),
             ),
-            child: const Icon(
-              Icons.description_outlined,
-              size: 60,
-              color: Colors.white,
+            const SizedBox(height: 24),
+            Text(
+              'Aucun rapport',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Aucun rapport',
-            style: GoogleFonts.poppins(
-              fontSize: 20,
-              color: Colors.grey[700],
-              fontWeight: FontWeight.w600,
+            const SizedBox(height: 8),
+            Text(
+              'Vos rapports d\'intervention apparaîtront ici',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Vos rapports d\'intervention apparaîtront ici',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -324,7 +337,7 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              report['date'],
+                              _formatDate(report['date']),
                               style: GoogleFonts.poppins(
                                 fontSize: 13,
                                 color: Colors.grey[600],
@@ -396,12 +409,6 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                     '${report['photos']} photos',
                     Colors.purple,
                   ),
-                  const SizedBox(width: 8),
-                  _buildStatChip(
-                    Icons.attach_money,
-                    '${report['cost']} FCFA',
-                    Colors.green,
-                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -410,60 +417,26 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (status == 'draft')
-                    Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.orange.shade600,
-                            Colors.orange.shade400
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.orange.withOpacity(0.3),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          SnackBarHelper.showWarning(
-                              context, 'Modifier - À implémenter');
-                        },
-                        icon: const Icon(Icons.edit, size: 18),
-                        label: Text('Modifier',
-                            style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w600)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                        ),
-                      ),
-                    ),
                   Container(
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0a543d), Color(0xFF0f7d59)],
+                      gradient: LinearGradient(
+                        colors: [Colors.blue.shade600, Colors.blue.shade400],
                       ),
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0a543d).withOpacity(0.3),
+                          color: Colors.blue.withOpacity(0.3),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
                     child: ElevatedButton.icon(
-                      onPressed: () => _downloadReportPDF(report),
-                      icon: const Icon(Icons.download, size: 18),
-                      label: Text('PDF',
+                      onPressed: () {
+                        _editReport(report);
+                      },
+                      icon: const Icon(Icons.edit, size: 18),
+                      label: Text('Modifier',
                           style:
                               GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                       style: ElevatedButton.styleFrom(
@@ -611,14 +584,89 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                 _buildStatusBadge(report['status']),
                 const SizedBox(height: 24),
 
-                // Informations
-                _buildDetailRow(Icons.person, 'Client', report['customer']),
+                // Section Client
+                const Text(
+                  'Informations Client',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.purple.shade100),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.person,
+                              size: 18, color: Colors.purple.shade600),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              report['customer'] ?? 'Non renseigné',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if ((report['customer_company'] ?? '')
+                          .toString()
+                          .isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.business,
+                                size: 18, color: Colors.purple.shade600),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(report['customer_company'])),
+                          ],
+                        ),
+                      ],
+                      if ((report['customer_phone'] ?? '')
+                          .toString()
+                          .isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.phone,
+                                size: 18, color: Colors.purple.shade600),
+                            const SizedBox(width: 8),
+                            Text(report['customer_phone']),
+                          ],
+                        ),
+                      ],
+                      if ((report['customer_email'] ?? '')
+                          .toString()
+                          .isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.email,
+                                size: 18, color: Colors.purple.shade600),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(report['customer_email'])),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Informations intervention
                 _buildDetailRow(
                     Icons.location_on, 'Adresse', report['address']),
-                _buildDetailRow(Icons.calendar_today, 'Date', report['date']),
-                _buildDetailRow(Icons.schedule, 'Durée', report['duration']),
                 _buildDetailRow(
-                    Icons.attach_money, 'Coût', '${report['cost']} FCFA'),
+                    Icons.calendar_today, 'Date', _formatDate(report['date'])),
+                _buildDetailRow(Icons.schedule, 'Durée', report['duration']),
 
                 const SizedBox(height: 24),
                 const Text(
@@ -650,10 +698,73 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                           Icon(Icons.check_circle,
                               size: 16, color: Theme.of(context).primaryColor),
                           const SizedBox(width: 8),
-                          Text(material),
+                          Text(material is Map
+                              ? material['name'] ?? material.toString()
+                              : material.toString()),
                         ],
                       ),
                     )),
+
+                // Mesures techniques
+                if (_hasTechnicalMeasures(report)) ...[
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Mesures Techniques',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            if (report['pression']?.toString().isNotEmpty ==
+                                true)
+                              Expanded(
+                                  child: _buildMeasureItem(Icons.compress,
+                                      'Pression', '${report['pression']} bar')),
+                            if (report['temperature']?.toString().isNotEmpty ==
+                                true)
+                              Expanded(
+                                  child: _buildMeasureItem(
+                                      Icons.thermostat,
+                                      'Température',
+                                      '${report['temperature']} °C')),
+                          ],
+                        ),
+                        if (report['intensite']?.toString().isNotEmpty ==
+                                true ||
+                            report['tension']?.toString().isNotEmpty == true)
+                          const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            if (report['intensite']?.toString().isNotEmpty ==
+                                true)
+                              Expanded(
+                                  child: _buildMeasureItem(
+                                      Icons.electrical_services,
+                                      'Intensité',
+                                      '${report['intensite']} A')),
+                            if (report['tension']?.toString().isNotEmpty ==
+                                true)
+                              Expanded(
+                                  child: _buildMeasureItem(Icons.bolt,
+                                      'Tension', '${report['tension']} V')),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 24),
                 Row(
@@ -706,6 +817,52 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _editReport(Map<String, dynamic> report) async {
+    try {
+      // Afficher un loader pendant le chargement
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: LoadingIndicator()),
+      );
+
+      // Charger les détails complets de l'intervention depuis l'API
+      final response = await _apiService.getInterventionById(report['id']);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Fermer le loader
+
+      if (response['success'] && response['data'] != null) {
+        final intervention = response['data'];
+
+        // Naviguer vers l'écran de création/modification du rapport
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CreateReportScreen(
+              intervention: intervention,
+            ),
+          ),
+        );
+
+        // Recharger la liste si le rapport a été modifié
+        if (result == true) {
+          await _loadReports();
+        }
+      } else {
+        SnackBarHelper.showError(
+          context,
+          'Impossible de charger les détails de l\'intervention',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Fermer le loader en cas d'erreur
+        SnackBarHelper.showError(context, 'Erreur: $e');
+      }
+    }
   }
 
   void _showFilterDialog() {
@@ -827,6 +984,69 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) {
+      return 'Date non disponible';
+    }
+
+    try {
+      DateTime date;
+
+      // Essayer différents formats
+      if (dateStr.contains('T')) {
+        // Format ISO (2024-01-20T10:30:00)
+        date = DateTime.parse(dateStr);
+      } else if (dateStr.contains('-') && dateStr.length == 10) {
+        // Format YYYY-MM-DD
+        date = DateTime.parse(dateStr);
+      } else {
+        return dateStr; // Retourner tel quel si format non reconnu
+      }
+
+      // Formater en français avec jour de la semaine
+      final formatter = DateFormat('EEEE d MMMM yyyy', 'fr_FR');
+      return formatter.format(date);
+    } catch (e) {
+      return dateStr; // Retourner la chaîne d'origine en cas d'erreur
+    }
+  }
+
+  bool _hasTechnicalMeasures(Map<String, dynamic> report) {
+    return (report['pression']?.toString().isNotEmpty == true) ||
+        (report['temperature']?.toString().isNotEmpty == true) ||
+        (report['intensite']?.toString().isNotEmpty == true) ||
+        (report['tension']?.toString().isNotEmpty == true);
+  }
+
+  Widget _buildMeasureItem(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.orange.shade700, size: 20),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

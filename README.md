@@ -5,7 +5,24 @@ Application complète de gestion de maintenance et de climatisation comprenant :
 - 🖥️ Dashboard web admin (React/TypeScript)
 - 🔧 API Backend (Node.js/Express)
 
-## 🚀 Fonctionnalités Principales
+---
+
+## 📋 DOCUMENTATION CENTRALE
+
+👉 **[PROJET_MCT_MAINTENANCE.md](./PROJET_MCT_MAINTENANCE.md)** - Document unique centralisé
+
+Ce document contient :
+- ✅ État d'avancement complet (96%)
+- ✅ Liste de toutes les fonctionnalités (complétées et en cours)
+- ✅ Roadmap et planning
+- ✅ Métriques et KPIs
+- ✅ Prochaines étapes
+- ✅ Réalisations majeures
+- ✅ Décisions techniques
+
+---
+
+## 🚀 Démarrage Rapide
 
 ### Application Mobile
 - ✅ Authentification sécurisée (JWT)

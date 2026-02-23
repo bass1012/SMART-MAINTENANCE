@@ -10,11 +10,29 @@ const User = sequelize.define('User', {
   },
   email: {
     type: DataTypes.STRING(255),
-    allowNull: false,
+    allowNull: true, // Permettre NULL si inscription par téléphone uniquement
     unique: true,
     validate: {
-      isEmail: true,
-      notEmpty: true
+      // Custom validation to allow both regular emails and soft-deleted format (deleted_timestamp_email@domain)
+      isValidEmail(value) {
+        // Permettre NULL (inscription par téléphone uniquement)
+        if (!value || value === null || value === 'null') return;
+        
+        // Allow soft-deleted format: deleted_timestamp_email@domain
+        if (value.startsWith('deleted_')) {
+          const emailPart = value.replace(/^deleted_\d+_/, '');
+          // Si la partie email est vide ou "null", c'est OK (user sans email)
+          if (!emailPart || emailPart === 'null' || emailPart === '') return;
+          if (!/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(emailPart)) {
+            throw new Error('Invalid email format');
+          }
+        } else {
+          // Validate normal email format
+          if (!/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(value)) {
+            throw new Error('Invalid email format');
+          }
+        }
+      }
     }
   },
   first_name: {
@@ -36,11 +54,12 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(20),
     allowNull: true,
     validate: {
-      is: /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/
+      // Allow both regular phone numbers and soft-deleted format (deleted_timestamp_+number)
+      is: /^(deleted_\d+_)?[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/
     }
   },
   role: {
-    type: DataTypes.ENUM('admin', 'customer', 'technician', 'depannage'),
+    type: DataTypes.ENUM('admin', 'customer', 'technician', 'depannage', 'manager'),
     allowNull: false,
     defaultValue: 'customer'
   },
@@ -58,6 +77,16 @@ const User = sequelize.define('User', {
     allowNull: false,
     defaultValue: false
   },
+  email_verification_token: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    comment: 'Token de vérification email'
+  },
+  email_verification_expires: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Date d\'expiration du token de vérification'
+  },
   phone_verified: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
@@ -72,6 +101,11 @@ const User = sequelize.define('User', {
     allowNull: true,
     comment: 'Token FCM pour les notifications push mobiles'
   },
+  created_by: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'ID de l\'admin qui a créé cet utilisateur (pour admin/manager uniquement)'
+  },
   preferences: {
     type: DataTypes.JSON,
     allowNull: true,
@@ -79,6 +113,14 @@ const User = sequelize.define('User', {
   }
 }, {
   tableName: 'users',
+  validate: {
+    // Au moins email OU phone doit être fourni
+    emailOrPhone() {
+      if (!this.email && !this.phone) {
+        throw new Error('Either email or phone number must be provided');
+      }
+    }
+  },
   hooks: {
     beforeCreate: async (user) => {
       if (user.password_hash) {

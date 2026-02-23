@@ -313,7 +313,7 @@ const notifyNewQuote = async (quote, customer) => {
       amount: quote.total
     },
     priority: 'high',
-    actionUrl: `/quotes/${quote.id}`
+    actionUrl: `/devis/${quote.id}`
   });
 };
 
@@ -373,7 +373,7 @@ const notifyQuoteSent = async (quote, customer) => {
       expiryDate: quote.expiryDate
     },
     priority: 'high',
-    actionUrl: `/quotes/${quote.id}`
+    actionUrl: `/devis/${quote.id}`
   });
 };
 
@@ -392,7 +392,7 @@ const notifyQuoteUpdated = async (quote, customer) => {
       amount: quote.total
     },
     priority: 'high',
-    actionUrl: `/quotes/${quote.id}`
+    actionUrl: `/devis/${quote.id}`
   });
 };
 
@@ -439,7 +439,7 @@ const notifyPaymentReceived = async (payment, customer) => {
       amount: payment.amount
     },
     priority: 'medium',
-    actionUrl: `/payments/${payment.id}`
+    actionUrl: `/commandes`
   });
 };
 
@@ -455,7 +455,205 @@ const notifyReportSubmitted = async (report, customer) => {
       interventionId: report.intervention_id
     },
     priority: 'medium',
-    actionUrl: `/reports/${report.id}`
+    actionUrl: `/rapports-interventions`
+  });
+};
+
+// Notification: Intervention annulée
+const notifyInterventionCancelled = async (intervention, customer, technician = null, cancelledBy = 'customer') => {
+  const notifications = [];
+  
+  // Notifier le client si annulé par admin/technicien
+  if (cancelledBy !== 'customer' && customer) {
+    notifications.push(
+      notificationService.create({
+        userId: customer.user_id || customer.id,
+        type: 'intervention_cancelled',
+        title: 'Intervention annulée',
+        message: `Votre intervention #${intervention.id} a été annulée`,
+        data: {
+          interventionId: intervention.id,
+          cancelledBy
+        },
+        priority: 'high',
+        actionUrl: `/interventions`
+      })
+    );
+  }
+  
+  // Notifier le technicien si assigné
+  if (technician && cancelledBy !== 'technician') {
+    const customerName = customer ? 
+      `${customer.first_name || ''} ${customer.last_name || ''}`.trim() : 'Le client';
+    notifications.push(
+      notificationService.create({
+        userId: technician.id,
+        type: 'intervention_cancelled',
+        title: 'Intervention annulée',
+        message: `${customerName} a annulé l'intervention #${intervention.id}`,
+        data: {
+          interventionId: intervention.id,
+          cancelledBy
+        },
+        priority: 'high',
+        actionUrl: `/interventions`
+      })
+    );
+  }
+  
+  // Notifier les admins
+  const customerName = customer ? 
+    `${customer.first_name || ''} ${customer.last_name || ''}`.trim() : 'Un client';
+  notifications.push(
+    notificationService.notifyAdmins({
+      type: 'intervention_cancelled',
+      title: 'Intervention annulée',
+      message: `L'intervention #${intervention.id} de ${customerName} a été annulée`,
+      data: {
+        interventionId: intervention.id,
+        cancelledBy
+      },
+      priority: 'medium',
+      actionUrl: `/interventions`
+    })
+  );
+  
+  return Promise.all(notifications);
+};
+
+// Notification: Intervention reprogrammée
+const notifyInterventionRescheduled = async (intervention, customer, technician, newDate) => {
+  const notifications = [];
+  const formattedDate = new Date(newDate).toLocaleDateString('fr-FR', {
+    weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+  });
+  
+  // Notifier le client
+  if (customer) {
+    notifications.push(
+      notificationService.create({
+        userId: customer.user_id || customer.id,
+        type: 'intervention_rescheduled',
+        title: 'Date modifiée',
+        message: `Votre intervention a été reprogrammée au ${formattedDate}`,
+        data: {
+          interventionId: intervention.id,
+          newDate
+        },
+        priority: 'high',
+        actionUrl: `/interventions`
+      })
+    );
+  }
+  
+  // Notifier le technicien
+  if (technician) {
+    notifications.push(
+      notificationService.create({
+        userId: technician.id,
+        type: 'intervention_rescheduled',
+        title: 'Intervention reprogrammée',
+        message: `L'intervention #${intervention.id} a été déplacée au ${formattedDate}`,
+        data: {
+          interventionId: intervention.id,
+          newDate
+        },
+        priority: 'high',
+        actionUrl: `/interventions`
+      })
+    );
+  }
+  
+  return Promise.all(notifications);
+};
+
+// Notification: Technicien en route
+const notifyTechnicianOnTheWay = async (intervention, customer, technician) => {
+  if (!customer) return null;
+  
+  const techName = technician ? 
+    `${technician.first_name || ''} ${technician.last_name || ''}`.trim() : 'Le technicien';
+  
+  return notificationService.create({
+    userId: customer.user_id || customer.id,
+    type: 'technician_on_the_way',
+    title: '🚗 Technicien en route',
+    message: `${techName} est en route vers votre adresse`,
+    data: {
+      interventionId: intervention.id,
+      technicianId: technician?.id
+    },
+    priority: 'high',
+    actionUrl: `/interventions`
+  });
+};
+
+// Notification: Technicien arrivé
+const notifyTechnicianArrived = async (intervention, customer, technician) => {
+  if (!customer) return null;
+  
+  const techName = technician ? 
+    `${technician.first_name || ''} ${technician.last_name || ''}`.trim() : 'Le technicien';
+  
+  return notificationService.create({
+    userId: customer.user_id || customer.id,
+    type: 'technician_arrived',
+    title: '📍 Technicien arrivé',
+    message: `${techName} est arrivé sur les lieux`,
+    data: {
+      interventionId: intervention.id,
+      technicianId: technician?.id
+    },
+    priority: 'high',
+    actionUrl: `/interventions`
+  });
+};
+
+// Notification: Intervention en cours
+const notifyInterventionInProgress = async (intervention, customer, technician) => {
+  if (!customer) return null;
+  
+  const techName = technician ? 
+    `${technician.first_name || ''} ${technician.last_name || ''}`.trim() : 'Le technicien';
+  
+  return notificationService.create({
+    userId: customer.user_id || customer.id,
+    type: 'intervention_in_progress',
+    title: '🔧 Intervention en cours',
+    message: `${techName} a démarré l'intervention`,
+    data: {
+      interventionId: intervention.id,
+      technicianId: technician?.id
+    },
+    priority: 'high',
+    actionUrl: `/interventions`
+  });
+};
+
+// Notification: Paiement reçu (pour admins)
+const notifyPaymentReceivedToAdmin = async (payment, customer, paymentType = 'order') => {
+  const customerName = customer ? 
+    `${customer.first_name || ''} ${customer.last_name || ''}`.trim() : 'Un client';
+  
+  const typeLabels = {
+    'order': 'commande',
+    'diagnostic': 'diagnostic',
+    'subscription': 'abonnement',
+    'quote': 'devis'
+  };
+  
+  return notificationService.notifyAdmins({
+    type: 'payment_received',
+    title: '💰 Paiement reçu',
+    message: `Paiement de ${payment.amount} FCFA reçu de ${customerName} (${typeLabels[paymentType] || paymentType})`,
+    data: {
+      paymentId: payment.id,
+      amount: payment.amount,
+      paymentType,
+      customerId: customer?.id
+    },
+    priority: 'medium',
+    actionUrl: `/dashboard`
   });
 };
 
@@ -465,6 +663,11 @@ module.exports = {
   notifyTechnicianAssignedToCustomer,
   notifyInterventionCompleted,
   notifyInterventionUpdated,
+  notifyInterventionCancelled,
+  notifyInterventionRescheduled,
+  notifyTechnicianOnTheWay,
+  notifyTechnicianArrived,
+  notifyInterventionInProgress,
   notifyNewComplaint,
   notifyComplaintResponse,
   notifyComplaintStatusChange,
@@ -481,5 +684,6 @@ module.exports = {
   notifyNewContract,
   notifyContractExpiring,
   notifyPaymentReceived,
+  notifyPaymentReceivedToAdmin,
   notifyReportSubmitted
 };

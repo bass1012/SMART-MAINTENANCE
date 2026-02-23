@@ -153,11 +153,24 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadProfile,
-              child: SingleChildScrollView(
+      body: Stack(
+        children: [
+          // Image de fond
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.4,
+              child: Image.asset(
+                'assets/images/background_tech_2.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          // Contenu
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _loadProfile,
+                  child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
                   children: [
@@ -408,6 +421,8 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                 ),
               ),
             ),
+        ],
+      ),
     );
   }
 

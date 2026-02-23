@@ -180,7 +180,12 @@ class ChatService {
       if (userDataString != null) {
         try {
           final userData = jsonDecode(userDataString);
-          _userId = userData['id']?.toString();
+          // Essayer différentes clés possibles pour l'ID utilisateur
+          _userId = userData['id']?.toString() ??
+              userData['user']?['id']?.toString() ??
+              userData['data']?['user']?['id']?.toString();
+          print('🔍 UserData keys: ${userData.keys.toList()}');
+          print('🔍 UserId extrait: $_userId');
         } catch (e) {
           print('❌ Erreur lors du décodage des données utilisateur: $e');
         }

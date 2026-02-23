@@ -152,11 +152,30 @@ class FCMService {
     final String? type = message.data['type'];
     final List<String> importantTypes = [
       'technician_assigned',
+      'technician_on_the_way',
+      'technician_arrived',
       'intervention_status',
+      'intervention_assigned',
+      'intervention_completed',
+      'intervention_cancelled',
       'quote_created',
+      'quote_received',
+      'quote_sent',
+      'quote_accepted',
+      'quote_rejected',
+      'quote_execution_confirmed', // Exécution confirmée par le client
       'order_status',
       'complaint_response',
       'maintenance_reminder',
+      'payment_confirmed',
+      'payment_success',
+      'payment_failed',
+      'payment_refunded',
+      'payment_pending',
+      'general', // Notifications broadcast
+      'announcement', // Annonces
+      'alert', // Alertes
+      'promotion', // Promotions
     ];
 
     if (type != null && importantTypes.contains(type)) {
@@ -237,13 +256,14 @@ class FCMService {
     print('👆 Notification cliquée');
     print('   Data: ${message.data}');
 
+    // Stocker les données de la notification pour la navigation
+    _pendingNotificationData = message.data;
+
     // Gérer les notifications de chat
     final String? type = message.data['type'];
 
     if (type == 'chat') {
       print('   → Type: Chat - Navigation vers la page de chat');
-      // Le navigateur sera géré depuis main.dart via un stream ou callback
-      // Pour l'instant, on stocke juste l'information
       _lastChatNotification = message.data;
     } else if (type == 'maintenance_offer_created' ||
         type == 'maintenance_offer_activated') {
@@ -251,17 +271,15 @@ class FCMService {
       _lastOfferNotification = message.data;
     }
 
-    // TODO: Navigation selon le type de notification
     final String? actionUrl = message.data['actionUrl'];
-
     if (actionUrl != null) {
-      print('   → Navigation vers: $actionUrl');
-      // Implémenter la navigation ici selon le type: ${message.data['type']}
+      print('   → Navigation vers: $actionUrl (type: $type)');
     }
   }
 
   Map<String, dynamic>? _lastChatNotification;
   Map<String, dynamic>? _lastOfferNotification;
+  Map<String, dynamic>? _pendingNotificationData;
 
   /// Obtenir et effacer la dernière notification de chat
   Map<String, dynamic>? getAndClearLastChatNotification() {
@@ -277,6 +295,13 @@ class FCMService {
     return notification;
   }
 
+  /// Obtenir et effacer les données de notification en attente
+  Map<String, dynamic>? getAndClearPendingNotification() {
+    final notification = _pendingNotificationData;
+    _pendingNotificationData = null;
+    return notification;
+  }
+
   /// Gérer le clic sur une notification locale
   void _handleLocalNotificationTap(String payload) {
     print('👆 Notification locale cliquée');
@@ -285,6 +310,9 @@ class FCMService {
     try {
       final Map<String, dynamic> data = jsonDecode(payload);
       final String? notificationType = data['type'];
+
+      // Stocker pour la navigation
+      _pendingNotificationData = data;
 
       if (notificationType == 'chat') {
         print('   → Type: Chat - Navigation vers la page de chat');
@@ -297,8 +325,7 @@ class FCMService {
 
       final String? actionUrl = data['actionUrl'];
       if (actionUrl != null) {
-        print('   → Navigation vers: $actionUrl');
-        // Implémenter la navigation ici
+        print('   → Navigation vers: $actionUrl (type: $notificationType)');
       }
     } catch (e) {
       print('❌ Erreur parsing payload: $e');
