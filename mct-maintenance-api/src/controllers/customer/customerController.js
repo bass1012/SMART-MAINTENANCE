@@ -1,5 +1,6 @@
 // Customer Controller - Implementation with basic REST handlers
 const { CustomerProfile, User } = require('../../models');
+const { deleteCustomerCompletely, softDeleteCustomer } = require('../../services/customerDeletionService');
 const bcrypt = require('bcryptjs');
 
 const getCustomerProfile = async (req, res) => {
@@ -221,14 +222,141 @@ const updateCustomer = async (req, res) => {
   }
 };
 // Suppression d'un client
+/**
+ * Supprimer un client COMPLÈTEMENT (hard delete)
+ * Supprime le client et TOUTES ses données associées
+ */
 const deleteCustomer = async (req, res) => {
   try {
-    const customer = await CustomerProfile.findByPk(req.params.id);
-    if (!customer) return res.status(404).json({ success: false, message: 'Client non trouvé' });
-    await customer.destroy();
-    res.json({ success: true, message: 'Client supprimé' });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Erreur lors de la suppression du client', error: err.message });
+    const customerId = parseInt(req.params.id);
+    
+    if (!customerId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'ID client invalide' 
+      });
+    }
+
+    // Utiliser le service de suppression complète
+    const result = await deleteCustomerCompletely(customerId);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: {
+        deletedItems: result.deletedItems
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la suppression du client:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Erreur lors de la suppression du client', 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Désactiver un client (soft delete)
+ * Le compte est désactivé mais les données sont conservées
+ */
+const deactivateCustomer = async (req, res) => {
+  try {
+    const customerId = parseInt(req.params.id);
+    
+    if (!customerId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'ID client invalide' 
+      });
+    }
+
+    // Utiliser le service de soft delete
+    const result = await softDeleteCustomer(customerId);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: {
+        user: result.user
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la désactivation du client:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Erreur lors de la désactivation du client', 
+      error: error.message 
+    });
+  }
+};
+
+// Supprimer définitivement tous les clients marqués comme "deleted"
+const purgeDeletedCustomers = async (req, res) => {
+  try {
+    const { User, CustomerProfile } = require('../../models');
+    const { Op } = require('sequelize');
+
+    // Trouver tous les utilisateurs avec email commençant par "deleted_"
+    const deletedUsers = await User.findAll({
+      where: {
+        email: {
+          [Op.like]: 'deleted_%'
+        }
+      },
+      attributes: ['id', 'email', 'first_name', 'last_name']
+    });
+
+    if (deletedUsers.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Aucun client supprimé à purger',
+        count: 0
+      });
+    }
+
+    console.log(`🗑️ [Purge] ${deletedUsers.length} client(s) marqué(s) comme supprimé(s) trouvé(s)`);
+
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    // Supprimer chaque client définitivement
+    for (const user of deletedUsers) {
+      try {
+        const result = await deleteCustomerCompletely(user.id);
+        console.log(`✅ Client ${user.id} (${user.email}) purgé avec succès`);
+        successCount++;
+      } catch (error) {
+        console.error(`❌ Erreur purge client ${user.id}:`, error.message);
+        errorCount++;
+        errors.push({
+          userId: user.id,
+          email: user.email,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Purge terminée: ${successCount} supprimé(s), ${errorCount} erreur(s)`,
+      total: deletedUsers.length,
+      successCount,
+      errorCount,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la purge des clients supprimés:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la purge des clients supprimés',
+      error: error.message
+    });
   }
 };
 
@@ -242,5 +370,7 @@ module.exports = {
   getCustomer,
   createCustomer,
   updateCustomer,
-  deleteCustomer
+  deleteCustomer,
+  deactivateCustomer,
+  purgeDeletedCustomers
 };

@@ -7,6 +7,8 @@ import '../../services/api_service.dart';
 import '../../services/fcm_service.dart';
 import '../../utils/snackbar_helper.dart';
 import '../../utils/test_keys.dart';
+import '../../screens/auth/email_verification_screen.dart';
+import '../../widgets/common/loading_indicator.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
@@ -50,6 +52,36 @@ class _LoginFormState extends State<LoginForm> {
         // Cacher le snackbar de chargement
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
+        // Vérification SMS uniquement pour comptes pending (email désactivé)
+        if (response['data'] != null && response['data']['user'] != null) {
+          final user = response['data']['user'];
+          final status = user['status']?.toLowerCase() ?? '';
+          final phone = user['phone']?.toString() ?? '';
+
+          // Si le compte est pending et a un numéro de téléphone, vérification SMS
+          if (status == 'pending' && phone.isNotEmpty) {
+            SnackBarHelper.showInfo(
+              context,
+              'Veuillez vérifier votre compte par SMS',
+              duration: const Duration(seconds: 3),
+            );
+
+            await Future.delayed(const Duration(milliseconds: 500));
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EmailVerificationScreen(
+                    email: phone, // Numéro de téléphone pour SMS
+                    userId: user['id'] ?? 0,
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+        }
+
         // Vérifier si la réponse contient des données utilisateur
         if (response['data'] != null && response['data']['user'] != null) {
           final user = response['data']['user'];
@@ -75,6 +107,8 @@ class _LoginFormState extends State<LoginForm> {
           // Rediriger en fonction du rôle (supporter anglais et français)
           if (role.contains('technician') || role.contains('technicien')) {
             Navigator.pushReplacementNamed(context, '/technician');
+          } else if (role.contains('manager')) {
+            Navigator.pushReplacementNamed(context, '/manager');
           } else {
             Navigator.pushReplacementNamed(context, '/client');
           }
@@ -113,12 +147,12 @@ class _LoginFormState extends State<LoginForm> {
     if (cleanMessage.contains('AUTH_ERROR') ||
         cleanMessage.contains('Invalid credentials') ||
         cleanMessage.contains('identifiants invalides')) {
-      return 'Email ou mot de passe incorrect. Veuillez vérifier vos identifiants.';
+      return 'Contact ou mot de passe incorrect. Veuillez vérifier vos identifiants.';
     }
 
     if (cleanMessage.contains('User not found') ||
         cleanMessage.contains('utilisateur introuvable')) {
-      return 'Aucun compte associé à cet email. Veuillez créer un compte.';
+      return 'Aucun compte associé à ce contact. Veuillez créer un compte.';
     }
 
     if (cleanMessage.contains('Account is inactive') ||
@@ -128,7 +162,7 @@ class _LoginFormState extends State<LoginForm> {
 
     if (cleanMessage.contains('Email not verified') ||
         cleanMessage.contains('email non vérifié')) {
-      return 'Veuillez vérifier votre email avant de vous connecter.';
+      return 'Veuillez vérifier votre compte avant de vous connecter.';
     }
 
     // Erreurs réseau
@@ -191,14 +225,19 @@ class _LoginFormState extends State<LoginForm> {
           ),
           const SizedBox(height: 32),
 
-          // Champ Email moderne
+          // Champ Contact (email ou téléphone)
           TextFormField(
             key: const ValueKey(TestKeys.emailField),
             controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
+            keyboardType: TextInputType.text,
             style: GoogleFonts.poppins(fontSize: 15),
             decoration: InputDecoration(
-              labelText: 'Email',
+              labelText: 'Contact (email ou téléphone)',
+              hintText: 'email@exemple.com ou 0709822377',
+              hintStyle: GoogleFonts.poppins(
+                color: Colors.grey.shade400,
+                fontSize: 14,
+              ),
               labelStyle: GoogleFonts.poppins(
                 color: const Color(0xFF0a543d).withOpacity(0.7),
               ),
@@ -209,7 +248,7 @@ class _LoginFormState extends State<LoginForm> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
-                  Icons.email_outlined,
+                  Icons.person_outline,
                   color: Color(0xFF0a543d),
                   size: 20,
                 ),
@@ -244,8 +283,9 @@ class _LoginFormState extends State<LoginForm> {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
-            validator: (value) =>
-                value == null || value.isEmpty ? 'Entrez votre email' : null,
+            validator: (value) => value == null || value.isEmpty
+                ? 'Entrez votre email ou téléphone'
+                : null,
           ),
           const SizedBox(height: 20),
 
@@ -257,6 +297,11 @@ class _LoginFormState extends State<LoginForm> {
             style: GoogleFonts.poppins(fontSize: 15),
             decoration: InputDecoration(
               labelText: 'Mot de passe',
+              hintText: 'Entrez votre mot de passe',
+              hintStyle: GoogleFonts.poppins(
+                color: Colors.grey.shade400,
+                fontSize: 14,
+              ),
               labelStyle: GoogleFonts.poppins(
                 color: const Color(0xFF0a543d).withOpacity(0.7),
               ),
@@ -348,9 +393,9 @@ class _LoginFormState extends State<LoginForm> {
                         color: const Color(0xFF0a543d).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: const CircularProgressIndicator(
+                      child: ButtonLoadingIndicator(
                         color: Color(0xFF0a543d),
-                        strokeWidth: 3,
+                        size: 8.0,
                       ),
                     ),
                   )

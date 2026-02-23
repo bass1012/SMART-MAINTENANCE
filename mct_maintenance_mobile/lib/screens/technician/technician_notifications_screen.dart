@@ -2,8 +2,10 @@ import '../../utils/snackbar_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 
 class TechnicianNotificationsScreen extends StatefulWidget {
   const TechnicianNotificationsScreen({super.key});
@@ -97,6 +99,62 @@ class _TechnicianNotificationsScreenState
       if (mounted) {
         SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
+    }
+  }
+
+  void _handleNotificationTap(Map<String, dynamic> notification) async {
+    print('📱 Clic sur notification: ${notification['type']}');
+
+    // Extraire les données additionnelles du champ 'data'
+    Map<String, dynamic>? additionalData;
+    if (notification['data'] != null) {
+      print('   Données brutes: ${notification['data']}');
+      if (notification['data'] is String) {
+        try {
+          additionalData = jsonDecode(notification['data']);
+        } catch (e) {
+          print('   Erreur parsing JSON: $e');
+        }
+      } else if (notification['data'] is Map) {
+        additionalData = Map<String, dynamic>.from(notification['data']);
+      }
+      print('   Données extraites: $additionalData');
+    }
+
+    // Construire les données de navigation
+    final notificationData = {
+      'type': notification['type'],
+      'role': 'technician', // Forcer le rôle technicien
+      // Essayer d'abord dans 'data', puis directement dans notification
+      'interventionId': additionalData?['interventionId'] ??
+          additionalData?['intervention_id'] ??
+          notification['intervention_id'],
+      'quoteId': additionalData?['quoteId'] ??
+          additionalData?['quote_id'] ??
+          notification['quote_id'],
+      'orderId': additionalData?['orderId'] ??
+          additionalData?['order_id'] ??
+          notification['order_id'],
+      'complaintId': additionalData?['complaintId'] ??
+          additionalData?['complaint_id'] ??
+          notification['complaint_id'],
+      'subscriptionId': additionalData?['subscriptionId'] ??
+          additionalData?['subscription_id'] ??
+          notification['subscription_id'],
+    };
+
+    print('   Données finales pour navigation: $notificationData');
+
+    // Fermer l'écran de notifications avant de naviguer
+    Navigator.pop(context);
+
+    // Attendre la fin de l'animation de fermeture
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // Utiliser le service de navigation
+    if (mounted) {
+      final navigationService = NotificationNavigationService();
+      navigationService.navigateFromNotification(context, notificationData);
     }
   }
 
@@ -292,43 +350,58 @@ class _TechnicianNotificationsScreenState
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF0a543d), Color(0xFF0f7d59)],
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.95),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0a543d), Color(0xFF0f7d59)],
+                ),
+                shape: BoxShape.circle,
               ),
-              shape: BoxShape.circle,
+              child: const Icon(
+                Icons.notifications_none,
+                size: 64,
+                color: Colors.white,
+              ),
             ),
-            child: const Icon(
-              Icons.notifications_none,
-              size: 64,
-              color: Colors.white,
+            const SizedBox(height: 24),
+            Text(
+              'Aucune notification',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Aucune notification',
-            style: GoogleFonts.poppins(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+            const SizedBox(height: 8),
+            Text(
+              'Vous n\'avez pas de nouvelles notifications',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Vous n\'avez pas de nouvelles notifications',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -366,6 +439,7 @@ class _TechnicianNotificationsScreenState
           if (!isRead) {
             _markAsRead(notification['id']);
           }
+          _handleNotificationTap(notification);
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(

@@ -137,7 +137,7 @@ const generateQuotePdf = async (req, res) => {
 };
 // Quote Controller - Placeholder implementation
 
-const { Quote, QuoteItem, CustomerProfile, User } = require('../../models');
+const { Quote, QuoteItem, CustomerProfile, User, Order, OrderItem } = require('../../models');
 const { 
   notifyNewQuote,
   notifyQuoteSent,
@@ -145,6 +145,12 @@ const {
   notifyQuoteRejected,
   notifyQuoteUpdated
 } = require('../../services/notificationHelpers');
+const { sendEmail } = require('../../services/emailService');
+const {
+  sendQuoteCreatedEmail,
+  sendQuoteAcceptedEmail,
+  sendQuoteRejectedEmail
+} = require('../../services/emailHelper');
 
 const getAllQuotes = async (req, res) => {
   try {
@@ -239,6 +245,29 @@ const createQuote = async (req, res) => {
           console.log('📤 Envoi notification au client user_id:', customerProfile.user_id);
           await notifyNewQuote(createdQuote, customerProfile);
           console.log('✅ Notification envoyée au client pour le nouveau devis');
+          
+          // 📧 Email au client (nouveau devis - template professionnel)
+          if (customerProfile.user) {
+            const plainQuote = createdQuote.get({ plain: true });
+            console.log('📧 Structure du devis pour email:', {
+              id: plainQuote.id,
+              reference: plainQuote.reference,
+              total: plainQuote.total,
+              total_amount: plainQuote.total_amount,
+              subtotal: plainQuote.subtotal,
+              allKeys: Object.keys(plainQuote)
+            });
+            await sendQuoteCreatedEmail(
+              plainQuote,
+              {
+                id: customerProfile.user_id,
+                email: customerProfile.user.email,
+                first_name: customerProfile.first_name,
+                last_name: customerProfile.last_name
+              }
+            );
+            console.log('✅ Email professionnel nouveau devis envoyé au client');
+          }
         } else {
           console.log('⚠️  CustomerProfile non trouvé pour customerId:', customerId);
         }
@@ -379,11 +408,93 @@ const deleteQuote = async (req, res) => {
 const acceptQuote = async (req, res) => {
   try {
     const { id } = req.params;
+    const { scheduled_date, second_contact, execute_now } = req.body;
+    
     const quote = await Quote.findByPk(id);
     if (!quote) {
       return res.status(404).json({ success: false, message: 'Devis non trouvé' });
     }
-    await quote.update({ status: 'accepted' });
+
+    let scheduledDateTime;
+    
+    // Si exécution immédiate demandée
+    if (execute_now === true) {
+      // Utiliser la date/heure actuelle
+      scheduledDateTime = new Date();
+      console.log('⚡ Exécution immédiate demandée pour le devis', id);
+    } else {
+      // Vérifier que la date planifiée est fournie
+      if (!scheduled_date) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'La date et l\'heure de l\'intervention sont requises' 
+        });
+      }
+
+      // Vérifier que la date est dans le futur
+      scheduledDateTime = new Date(scheduled_date);
+      if (scheduledDateTime <= new Date()) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'La date de l\'intervention doit être dans le futur' 
+        });
+      }
+    }
+
+    await quote.update({ 
+      status: 'accepted',
+      scheduled_date: scheduledDateTime,
+      second_contact: second_contact || null,
+      execute_now: execute_now || false
+    });
+
+    // 🛒 Créer automatiquement une commande à partir du devis accepté
+    try {
+      // Parser line_items si c'est un string JSON
+      let lineItems = quote.line_items;
+      if (typeof lineItems === 'string') {
+        try {
+          lineItems = JSON.parse(lineItems);
+        } catch (e) {
+          lineItems = [];
+        }
+      }
+      if (!Array.isArray(lineItems)) {
+        lineItems = [];
+      }
+
+      // Générer une référence unique pour la commande
+      const orderReference = `CMD-${Date.now()}-${quote.id}`;
+
+      // Déterminer le statut de paiement selon le type d'exécution
+      // Exécution immédiate → pending (paiement maintenant)
+      // Planifié pour plus tard → deferred (paiement différé)
+      const paymentStatus = execute_now ? 'pending' : 'deferred';
+
+      // Créer la commande
+      const order = await Order.create({
+        reference: orderReference,
+        customer_id: quote.customerId,
+        quote_id: quote.id,
+        total_amount: quote.total || 0,
+        status: execute_now ? 'pending' : 'scheduled',
+        payment_status: paymentStatus,
+        payment_method: null,
+        line_items: JSON.stringify(lineItems),
+        notes: execute_now 
+          ? `Commande créée automatiquement à partir du devis ${quote.reference} - Exécution immédiate`
+          : `Commande créée automatiquement à partir du devis ${quote.reference} - Intervention planifiée, paiement différé`,
+        scheduled_date: scheduledDateTime
+      });
+
+      // Mettre à jour le statut de paiement du devis
+      await quote.update({ payment_status: paymentStatus });
+
+      console.log(`✅ Commande ${orderReference} créée automatiquement pour le devis ${quote.reference} (paiement: ${paymentStatus})`);
+    } catch (orderError) {
+      console.error('⚠️  Erreur création commande automatique:', orderError.message);
+      // On ne bloque pas l'acceptation si la création de commande échoue
+    }
     
     // 📬 Notifier les admins de l'acceptation
     try {
@@ -394,6 +505,20 @@ const acceptQuote = async (req, res) => {
       if (customerProfile) {
         await notifyQuoteAccepted(quote, customerProfile);
         console.log('✅ Notification envoyée aux admins : devis accepté');
+        
+        // 📧 Email aux admins (devis accepté - template professionnel)
+        if (customerProfile.user) {
+          await sendQuoteAcceptedEmail(
+            quote.get({ plain: true }),
+            {
+              id: customerProfile.user_id,
+              email: customerProfile.user.email,
+              first_name: customerProfile.first_name,
+              last_name: customerProfile.last_name
+            }
+          );
+          console.log('✅ Email professionnel acceptation devis envoyé aux admins');
+        }
       }
     } catch (notifError) {
       console.error('⚠️  Erreur notification acceptation devis:', notifError.message);
@@ -427,6 +552,20 @@ const rejectQuote = async (req, res) => {
       if (customerProfile) {
         await notifyQuoteRejected(quote, customerProfile);
         console.log('✅ Notification envoyée aux admins : devis rejeté');
+        
+        // 📧 Email aux admins (devis rejeté - template professionnel)
+        if (customerProfile.user) {
+          await sendQuoteRejectedEmail(
+            quote.get({ plain: true }),
+            {
+              id: customerProfile.user_id,
+              email: customerProfile.user.email,
+              first_name: customerProfile.first_name,
+              last_name: customerProfile.last_name
+            }
+          );
+          console.log('✅ Email professionnel rejet devis envoyé aux admins');
+        }
       }
     } catch (notifError) {
       console.error('⚠️  Erreur notification rejet devis:', notifError.message);
@@ -439,7 +578,7 @@ const rejectQuote = async (req, res) => {
 };
 
 
-const { Order, OrderItem, Product } = require('../../models');
+const { Product } = require('../../models');
 
 const convertQuoteToOrder = async (req, res) => {
   const transaction = await Order.sequelize.transaction();
@@ -481,7 +620,7 @@ const convertQuoteToOrder = async (req, res) => {
     
     // Créer la commande avec le user_id (pas customer_profiles.id)
     const order = await Order.create({
-      customerId: customerProfile.user_id, // ← FIX: Utiliser user_id au lieu de customer_profiles.id
+      customerId: customerProfile.id, // ✅ FIX: Utiliser CustomerProfile.id
       totalAmount: quote.total,
       status: 'pending',
       notes: quote.notes,
@@ -519,10 +658,20 @@ const convertQuoteToOrder = async (req, res) => {
 
     await transaction.commit();
 
-    // Renvoyer la commande complète
+    // Renvoyer la commande complète avec CustomerProfile
     const orderWithDetails = await Order.findByPk(order.id, {
       include: [
-        { model: User, as: 'customer' },
+        { 
+          model: CustomerProfile, 
+          as: 'customer',
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['id', 'email', 'phone']
+            }
+          ]
+        },
         { model: OrderItem, as: 'items', include: [{ model: Product, as: 'product' }] }
       ]
     });

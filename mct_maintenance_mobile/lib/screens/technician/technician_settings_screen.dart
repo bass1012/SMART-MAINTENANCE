@@ -130,11 +130,24 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                const SizedBox(height: 16),
+      body: Stack(
+        children: [
+          // Image de fond
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.4,
+              child: Image.asset(
+                'assets/images/background_tech_2.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          // Contenu
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                  children: [
+                    const SizedBox(height: 16),
 
                 // Section Compte
                 _buildSectionHeader('Compte'),
@@ -267,6 +280,8 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
                 const SizedBox(height: 32),
               ],
             ),
+        ],
+      ),
     );
   }
 

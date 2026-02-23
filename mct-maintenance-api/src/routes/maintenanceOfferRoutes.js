@@ -102,7 +102,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
           await notificationService.createBulk(customerIds, {
             type: 'maintenance_offer_created',
             title: '🎉 Nouvelle offre d\'entretien disponible !',
-            message: `${offer.title} - ${offer.price}€/${offer.duration}`,
+            message: `${offer.title} - ${offer.price} FCFA/${offer.duration}`,
             data: {
               offer_id: offer.id,
               offer_title: offer.title,
@@ -230,7 +230,7 @@ router.patch('/:id/toggle', authenticate, authorize('admin'), async (req, res) =
           await notificationService.createBulk(customerIds, {
             type: 'maintenance_offer_activated',
             title: '✨ Offre d\'entretien maintenant disponible !',
-            message: `${offer.title} est maintenant activée - ${offer.price}€/${offer.duration}`,
+            message: `${offer.title} est maintenant activée - ${offer.price} FCFA/${offer.duration}`,
             data: {
               offer_id: offer.id,
               offer_title: offer.title,
@@ -304,6 +304,24 @@ router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error deleting maintenance offer:', error);
+    
+    // Si l'offre est référencée par des souscriptions/interventions, la désactiver au lieu de la supprimer
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      try {
+        const offer = await MaintenanceOffer.findByPk(req.params.id);
+        if (offer) {
+          await offer.update({ isActive: false });
+          return res.json({ 
+            success: true,
+            message: 'Cette offre est utilisée par des souscriptions ou interventions. Elle a été désactivée au lieu d\'être supprimée.',
+            softDeleted: true
+          });
+        }
+      } catch (softDeleteError) {
+        console.error('Erreur lors de la désactivation de l\'offre:', softDeleteError);
+      }
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la suppression de l\'offre',

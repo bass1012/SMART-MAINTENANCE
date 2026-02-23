@@ -1,0 +1,104 @@
+🎯 PROBLÈME FINEOPAY - Smart Maintenance MCT
+================================================
+
+📋 NOTRE COMPTE
+Business Code: smart_maintenance_by_mct
+API Key: fpay_5feda0bf5d62257365c70b73f1aa0c6d098f80dbcf788ff8a4c48a661923
+Environment: Sandbox/Dev
+
+
+✅ CE QUI FONCTIONNE
+====================
+
+1️⃣ Génération de lien via API ✅
+
+POST https://dev.fineopay.com/api/v1/business/dev/checkout-link
+
+Réponse:
+{
+  "success": true,
+  "message": "Lien de paiement généré avec succès",
+  "data": {
+    "checkoutLink": "https://demo.fineopay.com/smart_maintenance_by_mct/xxxxx/checkout"
+  }
+}
+
+
+❌ CE QUI NE FONCTIONNE PAS
+===========================
+
+2️⃣ Ouverture du lien checkout ❌
+
+Quand on ouvre:
+https://demo.fineopay.com/smart_maintenance_by_mct/xxxxx/checkout
+
+Résultat:
+🔴 "Erreur interne du serveur"
+
+📱 ERREUR dans la console navigateur:
+POST https://dev.fineopay.com/api/v1/business/checkout/payin
+→ 500 Internal Server Error
+→ {success: false, message: "Erreur interne du serveur.", error: "Internal Error"}
+
+⚠️ Cette requête est faite par la PAGE FINEOPAY elle-même (JavaScript interne)
+   Ce n'est PAS notre code qui appelle cet endpoint
+
+
+🧪 TESTS EFFECTUÉS
+==================
+
+✅ Test montant 5 FCFA → API OK, Page KO
+✅ Test montant 500 FCFA → API OK, Page KO  
+✅ Test montant 1000 FCFA → API OK, Page KO
+✅ Test montant 10000 FCFA → API OK, Page KO
+✅ Test avec tous les champs (email, phone, etc.) → API OK, Page KO
+✅ Ouverture immédiate (< 10 sec) → Page KO
+
+
+🔍 OBSERVATION
+==============
+
+⚠️ API sur: dev.fineopay.com
+⚠️ Checkout sur: demo.fineopay.com
+
+Est-ce normal ?
+
+
+❓ QUESTIONS
+============
+
+1. Notre compte "smart_maintenance_by_mct" est-il activé ?
+2. Configuration manquante dans le dashboard ?
+3. Whitelist à configurer pour les callback URLs ?
+4. Pourquoi dev.fineopay.com → demo.fineopay.com ?
+5. L'endpoint /checkout/payin (utilisé par votre page) a un bug ?
+6. Notre compte a-t-il accès à l'endpoint /checkout/payin ?
+
+
+💻 CODE DISPONIBLE
+==================
+
+Nous avons:
+✅ Backend Node.js complet
+✅ Mobile Flutter complet
+✅ Dashboard React complet
+✅ Script de démonstration
+✅ Documentation technique complète
+
+Tout est prêt de notre côté, on attend juste que les checkout links fonctionnent ! 🚀
+
+
+📞 PROCHAINE ÉTAPE
+==================
+
+Pouvez-vous:
+1. Vérifier les logs serveur FineoPay pour notre business code
+2. Confirmer si notre compte est bien configuré
+3. Nous dire ce qui manque pour activer les checkouts
+
+
+Merci ! 🙏
+
+---
+Contact: MCT Maintenance Team
+Date: 9 février 2026

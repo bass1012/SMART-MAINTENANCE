@@ -9,8 +9,10 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
 const { testConnection, syncDatabase } = require('./config/database');
+const { setupSwagger } = require('./config/swagger');
 const notificationService = require('./services/notificationService');
 const fcmService = require('./services/fcmService');
+const cronService = require('./services/cronService');
 
 const { securityMiddleware, authLimiter } = require('./middleware/security');
 const { errorHandler, notFound, errorLogger, rateLimitErrorHandler } = require('./middleware/errorHandler');
@@ -27,6 +29,7 @@ const contractRoutes = require('./routes/contractRoutes');
 const quoteRoutes = require('./routes/quoteRoutes');
 const promotionRoutes = require('./routes/promotionRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const notificationPreferenceRoutes = require('./routes/notificationPreferenceRoutes');
 const userRoutes = require('./routes/userRoutes');
 const maintenanceScheduleRoutes = require('./routes/maintenanceScheduleRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes');
@@ -35,6 +38,8 @@ const uploadRoutes = require('./routes/uploadRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const brandRoutes = require('./routes/brandRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const activityRoutes = require('./routes/activityRoutes');
+const smsWebhookRoutes = require('./routes/smsWebhookRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -115,7 +120,7 @@ app.get(['/health', '/api/health'], (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'MCT Maintenance API',
-    version: '1.0.0',
+    version: '2.0.8',
     uptime: process.uptime(),
     memoryUsage: process.memoryUsage(),
     nodeVersion: process.version,
@@ -123,6 +128,9 @@ app.get(['/health', '/api/health'], (req, res) => {
     env: process.env.NODE_ENV || 'development'
   });
 });
+
+// Configuration Swagger (avant les routes API)
+setupSwagger(app);
 
 // Middleware de sécurité (après les endpoints de santé)
 securityMiddleware(app);
@@ -152,10 +160,15 @@ app.use('/api/contracts', contractRoutes);
 app.use('/api/quotes', quoteRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/notification-preferences', notificationPreferenceRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/maintenance-schedules', maintenanceScheduleRoutes);
 app.use('/api/maintenance-offers', require('./routes/maintenanceOfferRoutes'));
 app.use('/api/subscriptions', require('./routes/subscriptionRoutes'));
+app.use('/api/admin/subscriptions', require('./routes/subscriptionRoutes')); // Alias pour le dashboard
+app.use('/api/installation-services', require('./routes/installationServiceRoutes'));
+app.use('/api/repair-services', require('./routes/repairServiceRoutes'));
+app.use('/api/diagnostic-reports', require('./routes/diagnosticRoutes'));
 app.use('/api/test', require('./routes/testNotificationRoutes'));
 app.use('/api/equipments', equipmentRoutes);
 app.use('/api/complaints', complaintRoutes);
@@ -163,7 +176,12 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/brands', brandRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/fineopay', require('./routes/fineoPayRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/maintenance', require('./routes/maintenanceRoutes'));
+app.use('/api/activities', activityRoutes);
+app.use('/api/sms', smsWebhookRoutes); // Webhooks HSMS.ci
+app.use('/api/splits', require('./routes/splitRoutes')); // Gestion des splits (QR code)
 
 // Servir les fichiers statiques uploadés
 app.use('/uploads', express.static('uploads'));
@@ -194,6 +212,9 @@ const startServer = async () => {
       console.log('ℹ️  Les notifications push mobiles ne fonctionneront pas');
     }
     
+    // Initialize CRON jobs
+    cronService.initializeJobs();
+    
     // Start server (utiliser server au lieu de app pour Socket.IO)
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 MCT Maintenance API server running on port ${PORT}`);
@@ -212,11 +233,13 @@ startServer();
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
+  cronService.stopAllJobs();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
+  cronService.stopAllJobs();
   process.exit(0);
 });
 

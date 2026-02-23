@@ -26,18 +26,28 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _apiService.submitInterventionReport(
+      final response = await _apiService.submitInterventionReport(
         widget.intervention['id'],
         widget.reportData,
       );
 
       if (mounted) {
-        SnackBarHelper.showSuccess(
-          context,
-          'Rapport soumis avec succès au client et à l\'admin',
-          emoji: '✅',
-          duration: const Duration(seconds: 3),
-        );
+        // Vérifier si le rapport a été mis en queue (mode offline)
+        if (response['queued'] == true) {
+          SnackBarHelper.showSuccess(
+            context,
+            response['message'] ?? 'Rapport enregistré (sera synchronisé)',
+            emoji: '📦',
+            duration: const Duration(seconds: 4),
+          );
+        } else {
+          SnackBarHelper.showSuccess(
+            context,
+            'Rapport soumis avec succès au client et à l\'admin',
+            emoji: '✅',
+            duration: const Duration(seconds: 3),
+          );
+        }
 
         // Retourner avec succès (2 pops pour revenir à l'écran de détail)
         Navigator.pop(context, true);
@@ -64,6 +74,12 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     final observations = reportData['observations'] ?? '';
     final workDescription = reportData['work_description'] ?? '';
 
+    // Mesures techniques
+    final pression = reportData['pression'] ?? '';
+    final temperature = reportData['temperature'] ?? '';
+    final intensite = reportData['intensite'] ?? '';
+    final tension = reportData['tension'] ?? '';
+
     // Créer le message de partage
     String materialsText = '';
     if (materials.isNotEmpty) {
@@ -72,6 +88,23 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
         materialsText +=
             '  • ${material['name']} - Qté: ${material['quantity']} - ${material['unit_price']} FCFA\n';
       }
+    }
+
+    // Mesures techniques texte
+    String measuresText = '';
+    if (pression.toString().isNotEmpty ||
+        temperature.toString().isNotEmpty ||
+        intensite.toString().isNotEmpty ||
+        tension.toString().isNotEmpty) {
+      measuresText = '\n📊 Mesures techniques:\n';
+      if (pression.toString().isNotEmpty)
+        measuresText += '  • Pression: $pression bar\n';
+      if (temperature.toString().isNotEmpty)
+        measuresText += '  • Température: $temperature °C\n';
+      if (intensite.toString().isNotEmpty)
+        measuresText += '  • Intensité: $intensite A\n';
+      if (tension.toString().isNotEmpty)
+        measuresText += '  • Tension: $tension V\n';
     }
 
     final String shareText = '''
@@ -85,7 +118,7 @@ ${intervention['title'] ?? 'Sans titre'}
 
 📝 Description des travaux:
 $workDescription
-
+$measuresText
 ${observations.isNotEmpty ? '💡 Observations:\n$observations\n' : ''}
 $materialsText
 ---
@@ -106,6 +139,19 @@ MCT Maintenance - Service de qualité
     );
   }
 
+  String _getCustomerName() {
+    final customer = widget.intervention['customer'];
+    if (customer == null) return 'N/A';
+
+    if (customer is Map) {
+      final firstName = customer['first_name'] ?? '';
+      final lastName = customer['last_name'] ?? '';
+      return '$firstName $lastName'.trim();
+    }
+
+    return customer.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final materials = widget.reportData['materials_used'] as List? ?? [];
@@ -113,6 +159,16 @@ MCT Maintenance - Service de qualité
     final observations = widget.reportData['observations'] ?? '';
     final workDescription = widget.reportData['work_description'] ?? '';
     final photos = widget.reportData['photos'] as List? ?? [];
+
+    // Mesures techniques
+    final pression = widget.reportData['pression'] ?? '';
+    final temperature = widget.reportData['temperature'] ?? '';
+    final intensite = widget.reportData['intensite'] ?? '';
+    final tension = widget.reportData['tension'] ?? '';
+    final hasTechnicalMeasures = pression.isNotEmpty ||
+        temperature.isNotEmpty ||
+        intensite.isNotEmpty ||
+        tension.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -165,8 +221,7 @@ MCT Maintenance - Service de qualité
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildInfoRow('Titre', widget.intervention['title']),
-                        _buildInfoRow(
-                            'Client', widget.intervention['customer'] ?? 'N/A'),
+                        _buildInfoRow('Client', _getCustomerName()),
                         _buildInfoRow(
                             'Adresse', widget.intervention['address'] ?? 'N/A'),
                       ],
@@ -216,6 +271,70 @@ MCT Maintenance - Service de qualité
                                 color: Colors.blue.shade900,
                               ),
                             ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Mesures techniques
+                  if (hasTechnicalMeasures) ...[
+                    _buildSection(
+                      'Mesures Techniques',
+                      Icons.speed,
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                if (pression.isNotEmpty)
+                                  Expanded(
+                                    child: _buildMeasureItem(
+                                      Icons.compress,
+                                      'Pression',
+                                      '$pression bar',
+                                    ),
+                                  ),
+                                if (temperature.isNotEmpty)
+                                  Expanded(
+                                    child: _buildMeasureItem(
+                                      Icons.thermostat,
+                                      'Température',
+                                      '$temperature °C',
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            if (intensite.isNotEmpty || tension.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  if (intensite.isNotEmpty)
+                                    Expanded(
+                                      child: _buildMeasureItem(
+                                        Icons.electrical_services,
+                                        'Intensité',
+                                        '$intensite A',
+                                      ),
+                                    ),
+                                  if (tension.isNotEmpty)
+                                    Expanded(
+                                      child: _buildMeasureItem(
+                                        Icons.bolt,
+                                        'Tension',
+                                        '$tension V',
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -455,6 +574,35 @@ MCT Maintenance - Service de qualité
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMeasureItem(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.orange.shade700, size: 20),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

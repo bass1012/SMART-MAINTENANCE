@@ -5,6 +5,7 @@ class Order extends Model {}
 
 Order.init({
   customerId: { type: DataTypes.INTEGER, allowNull: false },
+  quoteId: { type: DataTypes.INTEGER, allowNull: true }, // 🆕 Lien vers le devis
   totalAmount: { type: DataTypes.FLOAT, allowNull: false },
   status: { type: DataTypes.ENUM('pending', 'processing', 'completed', 'cancelled'), defaultValue: 'pending' },
   paymentStatus: { type: DataTypes.ENUM('pending', 'paid', 'failed', 'refunded'), defaultValue: 'pending' },
@@ -15,7 +16,12 @@ Order.init({
   trackingUrl: { type: DataTypes.STRING(500), allowNull: true },
   promoCode: { type: DataTypes.STRING, allowNull: true },
   promoDiscount: { type: DataTypes.FLOAT, defaultValue: 0 },
-  promoId: { type: DataTypes.INTEGER, allowNull: true }
+  promoId: { type: DataTypes.INTEGER, allowNull: true },
+  // 🔒 Champs sécurité paiement FineoPay
+  fineopayCheckoutId: { type: DataTypes.STRING, allowNull: true }, // ID du checkout link FineoPay
+  fineopayReference: { type: DataTypes.STRING, allowNull: true },  // Référence transaction FineoPay
+  paymentDate: { type: DataTypes.DATE, allowNull: true },          // Date du paiement
+  paymentProcessing: { type: DataTypes.BOOLEAN, defaultValue: false } // Flag anti-doublon
 }, {
   sequelize,
   modelName: 'Order',

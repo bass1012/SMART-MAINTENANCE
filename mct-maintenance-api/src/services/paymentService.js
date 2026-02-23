@@ -12,7 +12,8 @@ const PAYMENT_PROVIDERS = {
   WAVE: 'wave',
   ORANGE_MONEY: 'orange_money',
   MTN_MONEY: 'mtn_money',
-  MOOV_MONEY: 'moov_money'
+  MOOV_MONEY: 'moov_money',
+  FINEOPAY: 'fineopay'
 };
 
 /**

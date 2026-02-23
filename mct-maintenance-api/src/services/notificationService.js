@@ -126,8 +126,9 @@ class NotificationService {
         console.log(`⚠️  [Notif ${notification.id}] Socket.IO non initialisé`);
       }
 
-      // Envoyer notification push via FCM SEULEMENT si l'utilisateur n'est pas connecté via Socket.IO
-      if (!socketSent) {
+      // TOUJOURS envoyer notification push via FCM (même si Socket.IO est connecté)
+      // Car l'app mobile peut ne pas écouter Socket.IO pour les notifications
+      if (true) {
         try {
           const user = await User.findByPk(userId, { attributes: ['fcm_token'] });
           if (user && user.fcm_token) {

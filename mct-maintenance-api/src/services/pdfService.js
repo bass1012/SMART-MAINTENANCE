@@ -55,6 +55,11 @@ const generateInvoiceHTML = (order) => {
   const items = order.items || [];
   const customer = order.customer || {};
   
+  // Adapter la structure du customer (CustomerProfile avec User imbriqué)
+  const customerEmail = customer.user?.email || customer.email || order.customerEmail || 'N/A';
+  const customerPhone = customer.user?.phone || customer.phone || 'N/A';
+  const customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A';
+  
   // Charger le logo en base64
   let logoBase64 = '';
   try {
@@ -298,11 +303,11 @@ const generateInvoiceHTML = (order) => {
     <body>
       <div class="header">
         <div class="logo-section">
-          ${logoBase64 ? `<img src="${logoBase64}" alt="MCT Maintenance" class="logo" />` : ''}
+          ${logoBase64 ? `<img src="${logoBase64}" alt="SMART MAINTENANCE" class="logo" />` : ''}
         </div>
         <div class="info-section">
           <h1>FACTURE</h1>
-          <div class="company-name">MCT Maintenance</div>
+          <div class="company-name">SMART MAINTENANCE</div>
           <div class="tagline">Service de maintenance professionnel - Côte d'Ivoire</div>
         </div>
       </div>
@@ -323,9 +328,15 @@ const generateInvoiceHTML = (order) => {
             }) : new Date().toLocaleDateString('fr-FR')}</span>
           </div>
           <div class="info-row">
-            <strong>Statut:</strong>
+            <strong>Statut commande:</strong>
             <span class="status-badge ${getStatusClass(order.status)}">
               ${translateStatus(order.status || 'pending')}
+            </span>
+          </div>
+          <div class="info-row">
+            <strong>Statut paiement:</strong>
+            <span class="status-badge ${getStatusClass(order.paymentStatus)}">
+              ${translateStatus(order.paymentStatus || 'pending')}
             </span>
           </div>
         </div>
@@ -334,15 +345,15 @@ const generateInvoiceHTML = (order) => {
           <h3>Client</h3>
           <div class="info-row">
             <strong>Nom:</strong>
-            <span>${customer.first_name || ''} ${customer.last_name || ''}</span>
+            <span>${customerName}</span>
           </div>
           <div class="info-row">
             <strong>Email:</strong>
-            <span>${customer.email || order.customerEmail || 'N/A'}</span>
+            <span>${customerEmail}</span>
           </div>
           <div class="info-row">
             <strong>Téléphone:</strong>
-            <span>${customer.phone || 'N/A'}</span>
+            <span>${customerPhone}</span>
           </div>
           <div class="info-row">
             <strong>Adresse:</strong>
@@ -403,8 +414,8 @@ const generateInvoiceHTML = (order) => {
       
       <div class="footer">
         <p><strong>Merci pour votre confiance !</strong></p>
-        <p>MCT Maintenance - Service de maintenance professionnel</p>
-        <p>Email: contact@mct-maintenance.com | Téléphone: +225 XX XX XX XX XX</p>
+        <p>SMART MAINTENANCE - Service de maintenance professionnel</p>
+        <p>Email: contact@mct.ci | Téléphone: +225 XX XX XX XX XX</p>
         <p style="margin-top: 10px; font-size: 10px;">
           Ce document est une facture générée électroniquement et ne nécessite pas de signature.
         </p>

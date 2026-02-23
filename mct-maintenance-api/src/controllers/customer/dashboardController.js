@@ -34,19 +34,19 @@ exports.getDashboardStats = async (req, res, next) => {
     
     // Compter les interventions
     const totalInterventions = await Intervention.count({
-      where: { customer_id: userId }
+      where: { customer_id: customerId }
     });
     
     const pendingInterventions = await Intervention.count({
       where: { 
-        customer_id: userId,
+        customer_id: customerId,
         status: 'pending'
       }
     });
     
     const completedInterventions = await Intervention.count({
       where: { 
-        customer_id: userId,
+        customer_id: customerId,
         status: 'completed'
       }
     });
@@ -72,13 +72,13 @@ exports.getDashboardStats = async (req, res, next) => {
     
     // Compter les commandes
     const totalOrders = await Order.count({
-      where: { customerId: userId }
+      where: { customerId: customerId }
     });
     
     // Calculer le total dépensé (commandes payées)
     const ordersSum = await Order.sum('totalAmount', {
       where: { 
-        customerId: userId,
+        customerId: customerId,
         status: 'paid'
       }
     });
@@ -98,12 +98,12 @@ exports.getDashboardStats = async (req, res, next) => {
     
     // Compter les contrats
     const totalContracts = await Contract.count({
-      where: { customer_id: req.user.id }
+      where: { customer_id: customerId }
     });
     
     const activeContracts = await Contract.count({
       where: { 
-        customer_id: req.user.id,
+        customer_id: customerId,
         status: 'active'
       }
     });

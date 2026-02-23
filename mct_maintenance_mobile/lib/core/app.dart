@@ -12,8 +12,12 @@ import '../screens/customer/customer_main_screen.dart';
 import '../screens/customer/subscriptions_screen.dart';
 import '../screens/technician/technician_main_screen.dart';
 import '../screens/technician/technician_profile_screen.dart';
+import '../screens/manager/manager_main_screen.dart';
+import '../screens/common/notification_settings_screen.dart';
 import '../services/cart_service.dart';
 import '../providers/settings_provider.dart';
+import '../providers/notification_preferences_provider.dart';
+import '../providers/sync_provider.dart';
 
 // Initialiser la locale par défaut
 void initializeDateFormatting() {
@@ -35,6 +39,11 @@ class App extends StatelessWidget {
           },
         ),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(
+          create: (_) => NotificationPreferencesProvider()..loadPreferences(),
+        ),
+        // Provider pour le mode offline et synchronisation
+        ChangeNotifierProvider(create: (_) => SyncProvider()),
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settings, _) {
@@ -198,9 +207,12 @@ class App extends StatelessWidget {
               },
               '/client': (context) => const CustomerMainScreen(),
               '/technician': (context) => const TechnicianMainScreen(),
+              '/manager': (context) => const ManagerMainScreen(),
               '/technician/profile': (context) =>
                   const TechnicianProfileScreen(),
               '/subscriptions': (context) => const SubscriptionsScreen(),
+              '/notification-settings': (context) =>
+                  const NotificationSettingsScreen(),
             },
           );
         },

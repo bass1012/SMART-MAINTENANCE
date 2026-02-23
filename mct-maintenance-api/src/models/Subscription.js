@@ -16,8 +16,23 @@ Subscription.init({
   },
   maintenance_offer_id: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true, // Optionnel - au moins un des trois IDs doit être présent
     field: 'maintenance_offer_id'
+  },
+  installation_service_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true, // Optionnel - au moins un des trois IDs doit être présent
+    field: 'installation_service_id'
+  },
+  repair_service_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true, // Optionnel - au moins un des trois IDs doit être présent
+    field: 'repair_service_id'
+  },
+  split_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'split_id'
   },
   status: {
     type: DataTypes.ENUM('active', 'expired', 'cancelled'),

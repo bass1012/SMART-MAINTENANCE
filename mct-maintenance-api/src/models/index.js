@@ -1,4 +1,7 @@
 const MaintenanceSchedule = require('./MaintenanceSchedule');
+const EmailVerificationCode = require('./EmailVerificationCode');
+const DiagnosticReport = require('./DiagnosticReport');
+const SystemConfig = require('./SystemConfig');
 // Import all models
 const User = require('./User');
 const CustomerProfile = require('./CustomerProfile');
@@ -16,11 +19,15 @@ const OrderItem = require('./OrderItem');
 const Complaint = require('./Complaint');
 const ComplaintNote = require('./ComplaintNote');
 const MaintenanceOffer = require('./MaintenanceOffer');
+const InstallationService = require('./InstallationService');
+const RepairService = require('./RepairService');
 const Subscription = require('./Subscription');
 const Notification = require('./Notification');
 const InterventionImage = require('./InterventionImage');
 const ChatMessage = require('./ChatMessage');
 const PasswordResetCode = require('./PasswordResetCode');
+const Split = require('./Split');
+const PaymentLog = require('./PaymentLog');
 
 // Association CustomerProfile -> User
 const fs = require('fs');
@@ -46,10 +53,16 @@ MaintenanceSchedule.belongsTo(Equipment, { foreignKey: 'equipment_id', as: 'equi
 MaintenanceSchedule.belongsTo(User, { foreignKey: 'technician_id', as: 'technician' });
 
 // Associations interventions
-Intervention.belongsTo(User, { foreignKey: 'customer_id', as: 'customer' });
+Intervention.belongsTo(CustomerProfile, { foreignKey: 'customer_id', as: 'customer' });
 Intervention.belongsTo(User, { foreignKey: 'technician_id', as: 'technician' });
-User.hasMany(Intervention, { foreignKey: 'customer_id', as: 'customerInterventions' });
+Intervention.belongsTo(MaintenanceOffer, { foreignKey: 'maintenance_offer_id', as: 'maintenance_offer' });
+Intervention.belongsTo(RepairService, { foreignKey: 'repair_service_id', as: 'repair_service' });
+Intervention.belongsTo(InstallationService, { foreignKey: 'installation_service_id', as: 'installation_service' });
+CustomerProfile.hasMany(Intervention, { foreignKey: 'customer_id', as: 'interventions' });
 User.hasMany(Intervention, { foreignKey: 'technician_id', as: 'technicianInterventions' });
+MaintenanceOffer.hasMany(Intervention, { foreignKey: 'maintenance_offer_id', as: 'interventions' });
+RepairService.hasMany(Intervention, { foreignKey: 'repair_service_id', as: 'interventions' });
+InstallationService.hasMany(Intervention, { foreignKey: 'installation_service_id', as: 'interventions' });
 
 // Associations images interventions
 Intervention.hasMany(InterventionImage, { foreignKey: 'intervention_id', as: 'images' });
@@ -64,7 +77,9 @@ Quote.hasMany(QuoteItem, { foreignKey: 'quoteId', as: 'items', onDelete: 'CASCAD
 QuoteItem.belongsTo(Quote, { foreignKey: 'quoteId', as: 'quote' });
 
 // Associations commandes
-Order.belongsTo(User, { foreignKey: 'customerId', as: 'customer' });
+Order.belongsTo(CustomerProfile, { foreignKey: 'customerId', as: 'customer' });
+Order.belongsTo(Quote, { foreignKey: 'quoteId', as: 'quote' });
+Quote.hasOne(Order, { foreignKey: 'quoteId', as: 'order' });
 Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'items', onDelete: 'CASCADE' });
 OrderItem.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
 OrderItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
@@ -96,11 +111,17 @@ const models = {
   Complaint,
   ComplaintNote,
   MaintenanceOffer,
+  InstallationService,
+  RepairService,
   Subscription,
   InterventionImage,
   Payment,
   ChatMessage,
   PasswordResetCode,
+  Split,
+  DiagnosticReport,
+  PaymentLog,
+  SystemConfig,
   sequelize
 };
 
@@ -114,6 +135,22 @@ User.hasMany(Subscription, { foreignKey: 'customer_id', as: 'subscriptions' });
 Subscription.belongsTo(User, { foreignKey: 'customer_id', as: 'customer' });
 MaintenanceOffer.hasMany(Subscription, { foreignKey: 'maintenance_offer_id', as: 'subscriptions' });
 Subscription.belongsTo(MaintenanceOffer, { foreignKey: 'maintenance_offer_id', as: 'offer' });
+InstallationService.hasMany(Subscription, { foreignKey: 'installation_service_id', as: 'subscriptions' });
+Subscription.belongsTo(InstallationService, { foreignKey: 'installation_service_id', as: 'installationService' });
+RepairService.hasMany(Subscription, { foreignKey: 'repair_service_id', as: 'subscriptions' });
+Subscription.belongsTo(RepairService, { foreignKey: 'repair_service_id', as: 'repairService' });
+
+// Define associations for Split (Traçabilité par équipement)
+User.hasMany(Split, { foreignKey: 'customer_id', as: 'splits' });
+Split.belongsTo(User, { foreignKey: 'customer_id', as: 'customer' });
+
+// Un split peut avoir plusieurs souscriptions (historique) mais une seule active
+Split.hasMany(Subscription, { foreignKey: 'split_id', as: 'subscriptions' });
+Subscription.belongsTo(Split, { foreignKey: 'split_id', as: 'split' });
+
+// Un split peut avoir plusieurs interventions (historique)
+Split.hasMany(Intervention, { foreignKey: 'split_id', as: 'interventions' });
+Intervention.belongsTo(Split, { foreignKey: 'split_id', as: 'split' });
 
 // Define associations for Notification
 User.hasMany(Notification, { foreignKey: 'user_id', as: 'notifications' });
@@ -126,6 +163,20 @@ ChatMessage.belongsTo(User, { foreignKey: 'sender_id', as: 'sender' });
 // Define associations for PasswordResetCode
 User.hasMany(PasswordResetCode, { foreignKey: 'user_id', as: 'passwordResetCodes' });
 PasswordResetCode.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// Define associations for DiagnosticReport
+Intervention.hasMany(DiagnosticReport, { foreignKey: 'intervention_id', as: 'diagnosticReports' });
+DiagnosticReport.belongsTo(Intervention, { foreignKey: 'intervention_id', as: 'intervention' });
+User.hasMany(DiagnosticReport, { foreignKey: 'technician_id', as: 'submittedReports' });
+DiagnosticReport.belongsTo(User, { foreignKey: 'technician_id', as: 'technician' });
+User.hasMany(DiagnosticReport, { foreignKey: 'reviewed_by', as: 'reviewedReports' });
+DiagnosticReport.belongsTo(User, { foreignKey: 'reviewed_by', as: 'reviewer' });
+DiagnosticReport.hasMany(Quote, { foreignKey: 'diagnostic_report_id', as: 'quotes' });
+
+// Extend Quote associations for diagnostic workflow
+Quote.belongsTo(DiagnosticReport, { foreignKey: 'diagnostic_report_id', as: 'diagnosticReport' });
+Quote.belongsTo(Intervention, { foreignKey: 'intervention_id', as: 'intervention' });
+Intervention.hasMany(Quote, { foreignKey: 'intervention_id', as: 'quotes' });
 
 // Define associations for Payment
 if (Payment.associate) {
@@ -140,9 +191,13 @@ module.exports = {
   CustomerProfile,
   ComplaintNote,
   MaintenanceOffer,
+  InstallationService,
+  RepairService,
   Subscription,
   Notification,
   InterventionImage,
   Payment,
-  ChatMessage
+  ChatMessage,
+  EmailVerificationCode,
+  Split
 };

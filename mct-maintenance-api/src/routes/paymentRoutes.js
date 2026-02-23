@@ -26,6 +26,13 @@ router.post('/invoice/:orderId/email', authenticate, paymentController.emailInvo
 router.post('/webhook/wave', paymentController.waveWebhook);
 router.post('/webhook/orange', paymentController.orangeMoneyWebhook);
 
+// Routes FineoPay (remplace CinetPay)
+const fineoPayController = require('../controllers/payment/fineoPayController');
+router.post('/fineopay/initialize', authenticate, fineoPayController.createPaymentLink);
+router.post('/fineopay/callback', fineoPayController.handleCallback);
+router.get('/fineopay/status/:reference', authenticate, fineoPayController.checkTransactionStatus);
+router.post('/fineopay/initialize-diagnostic', authenticate, fineoPayController.initializeDiagnosticPayment);
+
 // Routes pour les paiements de souscriptions
 router.post('/subscription/initiate', authenticate, paymentController.initiateSubscriptionPayment);
 router.post('/subscription/:paymentId/confirm', authenticate, paymentController.confirmSubscriptionPayment);

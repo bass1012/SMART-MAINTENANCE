@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'core/app.dart';
 import 'services/fcm_service.dart';
+import 'services/connectivity_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +38,12 @@ void main() async {
     print('❌ ERREUR Firebase: $e');
     // Continuer même si Firebase échoue
   }
+
+  // Initialiser le service de connectivité pour le mode offline
+  print('📡 Initialisation du service de connectivité...');
+  final connectivityService = ConnectivityService();
+  connectivityService.initialize();
+  print('✅ Service de connectivité initialisé');
 
   // Configuration du mode paysage désactivé
   await SystemChrome.setPreferredOrientations([

@@ -1,8 +1,17 @@
-const { Order, User, Product, OrderItem } = require('../../models');
+const { Order, User, Product, OrderItem, CustomerProfile, Payment } = require('../../models');
 const Promotion = require('../../models/Promotion');
+const Subscription = require('../../models/Subscription');
+const MaintenanceOffer = require('../../models/MaintenanceOffer');
 const { Op } = require('sequelize');
 const { validationResult } = require('express-validator');
 const { notifyNewOrder, notifyOrderStatusUpdate } = require('../../services/notificationHelpers');
+const { sendEmail } = require('../../services/emailService');
+const {
+  sendOrderCreatedEmail,
+  sendOrderConfirmedEmail,
+  sendOrderShippedEmail,
+  sendOrderDeliveredEmail
+} = require('../../services/emailHelper');
 
 // Récupérer toutes les commandes (Admin/Manager)
 const getAllOrders = async (req, res, next) => {
@@ -15,7 +24,11 @@ const getAllOrders = async (req, res, next) => {
     const role = req.user ? req.user.role : null;
     const userId = req.user ? req.user.id : null;
     if (userId && (mine === 'true' || (role !== 'admin' && role !== 'manager'))) {
-      where.customerId = userId; // Sequelize mappe vers customer_id grâce à underscored
+      // Trouver le CustomerProfile de l'utilisateur
+      const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+      if (customerProfile) {
+        where.customerId = customerProfile.id; // Utiliser l'ID du CustomerProfile, pas du User
+      }
     }
     if (status) where.status = status;
     if (startDate || endDate) {
@@ -29,9 +42,14 @@ const getAllOrders = async (req, res, next) => {
       where: { ...where, deletedAt: null },
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
+          attributes: ['id', 'user_id', 'first_name', 'last_name', 'commune', 'city'],
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone']
+          }]
         },
         {
           model: OrderItem,
@@ -53,15 +71,20 @@ const getAllOrders = async (req, res, next) => {
       }
       let customerName = '';
       let customerEmail = '';
+      let customerPhone = '';
       if (order.customer) {
         customerName = [order.customer.first_name, order.customer.last_name].filter(Boolean).join(' ');
-        customerEmail = order.customer.email || '';
+        if (order.customer.user) {
+          customerEmail = order.customer.user.email || '';
+          customerPhone = order.customer.user.phone || '';
+        }
       }
       return {
         ...order.toJSON(),
         reference,
         customerName,
-        customerEmail
+        customerEmail,
+        customerPhone
       };
     });
     res.status(200).json({
@@ -85,9 +108,14 @@ const getOrderById = async (req, res, next) => {
     const order = await Order.findByPk(req.params.id, {
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
+          attributes: ['id', 'user_id', 'first_name', 'last_name', 'commune', 'city'],
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone']
+          }]
         },
         {
           model: OrderItem,
@@ -132,21 +160,32 @@ const createOrder = async (req, res, next) => {
 
     const { items, shippingAddress, shipping_address, paymentMethod, payment_method, notes, customer_id, promo_code, promo_discount, promo_id } = req.body;
     
+    console.log('📦 Création commande - Items reçus:', JSON.stringify(items, null, 2));
+    
     // Déterminer le customer_id à utiliser
-    // Si l'utilisateur est admin et qu'un customer_id est fourni, l'utiliser
-    // Sinon, utiliser l'ID de l'utilisateur connecté
-    let customerId = req.user.id;
+    let customerId;
+    
     if (customer_id && req.user.role === 'admin') {
-      // Vérifier que le client existe
-      const customer = await User.findByPk(customer_id, { transaction });
-      if (!customer) {
+      // Admin peut créer une commande pour un autre client
+      // customer_id fourni est déjà l'ID du customer_profile
+      customerId = customer_id;
+    } else {
+      // Pour un client, trouver son customer_profile
+      const customerProfile = await CustomerProfile.findOne({
+        where: { user_id: req.user.id },
+        transaction
+      });
+      
+      if (!customerProfile) {
         await transaction.rollback();
         return res.status(404).json({
           success: false,
-          message: `Client non trouvé avec l'ID: ${customer_id}`
+          message: 'Profil client non trouvé'
         });
       }
-      customerId = customer_id;
+      
+      customerId = customerProfile.id;
+      console.log(`👤 Client user_id=${req.user.id} → customer_profile_id=${customerId}`);
     }
     
     // Calculer le total
@@ -155,13 +194,26 @@ const createOrder = async (req, res, next) => {
     
     // Vérifier les produits et calculer le total
     for (const item of items) {
-      const productId = item.productId || item.product_id;
+      const productId = item.productId || item.product_id || item.id;
+      console.log('🔍 Item reçu:', item, '→ productId extrait:', productId);
+      
+      if (!productId) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'ID de produit manquant dans un des items'
+        });
+      }
+      
       const product = await Product.findByPk(productId, { transaction });
+      console.log('🔍 Produit trouvé:', product ? `${product.id} - ${product.nom}` : 'NULL');
+      
       if (!product) {
         await transaction.rollback();
+        console.log('❌ Produit non trouvé avec ID:', productId);
         return res.status(404).json({
           success: false,
-          message: `Produit non trouvé avec l'ID: ${item.productId}`
+          message: `Produit non trouvé avec l'ID: ${productId}`
         });
       }
       
@@ -190,10 +242,13 @@ const createOrder = async (req, res, next) => {
       await product.decrement('quantite_stock', { by: item.quantity, transaction });
     }
     
+    // Appliquer la réduction promo si présente
+    const finalAmount = promo_discount ? totalAmount - promo_discount : totalAmount;
+    
     // Créer la commande
     const order = await Order.create({
       customerId,
-      totalAmount,
+      totalAmount: finalAmount,
       status: 'pending',
       shippingAddress: shippingAddress || shipping_address,
       paymentMethod: paymentMethod || payment_method,
@@ -221,6 +276,26 @@ const createOrder = async (req, res, next) => {
       return orderItem;
     }));
     
+    // Créer un enregistrement Payment pour la commande
+    const { Payment } = require('../../models');
+    const paymentProvider = paymentMethod === 'cash' ? 'cash' : 
+                           paymentMethod === 'Carte bancaire' ? 'stripe' :
+                           paymentMethod === 'Orange Money' ? 'orange_money' :
+                           paymentMethod === 'MTN Money' ? 'mtn_money' :
+                           paymentMethod === 'Moov Money' ? 'moov_money' :
+                           paymentMethod === 'Wave' ? 'wave' : 'cash';
+    
+    await Payment.create({
+      orderId: order.id,
+      amount: finalAmount,
+      currency: 'XOF',
+      provider: paymentProvider,
+      status: 'pending',
+      paymentMethod: paymentMethod || payment_method || 'cash'
+    }, { transaction });
+    
+    console.log('✅ Payment record created for order');
+    
   await transaction.commit();
   committed = true;
     
@@ -241,7 +316,14 @@ const createOrder = async (req, res, next) => {
     // Récupérer la commande complète avec les détails
     const orderWithDetails = await Order.findByPk(order.id, {
       include: [
-        { model: User, as: 'customer' },
+        { 
+          model: CustomerProfile,
+          as: 'customer',
+          include: [{
+            model: User,
+            as: 'user'
+          }]
+        },
         { 
           model: OrderItem,
           as: 'items',
@@ -250,12 +332,106 @@ const createOrder = async (req, res, next) => {
       ]
     });
 
+    // 🎁 Activer automatiquement l'offre d'entretien si la commande contient un climatiseur (categorie_id = 1)
+    try {
+      const hasClimatiseur = orderWithDetails.items.some(item => 
+        item.product && item.product.categorie_id === 1
+      );
+      
+      if (hasClimatiseur) {
+        // IMPORTANT: Utiliser req.user.id (ID User) et non customerId (ID CustomerProfile)
+        // car les endpoints de souscription client utilisent req.user.id
+        const userId = req.user.id;
+        console.log('🎁 Commande contient un climatiseur - Activation offre d\'entretien automatique');
+        console.log(`   👤 User ID: ${userId}, CustomerProfile ID: ${customerId}`);
+        
+        // Chercher l'offre d'entretien active la plus appropriée (Premium > Gold > la plus chère)
+        let maintenanceOffer = await MaintenanceOffer.findOne({
+          where: { 
+            isActive: true,
+            title: { [Op.like]: '%premium%' }
+          }
+        });
+        
+        if (!maintenanceOffer) {
+          maintenanceOffer = await MaintenanceOffer.findOne({
+            where: { 
+              isActive: true,
+              title: { [Op.like]: '%gold%' }
+            }
+          });
+        }
+        
+        if (!maintenanceOffer) {
+          // Prendre l'offre active la plus chère
+          maintenanceOffer = await MaintenanceOffer.findOne({
+            where: { isActive: true },
+            order: [['price', 'DESC']]
+          });
+        }
+        
+        if (maintenanceOffer) {
+          // Vérifier si le client n'a pas déjà une souscription active à cette offre
+          const existingSubscription = await Subscription.findOne({
+            where: {
+              customer_id: userId, // Utiliser userId (User.id) et non customerId (CustomerProfile.id)
+              maintenance_offer_id: maintenanceOffer.id,
+              status: 'active'
+            }
+          });
+          
+          if (!existingSubscription) {
+            // Calculer les dates de début et fin
+            const startDate = new Date();
+            const endDate = new Date();
+            endDate.setMonth(endDate.getMonth() + maintenanceOffer.duration);
+            
+            // Créer la souscription automatique (gratuite car incluse avec l'achat)
+            const newSubscription = await Subscription.create({
+              customer_id: userId, // IMPORTANT: Utiliser userId (User.id) et non customerId (CustomerProfile.id)
+              maintenance_offer_id: maintenanceOffer.id,
+              status: 'active',
+              start_date: startDate,
+              end_date: endDate,
+              price: 0, // Gratuit car inclus avec l'achat du climatiseur
+              payment_status: 'paid' // Considéré comme payé car inclus
+            });
+            
+            console.log(`✅ Souscription créée automatiquement: Offre "${maintenanceOffer.title}" pour le client (User ID: ${userId})`);
+            console.log(`   📅 Période: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`);
+          } else {
+            console.log(`ℹ️ Le client (User ID: ${userId}) a déjà une souscription active à l'offre "${maintenanceOffer.title}"`);
+          }
+        } else {
+          console.log('⚠️ Aucune offre d\'entretien active trouvée');
+        }
+      }
+    } catch (subscriptionError) {
+      console.error('❌ Erreur création souscription automatique:', subscriptionError);
+      // Ne pas bloquer la commande si erreur souscription
+    }
+
     // 🔔 Notifier les admins de la nouvelle commande
     try {
-      const customer = orderWithDetails.customer;
-      if (customer) {
+      const customerProfile = orderWithDetails.customer;
+      if (customerProfile && customerProfile.user) {
+        // Créer un objet customer pour les anciennes fonctions
+        const customer = {
+          id: customerProfile.user.id,  // User ID pour les notifications
+          email: customerProfile.user.email,
+          phone: customerProfile.user.phone,
+          first_name: customerProfile.first_name,
+          firstName: customerProfile.first_name,
+          last_name: customerProfile.last_name,
+          lastName: customerProfile.last_name
+        };
+        
         await notifyNewOrder(orderWithDetails, customer);
         console.log('✅ Notification commande envoyée aux admins');
+        
+        // 📧 Email au client (confirmation de commande - template professionnel)
+        await sendOrderCreatedEmail(orderWithDetails.get({ plain: true }), customer);
+        console.log('✅ Email professionnel confirmation commande envoyé au client');
       }
     } catch (notifError) {
       console.error('❌ Erreur notification commande:', notifError);
@@ -292,9 +468,13 @@ const updateOrder = async (req, res, next) => {
     const order = await Order.findByPk(req.params.id, {
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
+          }]
         },
         {
           model: OrderItem,
@@ -386,9 +566,13 @@ const updateOrder = async (req, res, next) => {
     const updatedOrder = await Order.findByPk(order.id, {
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
+          }]
         },
         {
           model: OrderItem,
@@ -401,10 +585,25 @@ const updateOrder = async (req, res, next) => {
     // 🔔 Notifier le client si le statut a changé
     if (status && status !== oldStatus) {
       try {
-        const customer = updatedOrder.customer;
+        const customer = updatedOrder.customer?.user;
         if (customer) {
           await notifyOrderStatusUpdate(updatedOrder, customer, status);
           console.log(`✅ Notification changement statut commande envoyée: ${oldStatus} → ${status}`);
+          
+          // 📧 Email selon le nouveau statut (templates professionnels)
+          if (status === 'processing' || status === 'confirmed') {
+            // Commande en préparation
+            await sendOrderConfirmedEmail(updatedOrder.get({ plain: true }), customer.get({ plain: true }));
+            console.log('✅ Email professionnel préparation envoyé');
+          } else if (status === 'shipped') {
+            // Commande expédiée
+            await sendOrderShippedEmail(updatedOrder.get({ plain: true }), customer.get({ plain: true }));
+            console.log('✅ Email professionnel expédition envoyé');
+          } else if (status === 'delivered') {
+            // Commande livrée
+            await sendOrderDeliveredEmail(updatedOrder.get({ plain: true }), customer.get({ plain: true }));
+            console.log('✅ Email professionnel livraison envoyé');
+          }
         }
       } catch (notifError) {
         console.error('❌ Erreur notification statut:', notifError);
@@ -414,7 +613,7 @@ const updateOrder = async (req, res, next) => {
     // 🔔 Notifier le client si un lien de livraison a été ajouté
     if (tracking_url && tracking_url !== oldTrackingUrl) {
       try {
-        const customer = updatedOrder.customer;
+        const customer = updatedOrder.customer?.user;
         if (customer) {
           const notificationService = require('../../services/notificationService');
           await notificationService.create({

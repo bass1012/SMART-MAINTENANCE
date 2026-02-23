@@ -14,6 +14,7 @@ import 'package:mct_maintenance_mobile/screens/technician/technician_settings_sc
 import 'package:mct_maintenance_mobile/screens/technician/availability_screen.dart';
 import 'package:mct_maintenance_mobile/screens/technician/technician_notifications_screen.dart';
 import 'package:mct_maintenance_mobile/screens/auth/login_screen.dart';
+import 'package:mct_maintenance_mobile/widgets/common/offline_indicator.dart';
 
 class TechnicianMainScreen extends StatefulWidget {
   const TechnicianMainScreen({super.key});
@@ -32,8 +33,13 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
-    _loadNotificationsCount();
+    // Retarder le chargement pour éviter les conflits de layout
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadDashboardData();
+        _loadNotificationsCount();
+      }
+    });
   }
 
   Future<void> _loadDashboardData() async {
@@ -67,6 +73,9 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
           _isLoading = false;
         });
       }
+
+      // Recharger le compteur de notifications
+      await _loadNotificationsCount();
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -532,48 +541,72 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
       ),
       body: _isLoading
           ? const Center(child: LoadingIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadDashboardData,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          : Stack(
+              children: [
+                // Image de fond
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: 0.4,
+                    child: Image.asset(
+                      'assets/images/background_tech_2.png',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                // Contenu principal
+                Column(
                   children: [
-                    // En-tête de bienvenue
-                    _buildWelcomeCard(),
-                    const SizedBox(height: 24),
+                    // Indicateur de mode offline
+                    const OfflineIndicator(),
+                    // Contenu principal
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: _loadDashboardData,
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // En-tête de bienvenue
+                              _buildWelcomeCard(),
+                              const SizedBox(height: 24),
 
-                    // Statistiques
-                    if (_stats != null) ...[
-                      Text(
-                        'Mes Statistiques',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                              // Statistiques
+                              if (_stats != null) ...[
+                                Text(
+                                  'Mes Statistiques',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _buildStatsGrid(),
+                                const SizedBox(height: 24),
+                              ],
+
+                              // Services
+                              Text(
+                                'Mes Services',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildServicesGrid(),
+
+                              const SizedBox(height: 24),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      _buildStatsGrid(),
-                      const SizedBox(height: 24),
-                    ],
-
-                    // Services
-                    Text(
-                      'Mes Services',
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
                     ),
-                    const SizedBox(height: 12),
-                    _buildServicesGrid(),
-
-                    const SizedBox(height: 24),
                   ],
                 ),
-              ),
+              ],
             ),
     );
   }

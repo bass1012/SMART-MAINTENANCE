@@ -1,4 +1,4 @@
-const { Order, Payment, User, Subscription } = require('../models');
+const { Order, Payment, User, Subscription, CustomerProfile } = require('../models');
 const paymentService = require('../services/paymentService');
 const { generateInvoicePDF } = require('../services/pdfService');
 const { sendInvoiceEmail, sendPaymentConfirmationEmail } = require('../services/emailService');
@@ -14,9 +14,14 @@ const initiatePayment = async (req, res, next) => {
     const order = await Order.findByPk(orderId, {
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
+          attributes: ['id', 'user_id', 'first_name', 'last_name'],
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone']
+          }]
         }
       ]
     });
@@ -65,6 +70,50 @@ const initiatePayment = async (req, res, next) => {
           phoneNumber || order.customer?.phone,
           `Commande ${order.reference || order.id}`
         );
+        break;
+
+      case 'fineopay':
+        // Utiliser FineoPay
+        const axios = require('axios');
+        const FINEOPAY_BASE_URL = process.env.FINEOPAY_ENV === 'production' 
+          ? 'https://api.fineopay.com/v1/business/dev'
+          : 'https://dev.fineopay.com/api/v1/business/dev';
+
+        const callbackUrl = `${process.env.API_BASE_URL || process.env.BACKEND_URL}/api/fineopay/callback`;
+
+        const response = await axios.post(
+          `${FINEOPAY_BASE_URL}/checkout-link`,
+          {
+            title: `Commande ${order.reference || order.id}`,
+            amount: parseFloat(order.totalAmount),
+            callbackUrl,
+            syncRef: `SHOP_ORDER_${order.id}`,
+            inputs: [
+              {
+                key: 'phone',
+                type: 'tel',
+                label: 'Numéro de téléphone',
+                required: true
+              }
+            ]
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'businessCode': process.env.FINEOPAY_BUSINESS_CODE,
+              'apiKey': process.env.FINEOPAY_API_KEY
+            }
+          }
+        );
+
+        if (!response.data.success) {
+          throw new Error('Erreur lors de la création du lien FineoPay');
+        }
+
+        paymentResult = {
+          paymentId: `FINEOPAY_${Date.now()}`,
+          checkoutUrl: response.data.data.checkoutLink
+        };
         break;
 
       default:
@@ -215,9 +264,14 @@ const downloadInvoice = async (req, res, next) => {
     const order = await Order.findByPk(orderId, {
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
+          attributes: ['id', 'user_id', 'first_name', 'last_name'],
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone']
+          }]
         },
         {
           model: require('../models').OrderItem,
@@ -238,6 +292,15 @@ const downloadInvoice = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: 'Commande non trouvée'
+      });
+    }
+
+    // Vérifier que la commande est payée
+    if (order.paymentStatus !== 'paid') {
+      console.log('⚠️ Téléchargement refusé - Commande non payée:', order.paymentStatus);
+      return res.status(403).json({
+        success: false,
+        message: 'Le téléchargement de la facture est disponible uniquement pour les commandes payées. Veuillez effectuer le paiement pour accéder à votre facture.'
       });
     }
 
@@ -437,6 +500,62 @@ const initiateSubscriptionPayment = async (req, res, next) => {
           phoneNumber || subscription.customer?.phone,
           `Souscription ${subscription.id}`
         );
+        break;
+
+      case paymentService.PAYMENT_PROVIDERS.FINEOPAY:
+      case 'fineopay':
+        // Créer un lien de paiement FineoPay pour la souscription
+        const axios = require('axios');
+        const FINEOPAY_BASE_URL = process.env.FINEOPAY_ENV === 'production' 
+          ? 'https://api.fineopay.com/v1/business/dev'
+          : 'https://dev.fineopay.com/api/v1/business/dev';
+        const FINEOPAY_BUSINESS_CODE = process.env.FINEOPAY_BUSINESS_CODE;
+        const FINEOPAY_API_KEY = process.env.FINEOPAY_API_KEY;
+        
+        const callbackUrl = `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/fineopay/callback`;
+        const subscriptionTitle = subscription.offer?.title || `Souscription #${subscription.id}`;
+        
+        try {
+          const fineoResponse = await axios.post(
+            `${FINEOPAY_BASE_URL}/checkout-link`,
+            {
+              title: `Paiement: ${subscriptionTitle}`,
+              amount: parseFloat(subscription.price),
+              callbackUrl,
+              syncRef: `SUBSCRIPTION_${subscription.id}`
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'businessCode': FINEOPAY_BUSINESS_CODE,
+                'apiKey': FINEOPAY_API_KEY
+              }
+            }
+          );
+          
+          if (fineoResponse.data.success) {
+            const checkoutLink = fineoResponse.data.data.checkoutLink;
+            const checkoutLinkId = checkoutLink.split('/').slice(-2, -1)[0];
+            
+            paymentResult = {
+              paymentId: `FINEO-SUB-${subscription.id}-${Date.now()}`,
+              checkoutUrl: checkoutLink,
+              checkoutLinkId: checkoutLinkId,
+              clientSecret: null,
+              simulation: false
+            };
+            console.log(`✅ Lien FineoPay créé pour souscription #${subscription.id}: ${checkoutLink}`);
+          } else {
+            throw new Error(fineoResponse.data.message || 'Erreur FineoPay');
+          }
+        } catch (fineoError) {
+          console.error('❌ Erreur FineoPay:', fineoError.message);
+          return res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la création du lien de paiement FineoPay',
+            error: fineoError.message
+          });
+        }
         break;
 
       case 'cash':

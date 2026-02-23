@@ -1,13 +1,15 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const customerController = require('../controllers/customerController');
-const { Contract, User } = require('../models');
+const { Contract, User, InstallationService, RepairService } = require('../models');
 const { 
   listCustomers, 
   getCustomer, 
   createCustomer, 
   updateCustomer, 
-  deleteCustomer 
+  deleteCustomer,
+  deactivateCustomer,
+  purgeDeletedCustomers
 } = require('../controllers/customer/customerController');
 
 const router = express.Router();
@@ -29,12 +31,15 @@ router.get('/dashboard/stats', dashboardController.getDashboardStats);
 // Accepter un devis
 router.post('/quotes/:id/accept', async (req, res) => {
   try {
-    const { Quote, CustomerProfile } = require('../models');
+    const { Quote, CustomerProfile, Order, OrderItem, Intervention, User } = require('../models');
     const { notifyQuoteAccepted } = require('../services/notificationHelpers');
+    const notificationService = require('../services/notificationService');
     const userId = req.user.id;
     const quoteId = req.params.id;
+    const { execute_now, scheduled_date, second_contact } = req.body;
     
     console.log(`✅ Acceptation du devis ${quoteId} par user_id: ${userId}`);
+    console.log('📅 Paramètres:', { execute_now, scheduled_date, second_contact });
     
     // Vérifier que le devis appartient au client
     const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
@@ -59,11 +64,30 @@ router.post('/quotes/:id/accept', async (req, res) => {
         message: 'Devis non trouvé',
       });
     }
+
+    // Déterminer la date d'exécution
+    let scheduledDateTime = null;
+    if (execute_now === true) {
+      scheduledDateTime = new Date();
+      console.log('⚡ Exécution immédiate demandée');
+    } else if (scheduled_date) {
+      scheduledDateTime = new Date(scheduled_date);
+      console.log('📅 Intervention planifiée pour:', scheduledDateTime);
+    }
+
+    // Déterminer le statut de paiement
+    const paymentStatus = execute_now ? 'pending' : 'deferred';
     
-    // Mettre à jour le statut
-    await quote.update({ status: 'accepted' });
+    // Mettre à jour le statut du devis avec tous les champs
+    await quote.update({ 
+      status: 'accepted',
+      scheduled_date: scheduledDateTime,
+      execute_now: execute_now || false,
+      second_contact: second_contact || null,
+      payment_status: paymentStatus
+    });
     
-    console.log(`✅ Devis ${quoteId} accepté`);
+    console.log(`✅ Devis ${quoteId} accepté (paiement: ${paymentStatus})`);
     
     // 📬 Notifier les admins de l'acceptation
     try {
@@ -71,6 +95,124 @@ router.post('/quotes/:id/accept', async (req, res) => {
       console.log('✅ Notification envoyée aux admins : devis accepté');
     } catch (notifError) {
       console.error('⚠️  Erreur notification acceptation devis:', notifError.message);
+    }
+
+    // 🔧 Si exécution immédiate, notifier le technicien du diagnostic et mettre à jour l'intervention
+    if (execute_now === true && quote.intervention_id) {
+      try {
+        // Note: intervention.technician_id référence User.id directement
+        const intervention = await Intervention.findByPk(quote.intervention_id, {
+          include: [{
+            model: User,
+            as: 'technician'
+          }]
+        });
+        
+        if (intervention && intervention.technician_id) {
+          // 🔄 Exécution immédiate = technicien déjà sur place → passer à execution_confirmed
+          // Le technicien devra cliquer sur "Exécuter la tâche" pour passer à in_progress
+          await intervention.update({
+            status: 'execution_confirmed',  // Technicien doit confirmer le démarrage de l'exécution
+            intervention_type: 'execution', // Nouveau type: exécution suite au diagnostic
+            notes: `${intervention.notes || ''}\n\n[${new Date().toISOString()}] ⚡ EXÉCUTION IMMÉDIATE - Client a confirmé - Devis ${quote.reference} accepté - En attente démarrage technicien`
+          });
+          
+          console.log(`🔄 Intervention ${intervention.id} mise à jour: status = execution_confirmed (exécution immédiate - en attente démarrage)`);
+          
+          // L'id du technicien est directement dans intervention.technician_id (= User.id)
+          const technicianUserId = intervention.technician_id;
+          const technicianName = intervention.technician?.firstName || 'Technicien';
+          
+          await notificationService.create({
+            userId: technicianUserId,
+            type: 'quote_execution_confirmed',
+            title: '✅ Exécution confirmée',
+            message: `Le client a accepté le devis ${quote.reference} et demande une exécution immédiate. Vous pouvez procéder à l'intervention.`,
+            data: {
+              quote_id: quote.id,
+              quote_reference: quote.reference,
+              intervention_id: intervention.id,
+              execute_now: true
+            },
+            priority: 'high',
+            actionUrl: `/interventions/${intervention.id}`
+          });
+          
+          console.log(`📲 Notification envoyée au technicien ${technicianName} (user_id: ${technicianUserId})`);
+        } else {
+          console.log('⚠️  Aucun technicien assigné à cette intervention');
+        }
+      } catch (techNotifError) {
+        console.error('⚠️  Erreur notification technicien:', techNotifError.message);
+      }
+    }
+
+    // 🛒 Créer automatiquement une commande à partir du devis accepté
+    try {
+      // Recharger le devis complet avec tous les champs
+      const fullQuote = await Quote.findByPk(quoteId);
+      
+      console.log('🔍 DEBUG Quote pour création commande:', {
+        id: fullQuote.id,
+        customerId: fullQuote.customerId,
+        customer_id: fullQuote.customer_id,
+        total: fullQuote.total,
+        totalAmount: fullQuote.totalAmount,
+        subtotal: fullQuote.subtotal,
+        reference: fullQuote.reference,
+        line_items: typeof fullQuote.line_items,
+        lineItems: typeof fullQuote.lineItems
+      });
+      
+      // Parser line_items si c'est un string JSON
+      let lineItems = fullQuote.line_items || fullQuote.lineItems;
+      if (typeof lineItems === 'string') {
+        try {
+          lineItems = JSON.parse(lineItems);
+        } catch (e) {
+          lineItems = [];
+        }
+      }
+      if (!Array.isArray(lineItems)) {
+        lineItems = [];
+      }
+
+      // Générer une référence unique pour la commande
+      const orderReference = `CMD-${Date.now()}-${fullQuote.id}`;
+
+      // Extraire les valeurs avec fallback
+      const customerId = fullQuote.customerId || fullQuote.customer_id;
+      const totalAmount = fullQuote.total || fullQuote.totalAmount || fullQuote.subtotal || 0;
+
+      console.log('🔍 Valeurs pour création commande:', {
+        customerId,
+        totalAmount,
+        orderReference
+      });
+
+      // Créer la commande
+      const order = await Order.create({
+        reference: orderReference,
+        customerId: customerId,
+        quoteId: fullQuote.id,
+        totalAmount: totalAmount,
+        status: execute_now ? 'pending' : 'scheduled',
+        paymentStatus: execute_now ? 'pending' : 'deferred',
+        paymentMethod: null,
+        lineItems: JSON.stringify(lineItems),
+        notes: execute_now 
+          ? `Commande créée automatiquement - Exécution immédiate`
+          : `Commande créée automatiquement - Intervention planifiée, paiement différé`,
+        scheduledDate: scheduledDateTime
+      });
+
+      // Mettre à jour le statut de paiement du devis
+      await fullQuote.update({ payment_status: execute_now ? 'pending' : 'deferred' });
+
+      console.log(`✅ Commande ${orderReference} créée automatiquement pour le devis ${fullQuote.reference}`);
+    } catch (orderError) {
+      console.error('⚠️  Erreur création commande automatique:', orderError.message);
+      // On ne bloque pas l'acceptation si la création de commande échoue
     }
     
     res.json({
@@ -203,7 +345,12 @@ router.get('/quotes', async (req, res) => {
       subtotal: parseFloat(quote.subtotal),
       taxAmount: parseFloat(quote.taxAmount),
       discountAmount: parseFloat(quote.discountAmount),
-      items: quote.items || []
+      items: quote.items || [],
+      // Champs pour le paiement différé
+      payment_status: quote.payment_status,
+      scheduled_date: quote.scheduled_date,
+      execute_now: quote.execute_now,
+      second_contact: quote.second_contact
     }));
     
     res.json({
@@ -226,11 +373,24 @@ router.get('/quotes', async (req, res) => {
 // Liste des rapports de maintenance du client
 router.get('/maintenance-reports', async (req, res) => {
   try {
-    const { Intervention, User, TechnicianProfile } = require('../models');
+    const { Intervention, User, TechnicianProfile, CustomerProfile } = require('../models');
     const { Op } = require('sequelize');
-    const customerId = req.user.id;
+    const userId = req.user.id;
 
-    console.log(`📋 Client ${customerId}: Récupération des rapports de maintenance`);
+    console.log(`📋 Client user_id ${userId}: Récupération des rapports de maintenance`);
+
+    // Récupérer le CustomerProfile pour obtenir le customer_id
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    
+    if (!customerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil client non trouvé',
+      });
+    }
+
+    const customerId = customerProfile.id;
+    console.log(`🔄 Conversion User.id ${userId} → CustomerProfile.id ${customerId} pour rapports`);
 
     // Récupérer les interventions avec rapport soumis
     const interventions = await Intervention.findAll({
@@ -283,6 +443,11 @@ router.get('/maintenance-reports', async (req, res) => {
         photosCount: reportData.photos_count || 0,
         imageUrls: [], // TODO: Ajouter les URLs des photos si disponibles
         createdAt: intervention.created_at,
+        // Mesures techniques
+        pression: reportData.pression || '',
+        temperature: reportData.temperature || '',
+        intensite: reportData.intensite || '',
+        tension: reportData.tension || '',
       };
     });
 
@@ -298,6 +463,116 @@ router.get('/maintenance-reports', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des rapports',
+      error: error.message
+    });
+  }
+});
+
+// Détails d'un rapport de maintenance spécifique
+router.get('/maintenance-reports/:reportId', async (req, res) => {
+  try {
+    const { Intervention, User, TechnicianProfile, CustomerProfile, InterventionImage } = require('../models');
+    const { Op } = require('sequelize');
+    const userId = req.user.id;
+    const reportId = req.params.reportId;
+
+    console.log(`📋 Client user_id ${userId}: Récupération du rapport ${reportId}`);
+
+    // Récupérer le CustomerProfile pour obtenir le customer_id
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    
+    if (!customerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil client non trouvé',
+      });
+    }
+
+    const customerId = customerProfile.id;
+
+    // Récupérer l'intervention avec rapport
+    const intervention = await Intervention.findOne({
+      where: {
+        id: reportId,
+        customer_id: customerId,
+        report_submitted_at: { [Op.not]: null }
+      },
+      include: [
+        {
+          model: User,
+          as: 'technician',
+          attributes: ['id', 'email', 'first_name', 'last_name', 'phone'],
+          include: [{
+            model: TechnicianProfile,
+            as: 'technicianProfile',
+            attributes: ['first_name', 'last_name', 'phone']
+          }]
+        },
+        {
+          model: InterventionImage,
+          as: 'images',
+          attributes: ['id', 'image_url', 'image_type', 'created_at']
+        }
+      ],
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rapport non trouvé',
+      });
+    }
+
+    const reportData = intervention.report_data ?
+      (typeof intervention.report_data === 'string' ?
+        JSON.parse(intervention.report_data) : intervention.report_data)
+      : {};
+
+    // Enrichir le technicien
+    const technician = intervention.technician;
+    const technicianName = technician ?
+      (technician.technicianProfile ?
+        `${technician.technicianProfile.first_name} ${technician.technicianProfile.last_name}` :
+        `${technician.first_name || ''} ${technician.last_name || ''}`.trim() || technician.email
+      ) : 'Technicien non assigné';
+
+    // Extraire les URLs des images
+    const imageUrls = intervention.images ? intervention.images.map(img => img.image_url) : [];
+
+    const report = {
+      id: intervention.id,
+      reference: `MAINT-${intervention.id}`,
+      title: intervention.title,
+      description: reportData.work_description || intervention.description || '',
+      status: intervention.status,
+      technicianName: technicianName,
+      technicianNotes: reportData.observations || '',
+      scheduledDate: intervention.scheduled_date,
+      completedDate: intervention.completed_at || intervention.report_submitted_at,
+      duration: reportData.duration || 0,
+      materialsUsed: reportData.materials_used || [],
+      photosCount: imageUrls.length,
+      imageUrls: imageUrls,
+      createdAt: intervention.created_at,
+      // Mesures techniques
+      pression: reportData.pression || '',
+      temperature: reportData.temperature || '',
+      intensite: reportData.intensite || '',
+      tension: reportData.tension || '',
+    };
+
+    console.log(`✅ Rapport ${reportId} récupéré`);
+
+    res.json({
+      success: true,
+      data: report,
+      message: 'Détails du rapport récupérés avec succès',
+    });
+  } catch (error) {
+    console.error('❌ Error getting maintenance report details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération du rapport',
       error: error.message
     });
   }
@@ -383,89 +658,153 @@ router.get('/maintenance-offers', async (req, res) => {
 // POST /api/customer/subscriptions - Créer une souscription
 router.post('/subscriptions', authenticate, async (req, res) => {
   try {
-    const { Subscription, MaintenanceOffer, User } = require('../models');
-    const { maintenance_offer_id } = req.body;
+    const { Subscription, MaintenanceOffer, InstallationService, RepairService, User } = require('../models');
+    const { maintenance_offer_id, installation_service_id, repair_service_id } = req.body;
     const customerId = req.user.id;
     
-    console.log(`📝 POST /api/customer/subscriptions - Customer ${customerId}, Offer ${maintenance_offer_id}`);
+    console.log(`📝 POST /api/customer/subscriptions - Customer ${customerId}`);
     
-    // Vérifier que l'offre existe et est active
-    const offer = await MaintenanceOffer.findByPk(maintenance_offer_id);
-    if (!offer) {
-      return res.status(404).json({
-        success: false,
-        message: 'Offre d\'entretien non trouvée'
-      });
-    }
+    let serviceData = null;
+    let serviceType = null;
+    let duration = 1; // Par défaut 1 mois pour les services ponctuels
     
-    if (!offer.isActive) {
+    // Déterminer le type de service et récupérer ses données
+    if (maintenance_offer_id) {
+      serviceType = 'maintenance';
+      serviceData = await MaintenanceOffer.findByPk(maintenance_offer_id);
+      
+      if (!serviceData) {
+        return res.status(404).json({
+          success: false,
+          message: 'Offre d\'entretien non trouvée'
+        });
+      }
+      
+      if (!serviceData.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cette offre n\'est plus active'
+        });
+      }
+      
+      duration = serviceData.duration;
+      console.log(`   Type: Maintenance Offer ${maintenance_offer_id}`);
+    } else if (installation_service_id) {
+      serviceType = 'installation';
+      serviceData = await InstallationService.findByPk(installation_service_id);
+      
+      if (!serviceData) {
+        return res.status(404).json({
+          success: false,
+          message: 'Service d\'installation non trouvé'
+        });
+      }
+      
+      if (!serviceData.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ce service n\'est plus actif'
+        });
+      }
+      
+      console.log(`   Type: Installation Service ${installation_service_id}`);
+    } else if (repair_service_id) {
+      serviceType = 'repair';
+      serviceData = await RepairService.findByPk(repair_service_id);
+      
+      if (!serviceData) {
+        return res.status(404).json({
+          success: false,
+          message: 'Service de réparation non trouvé'
+        });
+      }
+      
+      if (!serviceData.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ce service n\'est plus actif'
+        });
+      }
+      
+      console.log(`   Type: Repair Service ${repair_service_id}`);
+    } else {
       return res.status(400).json({
         success: false,
-        message: 'Cette offre n\'est plus active'
+        message: 'Aucun service spécifié (maintenance_offer_id, installation_service_id ou repair_service_id requis)'
       });
     }
     
     // Calculer les dates
     const startDate = new Date();
     const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + offer.duration);
+    endDate.setMonth(endDate.getMonth() + duration);
     
-    // Créer la souscription
-    const subscription = await Subscription.create({
+    // Créer la souscription avec les bons champs selon le type
+    const subscriptionData = {
       customer_id: customerId,
-      maintenance_offer_id: maintenance_offer_id,
-      status: 'active', // Statut actif mais paiement en attente
+      status: 'active',
       start_date: startDate,
       end_date: endDate,
-      price: offer.price,
-      payment_status: 'pending' // En attente de paiement
-    });
+      price: serviceData.price,
+      payment_status: 'pending'
+    };
     
-    console.log(`✅ Subscription created: ${subscription.id}`);
+    if (maintenance_offer_id) {
+      subscriptionData.maintenance_offer_id = maintenance_offer_id;
+    } else if (installation_service_id) {
+      subscriptionData.installation_service_id = installation_service_id;
+    } else if (repair_service_id) {
+      subscriptionData.repair_service_id = repair_service_id;
+    }
     
-    // 🔔 Envoyer une notification au client (paiement en attente)
+    const subscription = await Subscription.create(subscriptionData);
+    
+    console.log(`✅ Subscription created: ${subscription.id} (${serviceType})`);
+    
+    // 🔔 Envoyer une notification au client
     try {
       const user = await User.findByPk(customerId);
-      
       const notificationService = require('../services/notificationService');
       
       await notificationService.create({
         userId: customerId,
         type: 'subscription_created',
         title: 'Paiement initié',
-        message: `Votre souscription à "${offer.title}" est en attente de confirmation de paiement`,
+        message: `Votre souscription à "${serviceData.title}" est en attente de confirmation de paiement`,
         data: {
           subscriptionId: subscription.id,
-          offerName: offer.title,
-          amount: offer.price,
+          serviceName: serviceData.title,
+          serviceType: serviceType,
+          amount: serviceData.price,
           paymentStatus: 'pending'
         },
         priority: 'medium',
         actionUrl: `/dashboard`
       });
       
-      console.log(`✅ Notification paiement en attente envoyée au client`);
+      console.log(`✅ Notification envoyée au client`);
       
-      // 🔔 Notifier les admins de la nouvelle souscription
+      // 🔔 Notifier les admins
       await notificationService.notifyAdmins({
         type: 'subscription_created',
         title: '💳 Nouvelle souscription',
-        message: `${user.first_name || user.email} a souscrit à "${offer.title}" (${offer.price}€)`,
+        message: `${user.first_name || user.email} a souscrit à "${serviceData.title}" (${serviceData.price} FCFA)`,
         data: {
           subscriptionId: subscription.id,
           customerId: customerId,
           customerName: user.first_name || user.email,
-          offerName: offer.title,
-          amount: offer.price,
+          serviceName: serviceData.title,
+          serviceType: serviceType,
+          amount: serviceData.price,
           paymentStatus: 'pending'
         },
         priority: 'high',
         actionUrl: `/maintenance-offers`
       });
       
-      console.log(`✅ Notification nouvelle souscription envoyée aux admins`);
+      console.log(`✅ Notification envoyée aux admins`);
     } catch (notifError) {
-      console.error('❌ Erreur notification souscription:', notifError);
+      console.error('❌ Erreur notification:', notifError);
     }
     
     res.status(201).json({
@@ -486,7 +825,7 @@ router.post('/subscriptions', authenticate, async (req, res) => {
 // GET /api/customer/subscriptions - Récupérer les souscriptions du client
 router.get('/subscriptions', authenticate, async (req, res) => {
   try {
-    const { Subscription, MaintenanceOffer } = require('../models');
+    const { Subscription, MaintenanceOffer, InstallationService, RepairService } = require('../models');
     const customerId = req.user.id;
     
     console.log(`🔍 GET /api/customer/subscriptions - Customer ${customerId}`);
@@ -497,6 +836,14 @@ router.get('/subscriptions', authenticate, async (req, res) => {
         {
           model: MaintenanceOffer,
           as: 'offer'
+        },
+        {
+          model: InstallationService,
+          as: 'installationService'
+        },
+        {
+          model: RepairService,
+          as: 'repairService'
         }
       ],
       order: [['created_at', 'DESC']]
@@ -522,7 +869,7 @@ router.get('/subscriptions', authenticate, async (req, res) => {
 // GET /api/customer/subscriptions/:id - Récupérer une souscription par ID
 router.get('/subscriptions/:id', authenticate, async (req, res) => {
   try {
-    const { Subscription, MaintenanceOffer } = require('../models');
+    const { Subscription, MaintenanceOffer, InstallationService, RepairService } = require('../models');
     const { id } = req.params;
     const customerId = req.user.id;
     
@@ -537,6 +884,14 @@ router.get('/subscriptions/:id', authenticate, async (req, res) => {
         {
           model: MaintenanceOffer,
           as: 'offer'
+        },
+        {
+          model: InstallationService,
+          as: 'installationService'
+        },
+        {
+          model: RepairService,
+          as: 'repairService'
         }
       ]
     });
@@ -887,13 +1242,14 @@ router.post('/interventions', async (req, res) => {
       priority,
       description,
       scheduledDate,
-      address
+      address,
+      maintenance_offer_id
     } = req.body;
     
     console.log(`🔧 Création d'une intervention pour user_id: ${userId}`);
     
     // Créer l'intervention
-    const intervention = await Intervention.create({
+    const interventionData = {
       customerId: userId,
       equipmentId,
       type: type || 'maintenance',
@@ -902,7 +1258,14 @@ router.post('/interventions', async (req, res) => {
       description,
       scheduledDate,
       address
-    });
+    };
+    
+    // Ajouter l'offre d'entretien si fournie
+    if (maintenance_offer_id) {
+      interventionData.maintenanceOfferId = maintenance_offer_id;
+    }
+    
+    const intervention = await Intervention.create(interventionData);
     
     console.log(`✅ Intervention ${intervention.id} créée`);
     
@@ -1036,8 +1399,10 @@ router.get('/orders', async (req, res) => {
       id: order.id,
       reference: order.reference,
       customerId: order.customerId,
+      quoteId: order.quoteId, // 🆕 Ajouter le quoteId pour lier à un devis
       totalAmount: order.totalAmount,
       status: order.status,
+      paymentStatus: order.paymentStatus, // Ajouter le statut de paiement
       notes: order.notes,
       shippingAddress: order.shippingAddress,
       paymentMethod: order.paymentMethod,
@@ -1076,17 +1441,29 @@ router.get('/orders', async (req, res) => {
 
 router.get('/orders/:id', async (req, res) => {
   try {
-    const { Order, OrderItem, Product, User } = require('../models');
+    const { Order, OrderItem, Product, CustomerProfile, User } = require('../models');
     const userId = req.user.id;
     const orderId = req.params.id;
     
     console.log(`📦 Récupération de la commande ${orderId} pour user_id: ${userId}`);
     
+    // Trouver le CustomerProfile pour obtenir le customerId
+    const customerProfile = await CustomerProfile.findOne({ 
+      where: { user_id: userId } 
+    });
+    
+    if (!customerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil client non trouvé'
+      });
+    }
+    
     // Récupérer la commande avec ses items
     const order = await Order.findOne({
       where: { 
         id: orderId,
-        customerId: userId 
+        customerId: customerProfile.id 
       },
       include: [
         { 
@@ -1094,7 +1471,11 @@ router.get('/orders/:id', async (req, res) => {
           as: 'items',
           include: [{ model: Product, as: 'product' }]
         },
-        { model: User, as: 'customer' }
+        { 
+          model: CustomerProfile, 
+          as: 'customer',
+          include: [{ model: User, as: 'user' }]
+        }
       ]
     });
     
@@ -1114,16 +1495,17 @@ router.get('/orders/:id', async (req, res) => {
       customerId: order.customerId,
       totalAmount: order.totalAmount,
       status: order.status,
+      paymentStatus: order.paymentStatus,
       notes: order.notes,
       shippingAddress: order.shippingAddress,
       paymentMethod: order.paymentMethod,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
-      customer: order.customer ? {
-        id: order.customer.id,
-        firstName: order.customer.firstName,
-        lastName: order.customer.lastName,
-        email: order.customer.email
+      customer: order.customer?.user ? {
+        id: order.customer.user.id,
+        firstName: order.customer.first_name || order.customer.user.first_name,
+        lastName: order.customer.last_name || order.customer.user.last_name,
+        email: order.customer.user.email
       } : null,
       items: order.items?.map(item => ({
         id: item.id,
@@ -1208,7 +1590,12 @@ router.get('/quotes/:id', async (req, res) => {
       subtotal: parseFloat(quote.subtotal),
       taxAmount: parseFloat(quote.taxAmount),
       discountAmount: parseFloat(quote.discountAmount),
-      items: quote.items || []
+      items: quote.items || [],
+      // Champs pour le paiement différé
+      payment_status: quote.payment_status,
+      scheduled_date: quote.scheduled_date,
+      execute_now: quote.execute_now,
+      second_contact: quote.second_contact
     };
     
     res.json({
@@ -1488,15 +1875,380 @@ router.post('/complaints/:id/notes', async (req, res) => {
 // === API REST pour gestion des clients (ADMIN UNIQUEMENT) ===
 // Ces routes doivent être à la fin pour éviter les conflits avec les routes spécifiques
 
-// Liste paginée des clients
+/**
+ * @swagger
+ * /customers:
+ *   get:
+ *     summary: Liste paginée des clients
+ *     description: Récupère la liste de tous les clients avec pagination, recherche et filtres (Admin uniquement)
+ *     tags: [Clients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Numéro de page
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Nombre d'éléments par page
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Recherche par nom, prénom ou email
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [active, inactive, suspended]
+ *         description: Filtrer par statut
+ *     responses:
+ *       200:
+ *         description: Liste des clients récupérée avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ */
 router.get('/', authorize('admin'), listCustomers);
-// Création d'un client
+
+/**
+ * @swagger
+ * /customers:
+ *   post:
+ *     summary: Créer un nouveau client
+ *     description: Crée un nouveau compte client avec profil (Admin uniquement)
+ *     tags: [Clients]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - first_name
+ *               - last_name
+ *               - phone
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: client@example.com
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 example: Password123!
+ *               first_name:
+ *                 type: string
+ *                 example: Jean
+ *               last_name:
+ *                 type: string
+ *                 example: Dupont
+ *               phone:
+ *                 type: string
+ *                 example: +221771234567
+ *               address:
+ *                 type: string
+ *                 example: 123 Rue de la Paix, Dakar
+ *               city:
+ *                 type: string
+ *                 example: Dakar
+ *     responses:
+ *       201:
+ *         description: Client créé avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ */
 router.post('/', authorize('admin'), createCustomer);
-// Détail d'un client
+
+/**
+ * @swagger
+ * /customers/{id}:
+ *   get:
+ *     summary: Détails d'un client
+ *     description: Récupère les informations complètes d'un client (Admin uniquement)
+ *     tags: [Clients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID du client
+ *     responses:
+ *       200:
+ *         description: Détails du client récupérés
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/User'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
 router.get('/:id', authorize('admin'), getCustomer);
-// Mise à jour d'un client
+
+/**
+ * @swagger
+ * /customers/{id}:
+ *   put:
+ *     summary: Modifier un client
+ *     description: Met à jour les informations d'un client (Admin uniquement)
+ *     tags: [Clients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID du client
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               first_name:
+ *                 type: string
+ *               last_name:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [active, inactive, suspended]
+ *     responses:
+ *       200:
+ *         description: Client modifié avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Success'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
 router.put('/:id', authorize('admin'), updateCustomer);
-// Suppression d'un client
+
+/**
+ * @swagger
+ * /customers/{id}/deactivate:
+ *   put:
+ *     summary: Désactiver un client (Soft Delete)
+ *     description: |
+ *       Désactive un compte client sans supprimer les données.
+ *       - Status → 'inactive'
+ *       - Email → 'deleted_timestamp_original@email.com'
+ *       - FCM token → null
+ *       - Les données sont conservées pour l'historique (Admin uniquement)
+ *     tags: [Clients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID du client à désactiver
+ *     responses:
+ *       200:
+ *         description: Client désactivé avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Client désactivé avec succès
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     email:
+ *                       type: string
+ *                       example: deleted_1703420000000_client@example.com
+ *                     status:
+ *                       type: string
+ *                       example: inactive
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.put('/:id/deactivate', authorize('admin'), deactivateCustomer);
+
+/**
+ * @swagger
+ * /customers/{id}:
+ *   delete:
+ *     summary: Supprimer COMPLÈTEMENT un client (Hard Delete)
+ *     description: |
+ *       ⚠️ **ATTENTION : SUPPRESSION IRRÉVERSIBLE**
+ *       
+ *       Supprime définitivement un client et TOUTES ses données associées dans un ordre précis :
+ *       1. Interventions (avec images)
+ *       2. Commandes (avec items)
+ *       3. Devis (avec items)
+ *       4. Réclamations
+ *       5. Contrats de maintenance
+ *       6. Notifications
+ *       7. Profil client (CustomerProfile)
+ *       8. Compte utilisateur (User)
+ *       
+ *       **Gestion transactionnelle :** Rollback automatique en cas d'erreur
+ *       
+ *       **Recommandation :** Utiliser `/deactivate` (soft delete) par défaut
+ *       
+ *       (Admin uniquement)
+ *     tags: [Clients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID du client à supprimer définitivement
+ *     responses:
+ *       200:
+ *         description: Client et toutes ses données supprimés avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DeleteCustomerResponse'
+ *       404:
+ *         description: Client non trouvé
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Client non trouvé
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         description: Erreur lors de la suppression (transaction rollback)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Erreur lors de la suppression du client
+ *                 error:
+ *                   type: string
+ */
+
+/**
+ * @swagger
+ * /api/customers/purge-deleted:
+ *   delete:
+ *     summary: Supprimer définitivement tous les clients marqués comme supprimés
+ *     tags: [Customers]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Purge réussie
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 total:
+ *                   type: number
+ *                 successCount:
+ *                   type: number
+ *                 errorCount:
+ *                   type: number
+ */
+router.delete('/purge-deleted', authorize('admin'), purgeDeletedCustomers);
+
 router.delete('/:id', authorize('admin'), deleteCustomer);
 
 module.exports = router;

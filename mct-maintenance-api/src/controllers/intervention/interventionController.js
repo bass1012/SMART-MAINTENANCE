@@ -1,14 +1,29 @@
-const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage } = require('../../models');
-const { Op } = require('sequelize');
+const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage, MaintenanceOffer, RepairService, InstallationService, Subscription, DiagnosticReport, Quote } = require('../../models');
+const { Op, sequelize } = require('sequelize');
+const { sequelize: db } = require('../../config/database');
 const { 
   notifyNewIntervention,
   notifyInterventionAssigned,
   notifyTechnicianAssignedToCustomer,
   notifyInterventionCompleted,
-  notifyInterventionUpdated
+  notifyInterventionUpdated,
+  notifyInterventionCancelled,
+  notifyInterventionInProgress,
+  notifyTechnicianOnTheWay,
+  notifyTechnicianArrived
 } = require('../../services/notificationHelpers');
 const notificationService = require('../../services/notificationService');
+const { sendEmail } = require('../../services/emailService');
+const {
+  sendInterventionCreatedEmail,
+  sendInterventionAssignedEmail,
+  sendInterventionStartedEmail,
+  sendInterventionCompletedEmail,
+  sendInterventionReportEmail,
+  sendInterventionRatingEmail
+} = require('../../services/emailHelper');
 const upload = require('../../config/multer');
+const schedulingService = require('../../services/schedulingService');
 
 // Intervention Controller - Implementation complète
 const getAllInterventions = async (req, res) => {
@@ -18,7 +33,22 @@ const getAllInterventions = async (req, res) => {
     const where = {};
     if (status) where.status = status;
     if (priority) where.priority = priority;
-    if (customer_id) where.customer_id = customer_id;
+    
+    // Si customer_id est fourni, il peut être un User.id, donc le convertir en CustomerProfile.id
+    if (customer_id) {
+      const customerProfile = await CustomerProfile.findOne({ 
+        where: { user_id: customer_id } 
+      });
+      
+      if (customerProfile) {
+        where.customer_id = customerProfile.id;
+        console.log(`🔄 Conversion User.id ${customer_id} → CustomerProfile.id ${customerProfile.id} pour filtre`);
+      } else {
+        // Si pas de profile trouvé, essayer directement avec l'ID fourni (au cas où c'est déjà un CustomerProfile.id)
+        where.customer_id = customer_id;
+      }
+    }
+    
     if (technician_id) where.technician_id = technician_id;
 
     const offset = (page - 1) * limit;
@@ -33,21 +63,38 @@ const getAllInterventions = async (req, res) => {
           required: false
         },
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email'],
-          include: [
-            {
-              model: CustomerProfile,
-              as: 'customerProfile',
-              attributes: ['first_name', 'last_name']
-            }
-          ]
+          attributes: ['id', 'first_name', 'last_name'],
+          required: false,
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone']
+          }]
         },
         {
           model: User,
           as: 'technician',
           attributes: ['id', 'first_name', 'last_name', 'email'],
+          required: false
+        },
+        {
+          model: MaintenanceOffer,
+          as: 'maintenance_offer',
+          attributes: ['id', 'title', 'price', 'description', 'duration'],
+          required: false
+        },
+        {
+          model: RepairService,
+          as: 'repair_service',
+          attributes: ['id', 'title', 'model', 'price', 'description'],
+          required: false
+        },
+        {
+          model: InstallationService,
+          as: 'installation_service',
+          attributes: ['id', 'title', 'model', 'price', 'description'],
           required: false
         }
       ],
@@ -59,28 +106,45 @@ const getAllInterventions = async (req, res) => {
       ]
     });
 
-    const interventions = result.rows.map(intervention => {
+    const interventions = await Promise.all(result.rows.map(async intervention => {
       const plain = intervention.get({ plain: true });
-      console.log('🔍 Intervention brute:', JSON.stringify(plain, null, 2));
-      // On enrichit le customer avec les infos du profil
+      // Reformater customer pour compatibilité
       let customer = null;
       if (plain.customer) {
         customer = {
-          id: plain.customer.id,
-          email: plain.customer.email,
-          first_name: plain.customer.customerProfile ? plain.customer.customerProfile.first_name : null,
-          last_name: plain.customer.customerProfile ? plain.customer.customerProfile.last_name : null
+          id: plain.customer.user?.id || plain.customer.id,
+          email: plain.customer.user?.email || '',
+          phone: plain.customer.user?.phone || '',
+          first_name: plain.customer.first_name,
+          last_name: plain.customer.last_name
         };
-        console.log('✅ Customer enrichi:', customer);
-      } else {
-        console.log('❌ Pas de customer trouvé pour intervention ID:', plain.id);
       }
+      
+      // Vérifier si le client a une souscription active pour cette offre
+      let has_active_subscription = false;
+      if (plain.maintenance_offer_id && customer) {
+        const activeSubscription = await Subscription.findOne({
+          where: {
+            customer_id: customer.id,
+            maintenance_offer_id: plain.maintenance_offer_id,
+            status: 'active',
+            payment_status: 'paid',
+            end_date: { [Op.gte]: new Date() }
+          }
+        });
+        has_active_subscription = !!activeSubscription;
+      }
+      
       return {
         ...plain,
         customer,
-        technician: plain.technician || null
+        technician: plain.technician || null,
+        maintenance_offer: plain.maintenance_offer ? {
+          ...plain.maintenance_offer,
+          has_active_subscription
+        } : null
       };
-    });
+    }));
 
     res.status(200).json({
       success: true,
@@ -114,8 +178,41 @@ const getInterventionById = async (req, res) => {
           attributes: ['id', 'image_url', 'order', 'image_type'],
           required: false
         },
-        { model: User, as: 'customer', attributes: ['id', 'first_name', 'last_name', 'email'] },
-        { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email'], required: false }
+        { 
+          model: CustomerProfile, 
+          as: 'customer', 
+          attributes: ['id', 'first_name', 'last_name'],
+          required: false,
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone']
+          }]
+        },
+        { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+        {
+          model: MaintenanceOffer,
+          as: 'maintenance_offer',
+          attributes: ['id', 'title', 'price', 'description', 'duration'],
+          required: false
+        },
+        {
+          model: RepairService,
+          as: 'repair_service',
+          attributes: ['id', 'title', 'model', 'price', 'description'],
+          required: false
+        },
+        {
+          model: InstallationService,
+          as: 'installation_service',
+          attributes: ['id', 'title', 'model', 'price', 'description'],
+          required: false
+        },
+        {
+          model: DiagnosticReport,
+          as: 'diagnosticReports',
+          required: false
+        }
       ],
       order: [
         [{ model: InterventionImage, as: 'images' }, 'order', 'ASC']
@@ -184,20 +281,90 @@ const createIntervention = [
         });
       }
 
-      // 💰 Calcul du coût du diagnostic
-      // Si le client a un contrat d'entretien actif, le diagnostic est gratuit
-      // Sinon, le diagnostic coûte 4000 FCFA
-      let diagnosticFee = 4000.00;
-      let isFreeDiagnosis = false;
-
-      if (interventionData.contract_id) {
-        // Client avec contrat d'entretien = diagnostic gratuit
-        diagnosticFee = 0.00;
-        isFreeDiagnosis = true;
-        console.log('✅ Client avec contrat d\'entretien → Diagnostic GRATUIT');
+      // 🔄 IMPORTANT: Convertir User.id en CustomerProfile.id si nécessaire
+      // L'app mobile peut envoyer User.id, mais la table interventions attend CustomerProfile.id
+      let actualCustomerId = interventionData.customer_id;
+      
+      // Vérifier si le customer_id fourni est un User.id ou CustomerProfile.id
+      const customerProfile = await CustomerProfile.findOne({
+        where: { user_id: interventionData.customer_id }
+      });
+      
+      if (customerProfile) {
+        // C'était un User.id, on utilise le CustomerProfile.id
+        actualCustomerId = customerProfile.id;
+        console.log(`🔄 Conversion User.id ${interventionData.customer_id} → CustomerProfile.id ${actualCustomerId}`);
       } else {
-        // Client sans contrat = diagnostic payant
-        console.log('💵 Client sans contrat → Diagnostic payant: 4000 FCFA');
+        // Vérifier si c'est déjà un CustomerProfile.id valide
+        const profileExists = await CustomerProfile.findByPk(interventionData.customer_id);
+        if (!profileExists) {
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message: 'Client non trouvé'
+          });
+        }
+        console.log(`✅ CustomerProfile.id ${actualCustomerId} valide`);
+      }
+      
+      // Mettre à jour avec le bon ID
+      interventionData.customer_id = actualCustomerId;
+
+      // 💰 Coût du diagnostic : OBLIGATOIRE pour les diagnostics, réparations et installations
+      // Pour l'entretien : gratuit si le client a une souscription active, sinon payant
+      const interventionType = interventionData.intervention_type?.toLowerCase() || '';
+      const requiresDiagnosticFee = interventionType === 'diagnostic' || 
+                                     interventionType === 'repair' || 
+                                     interventionType === 'réparation' ||
+                                     interventionType === 'reparation' ||
+                                     interventionType === 'installation' ||
+                                     interventionType === 'dépannage' ||
+                                     interventionType === 'depannage';
+      
+      let diagnosticFee = 0;
+      let isFreeDiagnosis = true;
+      
+      // Vérifier si c'est un entretien sans souscription active
+      const isMaintenanceType = interventionType === 'entretien' || interventionType === 'maintenance';
+      let hasActiveSubscription = false;
+      
+      if (isMaintenanceType && interventionData.maintenance_offer_id) {
+        // Vérifier si le client a une souscription active pour cette offre
+        const activeSubscription = await Subscription.findOne({
+          where: {
+            customer_id: actualCustomerId,
+            maintenance_offer_id: interventionData.maintenance_offer_id,
+            status: 'active',
+            payment_status: 'paid'
+          }
+        });
+        hasActiveSubscription = !!activeSubscription;
+        console.log(`🔍 Souscription active pour offre #${interventionData.maintenance_offer_id}: ${hasActiveSubscription ? 'OUI' : 'NON'}`);
+      }
+      
+      if (requiresDiagnosticFee) {
+        // Utiliser le prix du service si disponible, sinon frais par défaut
+        if (interventionType === 'repair' && interventionData.repair_service_id) {
+          const repairService = await RepairService.findByPk(interventionData.repair_service_id);
+          diagnosticFee = repairService ? parseFloat(repairService.price) : 13.00;
+        } else if (interventionType === 'installation' && interventionData.installation_service_id) {
+          const installationService = await InstallationService.findByPk(interventionData.installation_service_id);
+          diagnosticFee = installationService ? parseFloat(installationService.price) : 0;
+        } else {
+          diagnosticFee = 13.00; // Frais de diagnostic par défaut
+        }
+        isFreeDiagnosis = false;
+        console.log('💵 Frais de service : ' + diagnosticFee + ' (type: ' + interventionType + ')');
+      } else if (isMaintenanceType && !hasActiveSubscription && interventionData.maintenance_offer_id) {
+        // Entretien sans souscription active : utiliser le prix de l'offre
+        const maintenanceOffer = await MaintenanceOffer.findByPk(interventionData.maintenance_offer_id);
+        if (maintenanceOffer) {
+          diagnosticFee = parseFloat(maintenanceOffer.price);
+          isFreeDiagnosis = false;
+          console.log('💵 Entretien sans souscription - Prix offre: ' + diagnosticFee + ' FCFA');
+        }
+      } else {
+        console.log('✓ Pas de frais de diagnostic (type: ' + interventionType + ')');
       }
 
       // Créer l'intervention avec les frais de diagnostic
@@ -245,16 +412,15 @@ const createIntervention = [
             attributes: ['id', 'image_url', 'order', 'image_type']
           },
           { 
-            model: User, 
+            model: CustomerProfile, 
             as: 'customer', 
-            attributes: ['id', 'email'],
-            include: [
-              {
-                model: CustomerProfile,
-                as: 'customerProfile',
-                attributes: ['first_name', 'last_name']
-              }
-            ]
+            attributes: ['id', 'first_name', 'last_name'],
+            required: false,
+            include: [{
+              model: User,
+              as: 'user',
+              attributes: ['id', 'email', 'phone']
+            }]
           },
           { 
             model: User, 
@@ -272,10 +438,11 @@ const createIntervention = [
       try {
         // Enrichir le customer pour la notification
         const customer = {
-          id: createdIntervention.customer.id,
-          email: createdIntervention.customer.email,
-          first_name: createdIntervention.customer.customerProfile?.first_name || '',
-          last_name: createdIntervention.customer.customerProfile?.last_name || ''
+          id: createdIntervention.customer?.user?.id || createdIntervention.customer_id,
+          email: createdIntervention.customer?.user?.email || '',
+          phone: createdIntervention.customer?.user?.phone || '',
+          first_name: createdIntervention.customer?.first_name || '',
+          last_name: createdIntervention.customer?.last_name || ''
         };
         
         // 1. Notifier le client (confirmation de création)
@@ -292,6 +459,12 @@ const createIntervention = [
           actionUrl: `/interventions`
         });
         console.log('✅ Notification envoyée au client');
+
+        // 📧 Email au client (confirmation de création - template professionnel)
+        const emailResult = await sendInterventionCreatedEmail(createdIntervention.get({ plain: true }), customer);
+        if (emailResult.success) {
+          console.log('📧 Email envoyé au client:', customer.email);
+        }
 
         // 2. Notifier les admins de la nouvelle intervention
         await notificationService.notifyAdmins({
@@ -320,7 +493,12 @@ const createIntervention = [
           console.log('✅ Notification client - technicien assigné');
         }
       } catch (notifError) {
-        console.error('❌ Erreur notification:', notifError);
+        console.error('❌ ERREUR NOTIFICATION/EMAIL DÉTAILLÉE:', {
+          message: notifError.message,
+          stack: notifError.stack,
+          customerEmail: customer?.email,
+          interventionId: createdIntervention?.id
+        });
         // Ne pas bloquer la création si la notification échoue
       }
 
@@ -368,14 +546,14 @@ const updateIntervention = async (req, res) => {
     const updatedIntervention = await Intervention.findByPk(id, {
       include: [
         { 
-          model: User, 
-          as: 'customer', 
-          attributes: ['id', 'email'],
+          model: CustomerProfile, 
+          as: 'customer',
+          attributes: ['id', 'first_name', 'last_name'],
           include: [
             {
-              model: CustomerProfile,
-              as: 'customerProfile',
-              attributes: ['first_name', 'last_name']
+              model: User,
+              as: 'user',
+              attributes: ['id', 'email']
             }
           ]
         },
@@ -392,10 +570,10 @@ const updateIntervention = async (req, res) => {
         if (updatedIntervention.customer) {
           // Enrichir le customer pour la notification
           const customer = {
-            id: updatedIntervention.customer.id,
-            email: updatedIntervention.customer.email,
-            first_name: updatedIntervention.customer.customerProfile?.first_name || '',
-            last_name: updatedIntervention.customer.customerProfile?.last_name || ''
+            id: updatedIntervention.customer.user?.id || updatedIntervention.customer.id,
+            email: updatedIntervention.customer.user?.email || '',
+            first_name: updatedIntervention.customer.first_name || '',
+            last_name: updatedIntervention.customer.last_name || ''
           };
           
           console.log('📤 Envoi notification modification intervention au client user_id:', customer.id);
@@ -424,25 +602,65 @@ const updateIntervention = async (req, res) => {
 };
 
 const deleteIntervention = async (req, res) => {
+  const transaction = await db.transaction();
+  
   try {
     const { id } = req.params;
 
-    const intervention = await Intervention.findByPk(id);
+    const intervention = await Intervention.findByPk(id, {
+      include: [
+        { model: DiagnosticReport, as: 'diagnosticReports' },
+        { model: Quote, as: 'quotes' }
+      ]
+    });
     
     if (!intervention) {
+      await transaction.rollback();
       return res.status(404).json({
         success: false,
         message: 'Intervention non trouvée'
       });
     }
 
-    await intervention.destroy();
+    // Supprimer les rapports de diagnostic associés
+    if (intervention.diagnosticReports && intervention.diagnosticReports.length > 0) {
+      for (const report of intervention.diagnosticReports) {
+        // Supprimer les devis associés au rapport
+        await Quote.destroy({ 
+          where: { diagnostic_report_id: report.id },
+          transaction 
+        });
+      }
+      // Supprimer les rapports
+      await DiagnosticReport.destroy({ 
+        where: { intervention_id: id },
+        transaction 
+      });
+    }
+
+    // Supprimer les devis directement liés à l'intervention
+    await Quote.destroy({ 
+      where: { intervention_id: id },
+      transaction 
+    });
+
+    // Supprimer les images d'intervention
+    await InterventionImage.destroy({ 
+      where: { intervention_id: id },
+      transaction 
+    });
+
+    // Maintenant supprimer l'intervention
+    await intervention.destroy({ transaction });
+
+    await transaction.commit();
 
     res.status(200).json({
       success: true,
-      message: 'Intervention supprimée avec succès'
+      message: 'Intervention et toutes ses dépendances supprimées avec succès'
     });
   } catch (error) {
+    await transaction.rollback();
     console.error('Erreur lors de la suppression de l\'intervention:', error);
     res.status(500).json({
       success: false,
@@ -482,6 +700,35 @@ const assignIntervention = async (req, res) => {
       });
     }
 
+    // Vérifier la limite d'interventions par jour
+    const MAX_DAILY_INTERVENTIONS = process.env.MAX_DAILY_INTERVENTIONS || 6;
+    const interventionDate = intervention.scheduled_date 
+      ? new Date(intervention.scheduled_date).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
+
+    const dailyCount = await Intervention.count({
+      where: {
+        technician_id,
+        scheduled_date: {
+          [Op.gte]: new Date(interventionDate),
+          [Op.lt]: new Date(new Date(interventionDate).getTime() + 24 * 60 * 60 * 1000)
+        },
+        status: { [Op.notIn]: ['cancelled', 'rejected'] }
+      }
+    });
+
+    if (dailyCount >= MAX_DAILY_INTERVENTIONS) {
+      return res.status(400).json({
+        success: false,
+        message: `Le technicien a atteint la limite de ${MAX_DAILY_INTERVENTIONS} interventions pour cette journée`,
+        data: {
+          current_count: dailyCount,
+          max_allowed: MAX_DAILY_INTERVENTIONS,
+          date: interventionDate
+        }
+      });
+    }
+
     // Assigner le technicien
     await intervention.update({ 
       technician_id,
@@ -492,14 +739,14 @@ const assignIntervention = async (req, res) => {
     const updatedIntervention = await Intervention.findByPk(id, {
       include: [
         { 
-          model: User, 
+          model: CustomerProfile, 
           as: 'customer', 
-          attributes: ['id', 'email'],
+          attributes: ['id', 'first_name', 'last_name'],
           include: [
             {
-              model: CustomerProfile,
-              as: 'customerProfile',
-              attributes: ['first_name', 'last_name']
+              model: User,
+              as: 'user',
+              attributes: ['id', 'email', 'phone']
             }
           ]
         },
@@ -520,18 +767,27 @@ const assignIntervention = async (req, res) => {
     // 🔔 Notifier le client de l'assignation du technicien
     try {
       if (updatedIntervention.customer) {
-        // Enrichir le customer avec les données du profil
+        // Construire l'objet customer à partir du CustomerProfile
         const customer = {
-          id: updatedIntervention.customer.id,
-          email: updatedIntervention.customer.email,
-          first_name: updatedIntervention.customer.customerProfile?.first_name || '',
-          last_name: updatedIntervention.customer.customerProfile?.last_name || ''
+          id: updatedIntervention.customer.user?.id || updatedIntervention.customer.id,
+          email: updatedIntervention.customer.user?.email || '',
+          phone: updatedIntervention.customer.user?.phone || '',
+          first_name: updatedIntervention.customer.first_name || '',
+          last_name: updatedIntervention.customer.last_name || ''
         };
         
         console.log(`📤 Envoi notification assignation au client user_id: ${customer.id}`);
         console.log(`👤 Client: ${customer.first_name} ${customer.last_name}`);
         await notifyTechnicianAssignedToCustomer(updatedIntervention, customer, technician);
         console.log('✅ Notification envoyée au client pour l\'assignation du technicien');
+        
+        // 📧 Email au client et technicien (assignation)
+        await sendInterventionAssignedEmail(
+          updatedIntervention.get({ plain: true }),
+          technician.get({ plain: true }),
+          customer
+        );
+        console.log('✅ Emails professionnels envoyés (client + technicien)');
       } else {
         console.log('⚠️  Pas de customer trouvé pour cette intervention');
       }
@@ -604,7 +860,14 @@ const markOnTheWay = async (req, res, next) => {
     const technicianId = req.user.id;
     
     const intervention = await Intervention.findOne({
-      where: { id, technician_id: technicianId }
+      where: { id, technician_id: technicianId },
+      include: [
+        {
+          model: CustomerProfile,
+          as: 'customer',
+          include: [{ model: User, as: 'user' }]
+        }
+      ]
     });
     
     if (!intervention) {
@@ -625,6 +888,17 @@ const markOnTheWay = async (req, res, next) => {
       status: 'on_the_way',
       departed_at: new Date()
     });
+
+    // 📱 Notification au client
+    try {
+      if (intervention.customer?.user) {
+        const technician = await User.findByPk(technicianId);
+        await notifyTechnicianOnTheWay(intervention, intervention.customer.user, technician);
+        console.log(`📱 Notification envoyée: technicien en route pour intervention #${id}`);
+      }
+    } catch (notifError) {
+      console.error('⚠️ Erreur notification (non bloquante):', notifError.message);
+    }
     
     res.status(200).json({
       success: true,
@@ -644,7 +918,14 @@ const markArrived = async (req, res, next) => {
     const technicianId = req.user.id;
     
     const intervention = await Intervention.findOne({
-      where: { id, technician_id: technicianId }
+      where: { id, technician_id: technicianId },
+      include: [
+        {
+          model: CustomerProfile,
+          as: 'customer',
+          include: [{ model: User, as: 'user' }]
+        }
+      ]
     });
     
     if (!intervention) {
@@ -665,6 +946,17 @@ const markArrived = async (req, res, next) => {
       status: 'arrived',
       arrived_at: new Date()
     });
+
+    // 📱 Notification au client
+    try {
+      if (intervention.customer?.user) {
+        const technician = await User.findByPk(technicianId);
+        await notifyTechnicianArrived(intervention, intervention.customer.user, technician);
+        console.log(`📱 Notification envoyée: technicien arrivé pour intervention #${id}`);
+      }
+    } catch (notifError) {
+      console.error('⚠️ Erreur notification (non bloquante):', notifError.message);
+    }
     
     res.status(200).json({
       success: true,
@@ -694,7 +986,9 @@ const startIntervention = async (req, res, next) => {
       });
     }
     
-    if (intervention.status !== 'arrived') {
+    // Vérifier le statut: 'arrived' pour le workflow normal, 'execution_confirmed' pour l'exécution immédiate
+    const validStatuses = ['arrived', 'execution_confirmed'];
+    if (!validStatuses.includes(intervention.status)) {
       return res.status(400).json({
         success: false,
         message: 'Vous devez d\'abord signaler votre arrivée'
@@ -705,6 +999,33 @@ const startIntervention = async (req, res, next) => {
       status: 'in_progress',
       started_at: new Date()
     });
+    
+    // 📧 Email au client (intervention démarrée)
+    try {
+      // customer_id est un CustomerProfile.id, pas un User.id
+      const customerProfile = await CustomerProfile.findByPk(intervention.customer_id, {
+        include: [{ model: User, as: 'user' }]
+      });
+      
+      if (customerProfile && customerProfile.user) {
+        const technicianUser = await User.findByPk(technicianId);
+        const enrichedCustomer = {
+          id: customerProfile.user.id,
+          email: customerProfile.user.email,
+          first_name: customerProfile.first_name,
+          last_name: customerProfile.last_name
+        };
+        
+        await sendInterventionStartedEmail(
+          intervention.get({ plain: true }),
+          technicianUser.get({ plain: true }),
+          enrichedCustomer
+        );
+        console.log('✅ Email professionnel démarrage envoyé au client');
+      }
+    } catch (emailError) {
+      console.error('⚠️ Erreur envoi email démarrage:', emailError.message);
+    }
     
     res.status(200).json({
       success: true,
@@ -746,7 +1067,30 @@ const completeIntervention = async (req, res, next) => {
       completed_at: new Date()
     });
     
-    // TODO: Notifier le client que l'intervention est terminée
+    // 📧 Email au client (intervention terminée)
+    try {
+      // customer_id est un CustomerProfile.id, pas un User.id
+      const customerProfile = await CustomerProfile.findByPk(intervention.customer_id, {
+        include: [{ model: User, as: 'user' }]
+      });
+      
+      if (customerProfile && customerProfile.user) {
+        const enrichedCustomer = {
+          id: customerProfile.user.id,
+          email: customerProfile.user.email,
+          first_name: customerProfile.first_name,
+          last_name: customerProfile.last_name
+        };
+        
+        await sendInterventionCompletedEmail(
+          intervention.get({ plain: true }),
+          enrichedCustomer
+        );
+        console.log('✅ Email professionnel terminaison envoyé au client');
+      }
+    } catch (emailError) {
+      console.error('⚠️ Erreur envoi email terminaison:', emailError.message);
+    }
     
     res.status(200).json({
       success: true,
@@ -770,6 +1114,11 @@ const submitReport = async (req, res, next) => {
       duration,
       observations,
       photos,
+      // Mesures techniques
+      pression,
+      temperature,
+      intensite,
+      tension,
     } = req.body;
 
     console.log(`📝 Soumission rapport pour intervention ${id}`);
@@ -842,6 +1191,11 @@ const submitReport = async (req, res, next) => {
       photos_count: uploadedFiles.length,
       status: 'submitted',
       submitted_at: new Date(),
+      // Mesures techniques
+      pression: pression || '',
+      temperature: temperature || '',
+      intensite: intensite || '',
+      tension: tension || '',
     };
 
     // TODO: Sauvegarder le rapport dans une table dédiée
@@ -858,7 +1212,16 @@ const submitReport = async (req, res, next) => {
       // Récupérer l'intervention avec toutes les relations pour les notifications
       const interventionWithRelations = await Intervention.findByPk(id, {
         include: [
-          { model: User, as: 'customer', attributes: ['id', 'first_name', 'last_name', 'email'] },
+          { 
+            model: CustomerProfile, 
+            as: 'customer', 
+            attributes: ['id', 'first_name', 'last_name'],
+            include: [{
+              model: User,
+              as: 'user',
+              attributes: ['id', 'email']
+            }]
+          },
           { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email'] }
         ]
       });
@@ -916,6 +1279,23 @@ const submitReport = async (req, res, next) => {
         });
       }
       console.log('✅ Admins notifiés');
+      
+      // 📧 Email au client (rapport disponible)
+      if (interventionWithRelations.customer) {
+        const enrichedCustomer = {
+          id: interventionWithRelations.customer.id,
+          email: interventionWithRelations.customer.email,
+          first_name: interventionWithRelations.customer.first_name || '',
+          last_name: interventionWithRelations.customer.last_name || ''
+        };
+        
+        await sendInterventionReportEmail(
+          interventionWithRelations.get({ plain: true }),
+          reportData,
+          enrichedCustomer
+        );
+        console.log('✅ Email professionnel rapport envoyé au client');
+      }
 
     } catch (notifError) {
       console.error('⚠️  Erreur notifications rapport:', notifError.message);
@@ -1058,13 +1438,90 @@ const updateInterventionStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const previousStatus = req.body.previousStatus; // optionnel
 
-    const intervention = await Intervention.findByPk(id);
+    // Charger l'intervention avec les relations
+    const intervention = await Intervention.findByPk(id, {
+      include: [
+        {
+          model: CustomerProfile,
+          as: 'customer',
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'first_name', 'last_name']
+          }]
+        },
+        {
+          model: User,
+          as: 'technician',
+          attributes: ['id', 'email', 'first_name', 'last_name']
+        }
+      ]
+    });
+
     if (!intervention) {
       return res.status(404).json({ success: false, message: 'Intervention non trouvée' });
     }
 
+    const oldStatus = intervention.status;
     await intervention.update({ status });
+
+    // Envoyer les notifications selon le nouveau statut
+    try {
+      const customer = intervention.customer;
+      const technician = intervention.technician;
+      const customerUser = customer?.user;
+
+      switch (status) {
+        case 'in_progress':
+          // Notifier le client que l'intervention démarre
+          if (customerUser) {
+            await notifyInterventionInProgress(intervention, customerUser, technician);
+            console.log(`📱 Notification envoyée au client: intervention #${id} en cours`);
+          }
+          break;
+
+        case 'completed':
+          // Notifier le client que l'intervention est terminée
+          if (customerUser) {
+            await notifyInterventionCompleted(intervention, customerUser);
+            console.log(`📱 Notification envoyée au client: intervention #${id} terminée`);
+          }
+          // Notifier les admins
+          await notificationService.notifyAdmins({
+            type: 'intervention_completed',
+            title: 'Intervention terminée',
+            message: `L'intervention #${id} a été terminée par ${technician?.first_name || 'le technicien'}`,
+            data: { interventionId: intervention.id },
+            priority: 'medium',
+            actionUrl: `/interventions`
+          });
+          break;
+
+        case 'cancelled':
+          // Notifier client, technicien et admins
+          await notifyInterventionCancelled(intervention, customerUser, technician, 'admin');
+          console.log(`📱 Notifications envoyées: intervention #${id} annulée`);
+          break;
+
+        case 'assigned':
+          // Notifier le client
+          if (customerUser) {
+            await notifyInterventionUpdated(intervention, customerUser);
+            console.log(`📱 Notification envoyée au client: intervention #${id} assignée`);
+          }
+          break;
+
+        default:
+          // Pour les autres statuts, notifier le client
+          if (customerUser) {
+            await notifyInterventionUpdated(intervention, customerUser);
+          }
+      }
+    } catch (notifError) {
+      console.error('⚠️ Erreur notification (non bloquante):', notifError.message);
+    }
 
     res.status(200).json({ 
       success: true, 
@@ -1086,9 +1543,22 @@ const rateIntervention = async (req, res) => {
   try {
     const { id } = req.params;
     const { rating, review } = req.body;
-    const customerId = req.user.id;
+    const userId = req.user.id;
 
-    console.log('⭐ Évaluation intervention:', { id, customerId, rating, review });
+    console.log('⭐ Évaluation intervention:', { id, userId, rating, review });
+
+    // Récupérer le CustomerProfile pour obtenir le customer_id
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    
+    if (!customerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil client non trouvé',
+      });
+    }
+
+    const customerId = customerProfile.id;
+    console.log(`🔄 Conversion User.id ${userId} → CustomerProfile.id ${customerId} pour évaluation`);
 
     // Vérifier que l'intervention existe
     const intervention = await Intervention.findByPk(id);
@@ -1209,10 +1679,20 @@ const rateIntervention = async (req, res) => {
             technicianName: `${fullIntervention.technician.first_name} ${fullIntervention.technician.last_name}`
           },
           priority: 'medium',
-          actionUrl: `/interventions/${fullIntervention.id}`
+          actionUrl: `/interventions`
         });
       }
       console.log(`📧 Notifications envoyées à ${admins.length} admin(s)`);
+      
+      // 📧 Email au technicien (nouvelle évaluation)
+      if (fullIntervention.technician) {
+        await sendInterventionRatingEmail(
+          fullIntervention.get({ plain: true }),
+          { rating, review },
+          fullIntervention.technician.get({ plain: true })
+        );
+        console.log('✅ Email professionnel évaluation envoyé au technicien');
+      }
     } catch (notificationError) {
       // Les notifications ont échoué mais l'évaluation est enregistrée
       console.error('⚠️ Erreur lors de l\'envoi des notifications:', notificationError.message);
@@ -1248,6 +1728,122 @@ const rateIntervention = async (req, res) => {
   }
 };
 
+// Récupérer les interventions terminées non notées (customer uniquement)
+const getUnratedInterventions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log('📋 Récupération interventions non notées pour userId:', userId);
+
+    // Récupérer le CustomerProfile pour obtenir le customer_id
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    
+    if (!customerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil client non trouvé',
+      });
+    }
+
+    const customerId = customerProfile.id;
+    console.log(`🔄 Conversion User.id ${userId} → CustomerProfile.id ${customerId}`);
+
+    // Récupérer les interventions terminées non notées
+    const unratedInterventions = await Intervention.findAll({
+      where: {
+        customer_id: customerId,
+        status: 'completed',
+        rating: null
+      },
+      include: [
+        {
+          model: User,
+          as: 'technician',
+          attributes: ['id', 'first_name', 'last_name']
+        }
+      ],
+      order: [['completed_at', 'DESC']],
+      limit: 10 // Limiter à 10 pour éviter surcharge
+    });
+
+    console.log(`✅ ${unratedInterventions.length} intervention(s) non notée(s) trouvée(s)`);
+
+    res.status(200).json({
+      success: true,
+      data: unratedInterventions
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des interventions non notées:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des interventions non notées',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Récupérer les interventions avec diagnostic non payé
+ * @route GET /api/interventions/pending-diagnostic-payment
+ */
+const getPendingDiagnosticPayments = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    console.log(`🔍 Recherche interventions avec diagnostic non payé pour user #${userId}`);
+
+    // Récupérer le profil client
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    
+    if (!customerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil client non trouvé',
+      });
+    }
+
+    const customerId = customerProfile.id;
+
+    // Récupérer les interventions avec diagnostic non payé
+    // (type diagnostic ou repair ET is_free_diagnosis = false ET diagnostic_paid = false)
+    const pendingPayments = await Intervention.findAll({
+      where: {
+        customer_id: customerId,
+        is_free_diagnosis: false,
+        diagnostic_paid: false,
+        status: { [Op.notIn]: ['cancelled', 'completed'] }
+      },
+      include: [
+        {
+          model: User,
+          as: 'technician',
+          attributes: ['id', 'first_name', 'last_name', 'phone']
+        }
+      ],
+      order: [['created_at', 'DESC']],
+      attributes: [
+        'id', 'title', 'description', 'intervention_type', 'status', 
+        'diagnostic_fee', 'diagnostic_paid', 'is_free_diagnosis',
+        'created_at', 'equipment_count', 'address'
+      ]
+    });
+
+    console.log(`✅ ${pendingPayments.length} intervention(s) avec diagnostic non payé`);
+
+    res.status(200).json({
+      success: true,
+      data: pendingPayments,
+      count: pendingPayments.length
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des paiements en attente:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des paiements en attente',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getAllInterventions,
   getInterventionById,
@@ -1263,5 +1859,304 @@ module.exports = {
   submitReport,
   listReports,
   updateInterventionStatus,
-  rateIntervention
+  rateIntervention,
+  getUnratedInterventions,
+  getPendingDiagnosticPayments,
+  suggestTechnicians,
+  autoAssignIntervention,
+  sendPaymentLink
 };
+
+// ==================== PLANIFICATION AUTOMATIQUE ====================
+
+/**
+ * @swagger
+ * /api/interventions/{id}/suggest-technicians:
+ *   post:
+ *     summary: Suggérer les meilleurs techniciens pour une intervention
+ *     tags: [Interventions]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               max_results:
+ *                 type: integer
+ *                 default: 5
+ *               weights:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Suggestions générées avec succès
+ */
+async function suggestTechnicians(req, res) {
+  try {
+    const interventionId = parseInt(req.params.id);
+    const { max_results, weights } = req.body;
+
+    console.log(`🤖 Génération suggestions pour intervention ${interventionId}`);
+
+    const result = await schedulingService.suggestTechnicians(interventionId, {
+      max_results,
+      weights
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: `${result.suggestions.length} technicien(s) suggéré(s)`
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur suggestTechnicians:', error);
+    
+    if (error.message === 'Intervention non trouvée') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    if (error.message === 'Intervention déjà assignée') {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la génération des suggestions'
+    });
+  }
+}
+
+/**
+ * @swagger
+ * /api/interventions/{id}/auto-assign:
+ *   post:
+ *     summary: Assigner automatiquement le meilleur technicien
+ *     tags: [Interventions]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Assignation automatique réussie
+ */
+async function autoAssignIntervention(req, res) {
+  try {
+    const interventionId = parseInt(req.params.id);
+
+    console.log(`🤖 Auto-assignation intervention ${interventionId}`);
+
+    const result = await schedulingService.autoAssignIntervention(interventionId);
+
+    // Récupérer l'intervention et le technicien complets pour notifications
+    const intervention = await Intervention.findByPk(interventionId, {
+      include: [
+        { 
+          model: CustomerProfile, 
+          as: 'customer',
+          include: [{
+            model: User,
+            as: 'user'
+          }]
+        },
+        { model: User, as: 'technician' }
+      ]
+    });
+
+    // Envoyer notifications
+    await notifyInterventionAssigned(intervention, intervention.technician);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: `Intervention assignée automatiquement à ${result.assigned_technician.name}`
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur autoAssignIntervention:', error);
+    
+    if (error.message === 'Intervention non trouvée' || error.message === 'Aucun technicien disponible trouvé') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    if (error.message === 'Intervention déjà assignée') {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de l\'assignation automatique'
+    });
+  }
+}
+
+// Envoyer un lien de paiement pour l'offre d'entretien
+async function sendPaymentLink(req, res) {
+  try {
+    const interventionId = parseInt(req.params.id);
+
+    console.log(`💳 Envoi du lien de paiement pour intervention ${interventionId}`);
+
+    const intervention = await Intervention.findByPk(interventionId, {
+      include: [
+        { 
+          model: CustomerProfile, 
+          as: 'customer',
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone', 'first_name', 'last_name']
+          }]
+        },
+        {
+          model: MaintenanceOffer,
+          as: 'maintenance_offer'
+        },
+        {
+          model: RepairService,
+          as: 'repair_service'
+        },
+        {
+          model: InstallationService,
+          as: 'installation_service'
+        }
+      ]
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        success: false,
+        message: 'Intervention non trouvée'
+      });
+    }
+
+    if (!intervention.maintenance_offer_id || !intervention.maintenance_offer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cette intervention n\'a pas d\'offre d\'entretien associée'
+      });
+    }
+
+    const customerId = intervention.customer?.user?.id || intervention.customer_id;
+    
+    // Vérifier si une souscription active existe déjà
+    const existingSubscription = await Subscription.findOne({
+      where: {
+        customer_id: customerId,
+        maintenance_offer_id: intervention.maintenance_offer_id,
+        status: 'active',
+        payment_status: 'paid',
+        end_date: { [Op.gte]: new Date() }
+      }
+    });
+
+    if (existingSubscription) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le client a déjà une souscription active pour cette offre'
+      });
+    }
+
+    // Créer ou récupérer une souscription en attente
+    let subscription = await Subscription.findOne({
+      where: {
+        customer_id: customerId,
+        maintenance_offer_id: intervention.maintenance_offer_id,
+        payment_status: 'pending'
+      }
+    });
+
+    if (!subscription) {
+      // Créer une nouvelle souscription en attente
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setMonth(endDate.getMonth() + (intervention.maintenance_offer.duration || 12));
+
+      subscription = await Subscription.create({
+        customer_id: customerId,
+        maintenance_offer_id: intervention.maintenance_offer_id,
+        status: 'active',
+        start_date: startDate,
+        end_date: endDate,
+        price: intervention.maintenance_offer.price,
+        payment_status: 'pending'
+      });
+    }
+
+    // Générer le lien de paiement (conservé pour référence)
+    const paymentLink = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/payment/subscription/${subscription.id}`;
+
+    // Envoyer une notification au client (sans le lien, le client paiera depuis l'app)
+    const notificationMessage = `Votre offre d'entretien "${intervention.maintenance_offer.title}" est prête ! Montant: ${intervention.maintenance_offer.price} F CFA. Rendez-vous dans "Mes Interventions" pour procéder au paiement.`;
+    
+    await notificationService.create({
+      userId: customerId,
+      type: 'maintenance_offer_payment',
+      title: 'Paiement en attente - Offre d\'entretien',
+      message: notificationMessage,
+      data: {
+        subscription_id: subscription.id,
+        offer_id: intervention.maintenance_offer_id,
+        intervention_id: interventionId
+      },
+      priority: 'high'
+    });
+
+    // Envoyer par email si disponible
+    if (intervention.customer?.user?.email) {
+      try {
+        await sendEmail({
+          to: intervention.customer.user.email,
+          subject: `Lien de paiement - ${intervention.maintenance_offer.title}`,
+          html: `
+            <h2>Bonjour ${intervention.customer.user.first_name},</h2>
+            <p>Votre offre d'entretien <strong>${intervention.maintenance_offer.title}</strong> est prête !</p>
+            <p>Montant: <strong>${intervention.maintenance_offer.price} F CFA</strong></p>
+            <p>Cliquez sur le lien ci-dessous pour procéder au paiement:</p>
+            <p><a href="${paymentLink}" style="background-color: #52c41a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Payer maintenant</a></p>
+            <p>Cordialement,<br>L'équipe MCT Maintenance</p>
+          `
+        });
+      } catch (emailError) {
+        console.error('❌ Erreur envoi email:', emailError);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Lien de paiement envoyé au client',
+      data: {
+        subscription_id: subscription.id,
+        payment_link: paymentLink
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur sendPaymentLink:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de l\'envoi du lien de paiement',
+      error: error.message
+    });
+  }
+}

@@ -36,14 +36,16 @@ const authenticate = async (req, res, next) => {
     }
 
     // Check if user is active
-    if (user.status !== 'active') {
+    // Permettre l'accès pour les comptes pending (pour qu'ils puissent vérifier leur email)
+    // Bloquer uniquement les comptes deleted ou inactive
+    if (user.status === 'deleted' || user.status === 'inactive') {
       return res.status(401).json({
         success: false,
         message: 'Account is not active. Please contact support.'
       });
     }
 
-    // Attach user to request object
+    // Attacher le user à la requête (même si pending)
     req.user = user;
     next();
   } catch (error) {
@@ -71,20 +73,32 @@ const authenticate = async (req, res, next) => {
 // Role-based access control middleware
 const authorize = (...roles) => {
   return (req, res, next) => {
+    console.log(`🔐 Authorization check - Required roles: [${roles.join(', ')}]`);
+    console.log(`   User: ${req.user ? `ID=${req.user.id}, Role=${req.user.role}` : 'NOT AUTHENTICATED'}`);
+    
     if (!req.user) {
+      console.log('❌ Authorization failed: No user authenticated');
       return res.status(401).json({
         success: false,
         message: 'Access denied. User not authenticated.'
       });
     }
 
-    if (!roles.includes(req.user.role)) {
+    // Le rôle 'manager' a les mêmes droits que 'admin'
+    const effectiveRoles = [...roles];
+    if (roles.includes('admin') && !roles.includes('manager')) {
+      effectiveRoles.push('manager');
+    }
+
+    if (!effectiveRoles.includes(req.user.role)) {
+      console.log(`❌ Authorization failed: User role '${req.user.role}' not in [${effectiveRoles.join(', ')}]`);
       return res.status(403).json({
         success: false,
         message: 'Access denied. Insufficient permissions.'
       });
     }
 
+    console.log('✅ Authorization successful');
     next();
   };
 };

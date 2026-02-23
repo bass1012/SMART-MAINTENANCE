@@ -15,6 +15,11 @@ class MaintenanceReport {
   final List<String>? imageUrls;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  // Mesures techniques
+  final String? pression;
+  final String? temperature;
+  final String? intensite;
+  final String? tension;
 
   MaintenanceReport({
     required this.id,
@@ -30,6 +35,10 @@ class MaintenanceReport {
     this.imageUrls,
     this.createdAt,
     this.updatedAt,
+    this.pression,
+    this.temperature,
+    this.intensite,
+    this.tension,
   });
 
   factory MaintenanceReport.fromJson(Map<String, dynamic> json) {
@@ -63,6 +72,11 @@ class MaintenanceReport {
             json['updatedAt'] != null && json['updatedAt'].toString().isNotEmpty
                 ? DateTime.tryParse(json['updatedAt'].toString())
                 : null,
+        // Mesures techniques
+        pression: json['pression']?.toString(),
+        temperature: json['temperature']?.toString(),
+        intensite: json['intensite']?.toString(),
+        tension: json['tension']?.toString(),
       );
     } catch (e) {
       debugPrint('Error parsing MaintenanceReport: $e');
@@ -86,6 +100,10 @@ class MaintenanceReport {
       'imageUrls': imageUrls,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'pression': pression,
+      'temperature': temperature,
+      'intensite': intensite,
+      'tension': tension,
     };
   }
 }

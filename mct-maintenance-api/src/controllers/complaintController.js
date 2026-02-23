@@ -1,6 +1,12 @@
 const Complaint = require('../models/Complaint');
 const { validationResult } = require('express-validator');
 const { notifyNewComplaint, notifyComplaintResponse, notifyComplaintStatusChange } = require('../services/notificationHelpers');
+const { sendEmail } = require('../services/emailService');
+const {
+  sendComplaintCreatedEmail,
+  sendComplaintResponseEmail,
+  sendComplaintResolvedEmail
+} = require('../services/emailHelper');
 
 
 // Récupérer toutes les réclamations
@@ -233,6 +239,10 @@ async function createComplaint(req, res) {
         };
         await notifyNewComplaint(complaintWithRelations, customer);
         console.log('✅ Notification réclamation envoyée aux admins');
+        
+        // 📧 Email aux admins (réclamation créée - template professionnel)
+        await sendComplaintCreatedEmail(complaintWithRelations.get({ plain: true }), customer);
+        console.log('✅ Email professionnel réclamation envoyé aux admins');
       }
     } catch (notifError) {
       console.error('❌ Erreur notification réclamation:', notifError);
@@ -333,6 +343,28 @@ async function updateComplaint(req, res) {
             complaint.status
           );
           console.log(`✅ Notification changement statut réclamation ${id} vers "${complaint.status}" envoyée`);
+          
+          // 📧 Email au client (réponse ou résolution - templates professionnels)
+          const customer = {
+            id: updatedComplaint.customer.user.id,
+            email: updatedComplaint.customer.user.email,
+            first_name: updatedComplaint.customer.first_name,
+            last_name: updatedComplaint.customer.last_name
+          };
+          
+          if (complaint.status === 'resolved') {
+            // Email résolution
+            await sendComplaintResolvedEmail(updatedComplaint.get({ plain: true }), customer);
+            console.log('✅ Email professionnel résolution réclamation envoyé au client');
+          } else {
+            // Email réponse/mise à jour
+            await sendComplaintResponseEmail(
+              updatedComplaint.get({ plain: true }),
+              { text: updatedComplaint.resolution || 'Mise à jour du statut' },
+              customer
+            );
+            console.log('✅ Email professionnel réponse réclamation envoyé au client');
+          }
         } else {
           // Notification générale de mise à jour
           await notifyComplaintResponse(

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../models/complaint_model.dart';
 import '../../services/api_service.dart';
 import '../../widgets/common/loading_indicator.dart';
+import '../../widgets/common/support_fab_wrapper.dart';
 import 'complaint_detail_screen.dart';
 import '../../utils/snackbar_helper.dart';
 
@@ -47,69 +48,97 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mes Réclamations'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _showAddComplaintDialog,
+    return SupportFabWrapper(
+      alignLeft: true,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Mes Réclamations'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _showAddComplaintDialog,
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _showAddComplaintDialog,
+          child: const Icon(Icons.add),
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+              fit: BoxFit.cover,
+              opacity: 0.4,
+            ),
           ),
-        ],
+          child: _isLoading
+              ? const Center(child: LoadingIndicator())
+              : _error != null
+                  ? Center(child: Text('Erreur: $_error'))
+                  : _complaints.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _complaints.length,
+                          itemBuilder: (context, index) {
+                            final complaint = _complaints[index];
+                            return _buildComplaintCard(complaint);
+                          },
+                        ),
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddComplaintDialog,
-        child: const Icon(Icons.add),
-      ),
-      body: _isLoading
-          ? const Center(child: LoadingIndicator())
-          : _error != null
-              ? Center(child: Text('Erreur: $_error'))
-              : _complaints.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _complaints.length,
-                      itemBuilder: (context, index) {
-                        final complaint = _complaints[index];
-                        return _buildComplaintCard(complaint);
-                      },
-                    ),
     );
   }
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.assignment_outlined,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Aucune réclamation trouvée',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Appuyez sur le bouton + pour créer une nouvelle réclamation',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.assignment_outlined,
+              size: 64,
+              color: const Color(0xFF0a543d).withOpacity(0.6),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Aucune réclamation trouvée',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Appuyez sur le bouton + pour créer une nouvelle réclamation',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildComplaintCard(Complaint complaint) {
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
-    final priorityColor = _getPriorityColor(complaint.priority);
     final statusColor = _getStatusColor(complaint.status);
 
     return Card(
@@ -129,46 +158,23 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: priorityColor.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        _formatPriority(complaint.priority),
-                        style: TextStyle(
-                          color: priorityColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    _formatStatus(complaint.status),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        _formatStatus(complaint.status),
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -238,7 +244,6 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
   void _showAddComplaintDialog() {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
-    String selectedPriority = 'medium';
     String? selectedRelatedTo;
 
     showDialog(
@@ -391,81 +396,6 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Priorité
-                  Text(
-                    'Priorité',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: DropdownButtonFormField<String>(
-                      value: selectedPriority,
-                      isExpanded: true,
-                      style: GoogleFonts.poppins(
-                          fontSize: 14, color: Colors.black87),
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: Color(0xFF0a543d), width: 2),
-                        ),
-                        prefixIcon: const Icon(Icons.priority_high_outlined,
-                            color: Color(0xFF0a543d), size: 20),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 14),
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'low',
-                          child: Text('Basse',
-                              style: GoogleFonts.poppins(fontSize: 13)),
-                        ),
-                        DropdownMenuItem(
-                          value: 'medium',
-                          child: Text('Moyenne',
-                              style: GoogleFonts.poppins(fontSize: 13)),
-                        ),
-                        DropdownMenuItem(
-                          value: 'high',
-                          child: Text('Haute',
-                              style: GoogleFonts.poppins(fontSize: 13)),
-                        ),
-                        DropdownMenuItem(
-                          value: 'critical',
-                          child: Text('Critique',
-                              style: GoogleFonts.poppins(fontSize: 13)),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() => selectedPriority = value!);
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
                   // Concerne
                   Text(
                     'Concerne (optionnel)',
@@ -601,8 +531,8 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
                             }
 
                             Navigator.pop(context);
-                            await _createComplaint(title, description,
-                                selectedPriority, selectedRelatedTo);
+                            await _createComplaint(title, description, 'medium',
+                                selectedRelatedTo);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.transparent,

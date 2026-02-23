@@ -79,11 +79,50 @@ module.exports = {
       }
     });
 
-    // Ajouter les index
-    await queryInterface.addIndex('notifications', ['user_id']);
-    await queryInterface.addIndex('notifications', ['is_read']);
-    await queryInterface.addIndex('notifications', ['type']);
-    await queryInterface.addIndex('notifications', ['created_at']);
+    // Ajouter les index avec vérification d'existence
+    try {
+      await queryInterface.addIndex('notifications', ['user_id'], {
+        name: 'notifications_user_id'
+      });
+    } catch (error) {
+      if (!error.message.includes('already exists')) {
+        throw error;
+      }
+      console.log('Index notifications_user_id already exists, skipping...');
+    }
+
+    try {
+      await queryInterface.addIndex('notifications', ['is_read'], {
+        name: 'notifications_is_read'
+      });
+    } catch (error) {
+      if (!error.message.includes('already exists')) {
+        throw error;
+      }
+      console.log('Index notifications_is_read already exists, skipping...');
+    }
+
+    try {
+      await queryInterface.addIndex('notifications', ['type'], {
+        name: 'notifications_type'
+      });
+    } catch (error) {
+      if (!error.message.includes('already exists')) {
+        throw error;
+      }
+      console.log('Index notifications_type already exists, skipping...');
+    }
+
+    try {
+      await queryInterface.addIndex('notifications', ['created_at'], {
+        name: 'notifications_created_at'
+      });
+    } catch (error) {
+      if (!error.message.includes('already exists')) {
+        throw error;
+      }
+      console.log('Index notifications_created_at already exists, skipping...');
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

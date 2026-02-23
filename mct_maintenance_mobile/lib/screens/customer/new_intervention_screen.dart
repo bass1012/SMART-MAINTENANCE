@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/services/service_api_service.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
@@ -8,6 +9,10 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../utils/snackbar_helper.dart';
 import '../../utils/test_keys.dart';
+import '../../widgets/common/loading_indicator.dart';
+import '../../models/repair_service.dart';
+import '../../models/installation_service.dart';
+import 'diagnostic_payment_screen.dart';
 
 class NewInterventionScreen extends StatefulWidget {
   const NewInterventionScreen({super.key});
@@ -19,6 +24,7 @@ class NewInterventionScreen extends StatefulWidget {
 class _NewInterventionScreenState extends State<NewInterventionScreen> {
   final _formKey = GlobalKey<FormState>();
   final ApiService _apiService = ApiService();
+  final ServiceApiService _serviceApiService = ServiceApiService();
 
   bool _isLoading = false;
   bool _isLoadingLocation = false;
@@ -33,9 +39,25 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
   final _equipmentCountController = TextEditingController(text: '1');
 
   String _selectedPriority = 'normal';
-  String _selectedType = 'maintenance';
+  String? _selectedType;
+  String? _selectedClimatiseurType;
   DateTime? _preferredDate;
   TimeOfDay? _preferredTime;
+
+  // Offres d'entretien
+  List<Map<String, dynamic>> _maintenanceOffers = [];
+  String? _selectedMaintenanceOffer;
+  bool _isLoadingOffers = false;
+
+  // Services de réparation
+  List<RepairService> _repairServices = [];
+  int? _selectedRepairServiceId;
+  bool _isLoadingRepairServices = false;
+
+  // Services d'installation
+  List<InstallationService> _installationServices = [];
+  int? _selectedInstallationServiceId;
+  bool _isLoadingInstallationServices = false;
 
   @override
   void dispose() {
@@ -44,6 +66,64 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     _addressController.dispose();
     _equipmentCountController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadMaintenanceOffers() async {
+    setState(() => _isLoadingOffers = true);
+    try {
+      final offers = await _apiService.getMaintenanceOffers();
+      setState(() {
+        _maintenanceOffers = offers
+            .map((offer) => {
+                  'id': offer.id,
+                  'title': offer.title,
+                  'price': offer.price,
+                  'description': offer.description,
+                })
+            .toList();
+      });
+    } catch (e) {
+      if (mounted) {
+        SnackBarHelper.showError(
+            context, 'Erreur lors du chargement des offres: $e');
+      }
+    } finally {
+      setState(() => _isLoadingOffers = false);
+    }
+  }
+
+  Future<void> _loadRepairServices() async {
+    setState(() => _isLoadingRepairServices = true);
+    try {
+      final services = await _serviceApiService.getActiveRepairServices();
+      setState(() {
+        _repairServices = services;
+      });
+    } catch (e) {
+      if (mounted) {
+        SnackBarHelper.showError(context,
+            'Erreur lors du chargement des services de réparation: $e');
+      }
+    } finally {
+      setState(() => _isLoadingRepairServices = false);
+    }
+  }
+
+  Future<void> _loadInstallationServices() async {
+    setState(() => _isLoadingInstallationServices = true);
+    try {
+      final services = await _serviceApiService.getActiveInstallationServices();
+      setState(() {
+        _installationServices = services;
+      });
+    } catch (e) {
+      if (mounted) {
+        SnackBarHelper.showError(context,
+            'Erreur lors du chargement des services d\'installation: $e');
+      }
+    } finally {
+      setState(() => _isLoadingInstallationServices = false);
+    }
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -267,7 +347,14 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     try {
       // Récupérer l'ID du client depuis le token/profil
       final userData = await _apiService.getUserData();
-      final customerId = userData?['id'];
+
+      // Extraire l'ID en essayant différentes structures possibles
+      final customerId = userData?['id'] ??
+          userData?['user']?['id'] ??
+          userData?['data']?['user']?['id'];
+
+      print('🔍 [NewIntervention] UserData keys: ${userData?.keys.toList()}');
+      print('🔍 [NewIntervention] CustomerId extrait: $customerId');
 
       if (customerId == null) {
         throw Exception('Impossible de récupérer l\'ID utilisateur');
@@ -286,27 +373,73 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
       }
 
       // Préparer les données de la demande selon le format attendu par l'API
+      // Générer un titre par défaut si le champ n'est pas affiché (Entretien/Installation/Réparation)
+      String title = _titleController.text.trim();
+      if (title.isEmpty) {
+        if (_selectedType == 'Entretien') {
+          title = 'Demande d\'entretien';
+        } else if (_selectedType == 'installation' &&
+            _selectedInstallationServiceId != null) {
+          // Utiliser le titre du service d'installation sélectionné
+          final selectedService = _installationServices.firstWhere(
+            (s) => s.id == _selectedInstallationServiceId,
+          );
+          title =
+              'Installation: ${selectedService.title} - ${selectedService.model}';
+        } else if (_selectedType == 'repair' &&
+            _selectedRepairServiceId != null) {
+          // Utiliser le titre du service de réparation sélectionné
+          final selectedService = _repairServices.firstWhere(
+            (s) => s.id == _selectedRepairServiceId,
+          );
+          title =
+              'Réparation: ${selectedService.title} - ${selectedService.model}';
+        } else {
+          title = 'Intervention ${_selectedType ?? ""}';
+        }
+      }
+
       final interventionData = {
-        'title': _titleController.text.trim(),
+        'title': title,
         'description': _descriptionController.text.trim(),
         'customer_id': customerId,
         'scheduled_date': scheduledDateTime.toIso8601String(),
-        'priority': _selectedPriority,
+        'priority': 'normal', // Priorité par défaut
         'status': 'pending',
         'address': _addressController.text.trim(),
         'intervention_type': _selectedType,
         'equipment_count': int.tryParse(_equipmentCountController.text) ?? 1,
       };
 
+      // Ajouter l'offre d'entretien si le type est maintenance/Entretien
+      if (_selectedType == 'Entretien' && _selectedMaintenanceOffer != null) {
+        interventionData['maintenance_offer_id'] =
+            int.parse(_selectedMaintenanceOffer!);
+      }
+
+      // Ajouter le service d'installation si le type est installation
+      if (_selectedType == 'installation' &&
+          _selectedInstallationServiceId != null) {
+        interventionData['installation_service_id'] =
+            _selectedInstallationServiceId;
+      }
+
+      // Ajouter le service de réparation si le type est repair
+      if (_selectedType == 'repair' && _selectedRepairServiceId != null) {
+        interventionData['repair_service_id'] = _selectedRepairServiceId;
+      }
+
       // Appel API avec images (OPTION 1 - Multipart/Form-Data)
+      Map<String, dynamic> createdIntervention;
       if (_selectedImages.isNotEmpty) {
-        await _apiService.createInterventionWithImages(
+        createdIntervention = await _apiService.createInterventionWithImages(
           data: interventionData,
           images: _selectedImages,
         );
       } else {
         // Sans images, utiliser la méthode classique
-        await _apiService.createIntervention(interventionData);
+        createdIntervention =
+            await _apiService.createIntervention(interventionData);
       }
 
       // Alternative: OPTION 2 - Base64 (décommenter pour utiliser)
@@ -321,7 +454,55 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
           'Demande d\'intervention créée avec succès',
           emoji: '🎉',
         );
-        Navigator.pop(context, true); // Retourner true pour indiquer le succès
+
+        // Si c'est un diagnostic, réparation, installation ou entretien sans souscription, rediriger vers le paiement
+        final interventionId = createdIntervention['data']?['intervention']
+                ?['id'] ??
+            createdIntervention['data']?['id'];
+
+        // Récupérer le diagnostic_fee depuis la réponse (le backend calcule si paiement nécessaire)
+        final createdInterventionData = createdIntervention['data']
+                ?['intervention'] ??
+            createdIntervention['data'];
+        final diagnosticFeeFromServer = double.tryParse(
+                createdInterventionData?['diagnostic_fee']?.toString() ??
+                    '0') ??
+            0;
+        final isFreeDiagnosis =
+            createdInterventionData?['is_free_diagnosis'] ?? true;
+
+        if (!isFreeDiagnosis &&
+            diagnosticFeeFromServer > 0 &&
+            interventionId != null) {
+          // Attendre un peu pour que l'utilisateur voie le message de succès
+          await Future.delayed(const Duration(milliseconds: 800));
+
+          // Utiliser le montant calculé par le backend
+          double paymentAmount = diagnosticFeeFromServer;
+
+          if (mounted) {
+            // Naviguer vers l'écran de paiement
+            final paymentResult = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DiagnosticPaymentScreen(
+                  interventionId: interventionId is int
+                      ? interventionId
+                      : int.parse(interventionId.toString()),
+                  diagnosticFee: paymentAmount,
+                ),
+              ),
+            );
+
+            // Retourner avec le résultat du paiement
+            if (mounted) {
+              Navigator.pop(context, paymentResult ?? true);
+            }
+          }
+        } else {
+          // Pour les interventions gratuites (entretien avec souscription active), retourner normalement
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -367,16 +548,19 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF0a543d).withOpacity(0.1),
-                      const Color(0xFF0d6b4d).withOpacity(0.05),
-                    ],
-                  ),
+                  color: Colors.white.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(0xFF0a543d).withOpacity(0.2),
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0a543d).withOpacity(0.15),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
                 ),
                 child: Row(
                   children: [
@@ -422,13 +606,17 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               const SizedBox(height: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
                     ),
                   ],
                 ),
@@ -436,6 +624,9 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                   key: const ValueKey(TestKeys.interventionTypeDropdown),
                   value: _selectedType,
                   decoration: InputDecoration(
+                    hintText: 'Sélectionnez un type d\'intervention',
+                    hintStyle:
+                        GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: Colors.grey.shade300),
@@ -448,6 +639,10 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                       borderRadius: BorderRadius.circular(12),
                       borderSide:
                           const BorderSide(color: Color(0xFF0a543d), width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.red, width: 2),
                     ),
                     prefixIcon: Container(
                       margin: const EdgeInsets.all(8),
@@ -469,13 +664,13 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                   ),
                   items: [
                     DropdownMenuItem(
-                      value: 'maintenance',
-                      child: Text('Maintenance préventive',
-                          style: GoogleFonts.poppins()),
+                      value: 'Entretien',
+                      child: Text('Entretien', style: GoogleFonts.poppins()),
                     ),
                     DropdownMenuItem(
                       value: 'repair',
-                      child: Text('Réparation', style: GoogleFonts.poppins()),
+                      child: Text('Réparation (Diagnostic préalable)',
+                          style: GoogleFonts.poppins()),
                     ),
                     DropdownMenuItem(
                       value: 'installation',
@@ -484,93 +679,548 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                     DropdownMenuItem(
                       value: 'diagnostic',
                       child: Text('Diagnostic', style: GoogleFonts.poppins()),
-                    ),
-                    DropdownMenuItem(
-                      value: 'other',
-                      child: Text('Autre', style: GoogleFonts.poppins()),
-                    ),
+                    )
                   ],
-                  onChanged: (value) {
-                    setState(() => _selectedType = value!);
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Titre
-              Text(
-                'Titre de la demande',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: TextFormField(
-                  key: const ValueKey(TestKeys.interventionTitleField),
-                  controller: _titleController,
-                  style: GoogleFonts.poppins(fontSize: 14),
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: Color(0xFF0a543d), width: 2),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.red, width: 2),
-                    ),
-                    hintText: 'Ex: Panne de chaudière',
-                    hintStyle:
-                        GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
-                    prefixIcon: Container(
-                      margin: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.title_outlined,
-                          color: Colors.white, size: 20),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 16),
-                  ),
                   validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Veuillez entrer un titre';
+                    if (value == null || value.isEmpty) {
+                      return 'Veuillez sélectionner un type d\'intervention';
                     }
                     return null;
                   },
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedType = value;
+                      _selectedMaintenanceOffer = null;
+                      _selectedRepairServiceId = null;
+                      _selectedInstallationServiceId = null;
+                      _selectedClimatiseurType = null;
+                      if (value == 'Entretien') {
+                        _loadMaintenanceOffers();
+                      }
+                      if (value == 'repair') {
+                        _loadRepairServices();
+                      }
+                      if (value == 'installation') {
+                        _loadInstallationServices();
+                      }
+                    });
+                  },
                 ),
               ),
-              const SizedBox(height: 16),
 
-              // Description
+              // Message d'avertissement pour les réparations
+              if (_selectedType == 'repair') ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.orange.shade300,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.description_outlined,
+                          color: Colors.orange.shade700,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Un devis vous sera envoyé avant le début de l\'intervention',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.orange.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Message d'avertissement pour les diagnostics
+              if (_selectedType == 'diagnostic') ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.amber.shade300,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.warning_outlined,
+                          color: Colors.amber.shade700,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Un devis vous sera envoyé après le diagnostic',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.amber.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Offres d'entretien (visible seulement si type = Entretien)
+              if (_selectedType == 'Entretien') ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Offre d\'entretien',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF0a543d),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: _isLoadingOffers
+                      ? const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(
+                            child: ButtonLoadingIndicator(
+                              color: Color(0xFF0a543d),
+                              size: 8.0,
+                            ),
+                          ),
+                        )
+                      : DropdownButtonFormField<String>(
+                          value: _selectedMaintenanceOffer,
+                          decoration: InputDecoration(
+                            hintText: 'Sélectionnez une offre d\'entretien',
+                            hintStyle: GoogleFonts.poppins(
+                                color: Colors.grey, fontSize: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFF0a543d), width: 2),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: Colors.red, width: 2),
+                            ),
+                            prefixIcon: Container(
+                              margin: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF0a543d),
+                                    Color(0xFF0d6b4d)
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.local_offer_outlined,
+                                  color: Colors.white, size: 20),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
+                          ),
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                          items: _maintenanceOffers.map((offer) {
+                            final title = offer['title'] ?? '';
+                            return DropdownMenuItem<String>(
+                              value: offer['id'].toString(),
+                              child: Text(
+                                title,
+                                style: GoogleFonts.poppins(fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          validator: (value) {
+                            if (_selectedType == 'Entretien' &&
+                                (value == null || value.isEmpty)) {
+                              return 'Veuillez sélectionner une offre d\'entretien';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) {
+                            setState(() => _selectedMaintenanceOffer = value);
+                          },
+                        ),
+                ),
+              ],
+
+              // Sélection du service d'installation (pour type installation)
+              if (_selectedType == 'installation') ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Service d\'installation',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.6),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: _isLoadingInstallationServices
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF0a543d),
+                            ),
+                          ),
+                        )
+                      : DropdownButtonFormField<int>(
+                          value: _selectedInstallationServiceId,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFF0a543d), width: 2),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: Colors.red, width: 2),
+                            ),
+                            hintText: 'Sélectionner un service',
+                            hintStyle: GoogleFonts.poppins(
+                                color: Colors.grey, fontSize: 14),
+                            prefixIcon: Container(
+                              margin: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF0a543d),
+                                    Color(0xFF0d6b4d)
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.ac_unit_outlined,
+                                  color: Colors.white, size: 20),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
+                          ),
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                          dropdownColor: Colors.white,
+                          isExpanded: true,
+                          items: _installationServices.map((service) {
+                            return DropdownMenuItem<int>(
+                              value: service.id,
+                              child: Text(
+                                '${service.title} - ${service.model}',
+                                style: GoogleFonts.poppins(fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            );
+                          }).toList(),
+                          validator: (value) {
+                            if (_selectedType == 'installation' &&
+                                value == null) {
+                              return 'Veuillez sélectionner un service d\'installation';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) {
+                            setState(
+                                () => _selectedInstallationServiceId = value);
+                          },
+                        ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Sélection du service de réparation (pour type repair)
+              if (_selectedType == 'repair') ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Service de réparation',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.6),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: _isLoadingRepairServices
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF0a543d),
+                            ),
+                          ),
+                        )
+                      : DropdownButtonFormField<int>(
+                          value: _selectedRepairServiceId,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFF0a543d), width: 2),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: Colors.red, width: 2),
+                            ),
+                            hintText: 'Sélectionner un service',
+                            hintStyle: GoogleFonts.poppins(
+                                color: Colors.grey, fontSize: 14),
+                            prefixIcon: Container(
+                              margin: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF0a543d),
+                                    Color(0xFF0d6b4d)
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.build_outlined,
+                                  color: Colors.white, size: 20),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
+                          ),
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                          dropdownColor: Colors.white,
+                          isExpanded: true,
+                          items: _repairServices.map((service) {
+                            return DropdownMenuItem<int>(
+                              value: service.id,
+                              child: Text(
+                                '${service.title} - ${service.model}',
+                                style: GoogleFonts.poppins(fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            );
+                          }).toList(),
+                          validator: (value) {
+                            if (_selectedType == 'repair' && value == null) {
+                              return 'Veuillez sélectionner un service de réparation';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) {
+                            setState(() => _selectedRepairServiceId = value);
+                          },
+                        ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Titre (caché pour Entretien, Installation et Réparation)
+              if (_selectedType != 'Entretien' &&
+                  _selectedType != 'installation' &&
+                  _selectedType != 'repair') ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Titre de la demande',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.6),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: TextFormField(
+                    key: const ValueKey(TestKeys.interventionTitleField),
+                    controller: _titleController,
+                    style: GoogleFonts.poppins(fontSize: 14),
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: Color(0xFF0a543d), width: 2),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            const BorderSide(color: Colors.red, width: 2),
+                      ),
+                      hintText: 'Ex: Panne de chaudière',
+                      hintStyle:
+                          GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
+                      prefixIcon: Container(
+                        margin: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.title_outlined,
+                            color: Colors.white, size: 20),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 16),
+                    ),
+                    validator: (value) {
+                      if (_selectedType != 'Entretien' &&
+                          _selectedType != 'installation' &&
+                          _selectedType != 'repair' &&
+                          (value == null || value.trim().isEmpty)) {
+                        return 'Veuillez entrer un titre';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Espacement si le titre est caché
+              if (_selectedType == 'Entretien' ||
+                  _selectedType == 'installation' ||
+                  _selectedType == 'repair')
+                const SizedBox(height: 16),
+
+              // Description avec label et placeholder personnalisés selon le type
               Text(
-                'Emplacement et description du problème',
+                _selectedType == 'installation'
+                    ? 'Emplacement de l\'installation'
+                    : _selectedType == 'Entretien'
+                        ? 'Emplacement et description du problème'
+                        : 'Emplacement et description du problème',
                 style: GoogleFonts.poppins(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -580,13 +1230,17 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               const SizedBox(height: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
                     ),
                   ],
                 ),
@@ -613,13 +1267,23 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                       borderRadius: BorderRadius.circular(12),
                       borderSide: const BorderSide(color: Colors.red, width: 2),
                     ),
-                    hintText:
-                        'Ex: La chaudière est au sous-sol. Elle ne démarre plus depuis ce matin...',
+                    hintText: _selectedType == 'Entretien'
+                        ? 'Ex: Piece de la maison concernée'
+                        : _selectedType == 'repair'
+                            ? 'Parlez-nous du problème et de la pièce de la maison concernée'
+                            : _selectedType == 'installation'
+                                ? 'Dites-nous la pièce de la maison concernée'
+                                : _selectedType == 'diagnostic'
+                                    ? 'Parlez-nous du problème et de la pièce de la maison concernée'
+                                    : 'Ex: La chaudière est au sous-sol. Elle ne démarre plus depuis ce matin...',
                     hintStyle:
                         GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
                     alignLabelWithHint: true,
-                    helperText:
-                        'Précisez l\'emplacement de l\'appareil et le problème',
+                    helperText: _selectedType == 'installation'
+                        ? 'Précisez la pièce où sera installé l\'équipement'
+                        : _selectedType == 'Entretien'
+                            ? 'Précisez la pièce où se trouve l\'équipement'
+                            : 'Précisez l\'emplacement de l\'appareil et le problème',
                     helperStyle: GoogleFonts.poppins(fontSize: 12),
                     helperMaxLines: 2,
                     contentPadding: const EdgeInsets.all(16),
@@ -646,13 +1310,17 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               const SizedBox(height: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
                     ),
                   ],
                 ),
@@ -720,7 +1388,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                   label: Text(
                     _isLoadingLocation
                         ? 'Localisation en cours...'
-                        : 'Utiliser ma position actuelle',
+                        : 'Utiliser ma position actuelle si vous êtes sur place',
                     style: GoogleFonts.poppins(
                       color: const Color(0xFF0a543d),
                       fontWeight: FontWeight.w500,
@@ -743,13 +1411,17 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               const SizedBox(height: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
                     ),
                   ],
                 ),
@@ -910,8 +1582,19 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               // Boutons d'ajout
               Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.white.withOpacity(0.95),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
@@ -967,84 +1650,6 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Priorité
-              Text(
-                'Priorité',
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: DropdownButtonFormField<String>(
-                  key: const ValueKey(TestKeys.interventionPriorityDropdown),
-                  value: _selectedPriority,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: Color(0xFF0a543d), width: 2),
-                    ),
-                    prefixIcon: Container(
-                      margin: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.priority_high_outlined,
-                          color: Colors.white, size: 20),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 16),
-                  ),
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.black87,
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                        value: 'low',
-                        child: Text('Basse', style: GoogleFonts.poppins())),
-                    DropdownMenuItem(
-                        value: 'normal',
-                        child: Text('Normale', style: GoogleFonts.poppins())),
-                    DropdownMenuItem(
-                        value: 'high',
-                        child: Text('Haute', style: GoogleFonts.poppins())),
-                    DropdownMenuItem(
-                        value: 'urgent',
-                        child: Text('Urgente', style: GoogleFonts.poppins())),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _selectedPriority = value!);
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-
               // Date préférée
               Text(
                 'Date souhaitée',
@@ -1057,13 +1662,17 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               const SizedBox(height: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
                     ),
                   ],
                 ),
@@ -1128,13 +1737,17 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
               const SizedBox(height: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.white.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
                     ),
                   ],
                 ),
@@ -1221,13 +1834,11 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                     ),
                   ),
                   icon: _isLoading
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                      ? SizedBox(
+                          width: 45,
+                          child: ButtonLoadingIndicator(
+                            color: Colors.white,
+                            size: 6.0,
                           ),
                         )
                       : const Icon(Icons.send_rounded, size: 24),

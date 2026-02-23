@@ -4,6 +4,7 @@ const { authenticate } = require('../middleware/auth');
 const equipmentController = require('../controllers/equipment/equipmentController');
 
 // Routes pour la gestion des équipements
+router.get('/my-equipments', authenticate, equipmentController.getMyEquipments || equipmentController.listEquipments);
 router.get('/', authenticate, equipmentController.listEquipments);
 router.get('/:id', authenticate, equipmentController.getEquipment);
 router.post('/', authenticate, equipmentController.createEquipment);

@@ -12,6 +12,8 @@ import '../models/contract_model.dart';
 import '../models/maintenance_report_model.dart';
 import '../models/complaint_model.dart';
 import '../models/maintenance_offer_model.dart';
+import 'local_cache_service.dart';
+import 'connectivity_service.dart';
 
 class ApiService {
   // Instance unique
@@ -23,6 +25,10 @@ class ApiService {
   // Token d'authentification
   String? _authToken;
   String? _accessToken;
+
+  // Services pour mode offline
+  final LocalCacheService _cacheService = LocalCacheService();
+  final ConnectivityService _connectivityService = ConnectivityService();
 
   // Clés pour SharedPreferences
   static const String _tokenKey = 'auth_token';
@@ -100,17 +106,26 @@ class ApiService {
   Map<String, String> get _headers {
     final headers = {
       ...ApiConfig.defaultHeaders,
-      ...ApiConfig.corsHeaders,
+      // Note: Les headers CORS ne doivent pas être envoyés par le client
     };
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
-      debugPrint('📤 Authorization header: Bearer $_authToken');
+      // Token masqué pour sécurité - ne jamais logger le token complet
+      debugPrint('📤 Authorization header: Bearer ***TOKEN_PRESENT***');
     }
     if (ApiConfig.debugLogs) {
-      debugPrint('📤 Sending headers: $headers');
+      // Copie des headers sans le token pour le log
+      final safeHeaders = Map<String, String>.from(headers);
+      if (safeHeaders.containsKey('Authorization')) {
+        safeHeaders['Authorization'] = 'Bearer ***REDACTED***';
+      }
+      debugPrint('📤 Sending headers: $safeHeaders');
     }
     return headers;
   }
+
+  /// Getter public pour les headers avec authentification
+  Map<String, String> get headers => _headers;
 
   Map<String, String> get _authHeaders {
     return {
@@ -356,10 +371,21 @@ class ApiService {
     return QuoteContract.fromJson(response['data']);
   }
 
-  Future<void> acceptQuote(String quoteId) async {
+  Future<void> acceptQuote(
+    String quoteId, {
+    DateTime? scheduledDate,
+    bool executeNow = false,
+    String? secondContact,
+  }) async {
     await _handleRequest(
       'POST',
       '/api/customer/quotes/$quoteId/accept',
+      body: {
+        'execute_now': executeNow,
+        if (scheduledDate != null)
+          'scheduled_date': scheduledDate.toIso8601String(),
+        if (secondContact != null) 'second_contact': secondContact,
+      },
       successMessage: 'Devis accepté avec succès',
     );
   }
@@ -502,6 +528,24 @@ class ApiService {
     return response['data'];
   }
 
+  Future<Map<String, dynamic>> createServiceSubscription({
+    required int serviceId,
+    required String serviceType, // 'installation' ou 'repair'
+  }) async {
+    final body = serviceType == 'installation'
+        ? {'installation_service_id': serviceId}
+        : {'repair_service_id': serviceId};
+
+    final response = await _handleRequest(
+      'POST',
+      '/api/customer/subscriptions',
+      body: body,
+      successMessage: 'Souscription créée avec succès',
+    );
+
+    return response['data'];
+  }
+
   Future<List<Map<String, dynamic>>> getSubscriptions() async {
     final response = await _handleRequest(
       'GET',
@@ -510,6 +554,16 @@ class ApiService {
     );
 
     return List<Map<String, dynamic>>.from(response['data']);
+  }
+
+  /// Récupérer les souscriptions avec paiement en attente
+  Future<List<Map<String, dynamic>>> getPendingSubscriptionPayments() async {
+    final subscriptions = await getSubscriptions();
+    // Filtrer les souscriptions avec payment_status = 'pending' et status = 'active'
+    return subscriptions
+        .where(
+            (s) => s['payment_status'] == 'pending' && s['status'] == 'active')
+        .toList();
   }
 
   Future<Map<String, dynamic>> getSubscriptionDetails(
@@ -715,6 +769,14 @@ class ApiService {
     );
   }
 
+  // Méthode pour supprimer son propre compte (soft delete)
+  Future<Map<String, dynamic>> deleteMyAccount() async {
+    return await _handleRequest(
+      'DELETE',
+      '/api/auth/delete-account',
+    );
+  }
+
   // Méthode pour récupérer les statistiques du tableau de bord
   Future<Map<String, dynamic>> getDashboardStats() async {
     return await _handleRequest(
@@ -836,6 +898,21 @@ class ApiService {
     );
   }
 
+  // Méthode pour récupérer les détails d'une commande
+  Future<Map<String, dynamic>?> getOrderDetails(int orderId) async {
+    try {
+      final response = await _handleRequest(
+        'GET',
+        '/api/customer/orders/$orderId',
+        successMessage: 'Commande récupérée',
+      );
+      return response['data'];
+    } catch (e) {
+      debugPrint('❌ Erreur récupération commande: $e');
+      rethrow;
+    }
+  }
+
   // Méthode pour récupérer les factures (invoices)
   Future<Map<String, dynamic>> getInvoices() async {
     return await _handleRequest(
@@ -863,14 +940,33 @@ class ApiService {
     }
   }
 
-  // Traiter un paiement
+  // Traiter un paiement (ancien système)
   Future<Map<String, dynamic>> processPayment(
       Map<String, dynamic> paymentData) async {
     return await _handleRequest(
       'POST',
-      '/api/payments/process',
+      '/api/payments/initiate',
       body: paymentData,
       successMessage: 'Paiement traité avec succès',
+    );
+  }
+
+  // Initialiser un paiement FineoPay
+  Future<Map<String, dynamic>> initializeFineoPay(int orderId) async {
+    return await _handleRequest(
+      'POST',
+      '/api/payments/fineopay/initialize',
+      body: {'orderId': orderId},
+      successMessage: 'Paiement FineoPay initialisé',
+    );
+  }
+
+  // Vérifier le statut d'un paiement FineoPay
+  Future<Map<String, dynamic>> checkFineoPayStatus(String reference) async {
+    return await _handleRequest(
+      'GET',
+      '/api/payments/fineopay/status/$reference',
+      successMessage: 'Statut vérifié',
     );
   }
 
@@ -1038,6 +1134,18 @@ class ApiService {
     );
   }
 
+  // Annuler une intervention (customer)
+  Future<Map<String, dynamic>> cancelIntervention(int interventionId) async {
+    return await _handleRequest(
+      'PUT',
+      '/api/interventions/$interventionId',
+      body: {
+        'status': 'cancelled',
+      },
+      successMessage: 'Intervention annulée avec succès',
+    );
+  }
+
   // Noter une intervention (customer rating)
   Future<Map<String, dynamic>> rateIntervention(
     int interventionId,
@@ -1053,6 +1161,41 @@ class ApiService {
       },
       successMessage: 'Évaluation enregistrée',
     );
+  }
+
+  // Récupérer les interventions terminées non notées
+  Future<List<Map<String, dynamic>>> getUnratedInterventions() async {
+    print('🔍 Appel API getUnratedInterventions...');
+    try {
+      final response = await _handleRequest(
+        'GET',
+        '/api/interventions/unrated',
+      );
+      print(
+          '✅ Réponse API unrated: ${response['data']?.length ?? 0} interventions');
+      print('📊 Données: ${response['data']}');
+      return List<Map<String, dynamic>>.from(response['data'] ?? []);
+    } catch (e) {
+      print('❌ Erreur getUnratedInterventions: $e');
+      rethrow;
+    }
+  }
+
+  // Récupérer les interventions avec diagnostic non payé
+  Future<List<Map<String, dynamic>>> getPendingDiagnosticPayments() async {
+    print('🔍 Appel API getPendingDiagnosticPayments...');
+    try {
+      final response = await _handleRequest(
+        'GET',
+        '/api/interventions/pending-diagnostic-payment',
+      );
+      print(
+          '💳 Réponse API pending-diagnostic: ${response['data']?.length ?? 0} interventions');
+      return List<Map<String, dynamic>>.from(response['data'] ?? []);
+    } catch (e) {
+      print('❌ Erreur getPendingDiagnosticPayments: $e');
+      rethrow;
+    }
   }
 
   // Télécharger la facture PDF d'une commande
@@ -1086,8 +1229,18 @@ class ApiService {
       if (response.statusCode == 200) {
         return response.bodyBytes;
       } else {
-        throw Exception(
-            'Erreur lors du téléchargement: ${response.statusCode}');
+        // Essayer d'extraire le message d'erreur du serveur
+        String errorMessage =
+            'Erreur lors du téléchargement: ${response.statusCode}';
+        try {
+          final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
+          if (jsonResponse['message'] != null) {
+            errorMessage = jsonResponse['message'];
+          }
+        } catch (_) {
+          // Si le parsing échoue, garder le message par défaut
+        }
+        throw Exception(errorMessage);
       }
     } catch (e) {
       if (ApiConfig.debugLogs) {
@@ -1136,16 +1289,111 @@ class ApiService {
     final queryParams = <String, String>{};
     if (status != null) queryParams['status'] = status;
 
-    return await _handleRequest(
-      'GET',
-      '/api/technician/interventions',
-      queryParams: queryParams,
-      successMessage: 'Interventions récupérées',
-    );
+    // Vérifier si en ligne
+    if (!_connectivityService.isConnected) {
+      debugPrint('📦 Mode offline - Lecture depuis cache local');
+      final cachedInterventions = await _cacheService.getCachedInterventions();
+
+      // Filtrer par statut si nécessaire (les données sont déjà décodées)
+      List<Map<String, dynamic>> filteredData = cachedInterventions;
+      if (status != null) {
+        filteredData = cachedInterventions
+            .where((intervention) {
+              // Vérifier que l'intervention n'est pas null et contient le champ status
+              if (intervention == null) return false;
+              final interventionStatus = intervention['status'];
+              return interventionStatus != null && interventionStatus == status;
+            })
+            .cast<Map<String, dynamic>>()
+            .toList();
+      }
+
+      return {
+        'success': true,
+        'data': filteredData,
+        'message':
+            'Interventions chargées depuis le cache (${filteredData.length})',
+        'fromCache': true,
+      };
+    }
+
+    try {
+      // Appel API normal si en ligne
+      final response = await _handleRequest(
+        'GET',
+        '/api/technician/interventions',
+        queryParams: queryParams,
+        successMessage: 'Interventions récupérées',
+      );
+
+      // Mettre en cache si succès
+      if (response['success'] == true && response['data'] != null) {
+        final interventions = response['data'] as List;
+        debugPrint('💾 Mise en cache de ${interventions.length} interventions');
+
+        // Nettoyer le cache existant avant de le remplir
+        for (var intervention in interventions) {
+          await _cacheService.cacheIntervention(intervention);
+        }
+      }
+
+      return response;
+    } catch (e) {
+      // En cas d'erreur réseau, fallback sur le cache
+      debugPrint('⚠️ Erreur API, fallback cache: $e');
+      final cachedInterventions = await _cacheService.getCachedInterventions();
+
+      if (cachedInterventions.isEmpty) {
+        rethrow; // Si pas de cache, propager l'erreur
+      }
+
+      // Filtrer par statut si nécessaire (les données sont déjà décodées)
+      List<Map<String, dynamic>> filteredData = cachedInterventions;
+      if (status != null) {
+        filteredData = cachedInterventions
+            .where((intervention) {
+              // Vérifier que l'intervention n'est pas null et contient le champ status
+              if (intervention == null) return false;
+              final interventionStatus = intervention['status'];
+              return interventionStatus != null && interventionStatus == status;
+            })
+            .cast<Map<String, dynamic>>()
+            .toList();
+      }
+
+      return {
+        'success': true,
+        'data': filteredData,
+        'message': 'Interventions chargées depuis le cache (mode dégradé)',
+        'fromCache': true,
+      };
+    }
   }
 
   // Accepter une intervention
   Future<Map<String, dynamic>> acceptIntervention(int interventionId) async {
+    // Si offline, ajouter à la queue
+    if (!_connectivityService.isConnected) {
+      debugPrint('📦 Mode offline - Ajout acceptation à la queue');
+
+      // Mettre à jour le cache local
+      await _cacheService.updateCachedIntervention(
+        interventionId,
+        {'status': 'accepted'},
+      );
+
+      await _cacheService.addToSyncQueue(
+        'intervention_status',
+        interventionId,
+        {'status': 'accepted', 'action': 'accept'},
+      );
+      return {
+        'success': true,
+        'message': 'Acceptation enregistrée (sera synchronisée)',
+        'queued': true,
+      };
+    }
+
     return await _handleRequest(
       'POST',
       '/api/interventions/$interventionId/accept',
@@ -1156,6 +1404,28 @@ class ApiService {
   // Signaler "En route"
   Future<Map<String, dynamic>> markInterventionOnTheWay(
       int interventionId) async {
+    // Si offline, ajouter à la queue
+    if (!_connectivityService.isConnected) {
+      debugPrint('📦 Mode offline - Ajout "En route" à la queue');
+
+      // Mettre à jour le cache local
+      await _cacheService.updateCachedIntervention(
+        interventionId,
+        {'status': 'on_the_way'},
+      );
+
+      await _cacheService.addToSyncQueue(
+        'intervention_status',
+        interventionId,
+        {'status': 'on_the_way', 'action': 'on-the-way'},
+      );
+      return {
+        'success': true,
+        'message': 'Statut "En route" enregistré (sera synchronisé)',
+        'queued': true,
+      };
+    }
+
     return await _handleRequest(
       'POST',
       '/api/interventions/$interventionId/on-the-way',
@@ -1166,6 +1436,27 @@ class ApiService {
   // Signaler "Arrivé sur les lieux"
   Future<Map<String, dynamic>> markInterventionArrived(
       int interventionId) async {
+    // Si offline, ajouter à la queue
+    if (!_connectivityService.isConnected) {
+      debugPrint('📦 Mode offline - Ajout "Arrivé" à la queue');
+
+      // Mettre à jour le cache local
+      await _cacheService.updateCachedIntervention(
+        interventionId,
+        {'status': 'arrived'},
+      );
+      await _cacheService.addToSyncQueue(
+        'intervention_status',
+        interventionId,
+        {'status': 'arrived', 'action': 'arrived'},
+      );
+      return {
+        'success': true,
+        'message': 'Statut "Arrivé" enregistré (sera synchronisé)',
+        'queued': true,
+      };
+    }
+
     return await _handleRequest(
       'POST',
       '/api/interventions/$interventionId/arrived',
@@ -1175,6 +1466,28 @@ class ApiService {
 
   // Démarrer l'intervention
   Future<Map<String, dynamic>> startIntervention(int interventionId) async {
+    // Si offline, ajouter à la queue
+    if (!_connectivityService.isConnected) {
+      debugPrint('📦 Mode offline - Ajout "Démarrer" à la queue');
+
+      // Mettre à jour le cache local
+      await _cacheService.updateCachedIntervention(
+        interventionId,
+        {'status': 'in_progress'},
+      );
+
+      await _cacheService.addToSyncQueue(
+        'intervention_status',
+        interventionId,
+        {'status': 'in_progress', 'action': 'start'},
+      );
+      return {
+        'success': true,
+        'message': 'Démarrage enregistré (sera synchronisé)',
+        'queued': true,
+      };
+    }
+
     return await _handleRequest(
       'POST',
       '/api/interventions/$interventionId/start',
@@ -1184,6 +1497,28 @@ class ApiService {
 
   // Terminer une intervention
   Future<Map<String, dynamic>> completeIntervention(int interventionId) async {
+    // Si offline, ajouter à la queue
+    if (!_connectivityService.isConnected) {
+      debugPrint('📦 Mode offline - Ajout "Terminer" à la queue');
+
+      // Mettre à jour le cache local
+      await _cacheService.updateCachedIntervention(
+        interventionId,
+        {'status': 'completed'},
+      );
+
+      await _cacheService.addToSyncQueue(
+        'intervention_status',
+        interventionId,
+        {'status': 'completed', 'action': 'complete'},
+      );
+      return {
+        'success': true,
+        'message': 'Finalisation enregistrée (sera synchronisée)',
+        'queued': true,
+      };
+    }
+
     return await _handleRequest(
       'POST',
       '/api/interventions/$interventionId/complete',
@@ -1196,6 +1531,58 @@ class ApiService {
     int interventionId,
     Map<String, dynamic> reportData,
   ) async {
+    // Mode offline: Enregistrer localement et mettre en queue
+    if (!_connectivityService.isConnected) {
+      debugPrint('📦 Mode offline - Ajout rapport à la queue');
+
+      try {
+        // Mettre à jour le cache local avec les données du rapport
+        await _cacheService.updateCachedIntervention(
+          interventionId,
+          {
+            'report_data': reportData,
+            'report_submitted_at': DateTime.now().toIso8601String(),
+            'status': 'completed',
+          },
+        );
+
+        // Cache les photos localement si présentes
+        final List<String> imagePaths = (reportData['photos'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [];
+
+        if (imagePaths.isNotEmpty) {
+          debugPrint(
+              '📷 Cache de ${imagePaths.length} photo(s) pour sync ultérieure');
+          for (final photoPath in imagePaths) {
+            final fileName = photoPath.split('/').last;
+            await _cacheService.cachePhoto(interventionId, photoPath, fileName);
+          }
+        }
+
+        // Ajouter à la queue de synchronisation
+        await _cacheService.addToSyncQueue(
+          'report_upload',
+          interventionId,
+          reportData,
+        );
+
+        debugPrint('✅ Rapport enregistré localement et ajouté à la queue');
+
+        return {
+          'success': true,
+          'message':
+              'Rapport enregistré. Il sera synchronisé automatiquement quand la connexion sera rétablie.',
+          'queued': true,
+        };
+      } catch (e) {
+        debugPrint('❌ Erreur cache rapport offline: $e');
+        rethrow;
+      }
+    }
+
+    // Mode online: Upload normal
     try {
       if (_authToken == null) {
         await loadSavedToken();
@@ -1224,6 +1611,13 @@ class ApiService {
         request.fields['duration'] = reportData['duration']?.toString() ?? '0';
         request.fields['observations'] =
             reportData['observations']?.toString() ?? '';
+
+        // Ajouter les mesures techniques
+        request.fields['pression'] = reportData['pression']?.toString() ?? '';
+        request.fields['temperature'] =
+            reportData['temperature']?.toString() ?? '';
+        request.fields['intensite'] = reportData['intensite']?.toString() ?? '';
+        request.fields['tension'] = reportData['tension']?.toString() ?? '';
 
         // Ajouter materials_used en JSON
         if (reportData['materials_used'] != null) {

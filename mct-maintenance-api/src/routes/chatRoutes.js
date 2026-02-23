@@ -357,4 +357,43 @@ router.delete('/history', authenticate, async (req, res) => {
   }
 });
 
+// Supprimer une conversation spécifique (admin uniquement)
+router.delete('/conversation/:userId', authenticate, async (req, res) => {
+  try {
+    // Vérifier que l'utilisateur est admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Accès refusé. Seuls les admins peuvent supprimer des conversations.'
+      });
+    }
+
+    const targetUserId = parseInt(req.params.userId);
+
+    // Supprimer tous les messages liés à cet utilisateur
+    const deletedCount = await ChatMessage.destroy({
+      where: {
+        [Op.or]: [
+          { sender_id: targetUserId },
+          { recipient_id: targetUserId }
+        ]
+      }
+    });
+
+    console.log(`🗑️ [Chat] Admin ${req.user.id} a supprimé ${deletedCount} message(s) de l'utilisateur ${targetUserId}`);
+
+    res.json({
+      success: true,
+      message: 'Conversation supprimée avec succès',
+      deletedCount
+    });
+  } catch (error) {
+    console.error('Erreur suppression conversation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la suppression de la conversation'
+    });
+  }
+});
+
 module.exports = router;

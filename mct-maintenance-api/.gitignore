@@ -1,43 +1,38 @@
-# Dependencies
-node_modules/
-package-lock.json
 
-# Environment files
+!uploads/.gitkeep
+!uploads/avatars/.gitkeep
+!uploads/documents/.gitkeep
+!uploads/equipments/.gitkeep
+!uploads/products/.gitkeep
+.DS_Store
 .env
 .env.local
 .env.production
-
-# Database
+.idea/
+.vscode/
+*.bak*
 *.db
+*.log
 *.sqlite
 *.sqlite3
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-
-# Uploads (sauf structure)
-uploads/**/*
-!uploads/.gitkeep
-!uploads/avatars/.gitkeep
-!uploads/products/.gitkeep
-!uploads/equipments/.gitkeep
-!uploads/documents/.gitkeep
-
-# IDE
-.vscode/
-.idea/
-*.swp
 *.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-coverage/
-
+*.swp
 # Build
-dist/
+# Database
+# Dependencies
+# Environment files
+# IDE
+# Logs
+# OS
+# Testing
+# Uploads (sauf structure)
 build/
+coverage/
+dist/
+logs/
+mct-maintenance-api/.env.bak2
+node_modules/
+npm-debug.log*
+package-lock.json
+Thumbs.db
+uploads/**/*

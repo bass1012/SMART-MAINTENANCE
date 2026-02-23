@@ -12,6 +12,12 @@ exports.listUsers = async (req, res, next) => {
     const where = {};
     if (role) where.role = role;
     if (status) where.status = status;
+    
+    // Exclure les utilisateurs supprimés par défaut
+    if (!status) {
+      where.status = { [Op.ne]: 'deleted' };
+    }
+    
     if (search) {
       // Utilisation de Op.like pour compatibilité SQLite (pas de iLike natif)
       const pattern = `%${search}%`;
@@ -120,7 +126,39 @@ exports.deleteUser = async (req, res, next) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
-    await user.destroy();
+    
+    // 🔒 RESTRICTION: Pour supprimer un admin ou manager, l'admin doit l'avoir créé lui-même
+    if (user.role === 'admin' || user.role === 'manager') {
+      const currentUser = req.user; // L'utilisateur connecté via middleware authenticate
+      
+      if (!currentUser || currentUser.role !== 'admin') {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Seul un administrateur peut supprimer un compte admin ou manager' 
+        });
+      }
+      
+      // Vérifier que l'admin actuel a créé cet utilisateur
+      if (user.created_by !== currentUser.id) {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Vous ne pouvez supprimer que les comptes admin/manager que vous avez créés' 
+        });
+      }
+      
+      console.log(`🗑️ Admin ${currentUser.id} supprime le ${user.role} ${user.id} qu'il a créé`);
+    }
+    
+    // Soft delete: change status to 'deleted' instead of destroying
+    user.status = 'deleted';
+    await user.save();
+    
+    // Clear from cache if exists
+    const { cache } = require('../../config/redis');
+    if (cache) {
+      await cache.del(`user:${user.id}`);
+    }
+    
     return res.json({ success: true, message: 'User deleted' });
   } catch (err) {
     next(err);

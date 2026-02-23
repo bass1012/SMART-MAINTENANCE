@@ -10,6 +10,7 @@ class SnackBarHelper {
     String? emoji,
     SnackBarAction? action,
   }) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       _buildSnackBar(
         message: emoji != null ? '$emoji $message' : '✅ $message',
@@ -28,6 +29,7 @@ class SnackBarHelper {
     Duration duration = const Duration(seconds: 4),
     SnackBarAction? action,
   }) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       _buildSnackBar(
         message: '❌ $message',
@@ -46,6 +48,7 @@ class SnackBarHelper {
     Duration duration = const Duration(seconds: 3),
     String? emoji,
   }) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       _buildSnackBar(
         message: emoji != null ? '$emoji $message' : 'ℹ️ $message',
@@ -62,6 +65,7 @@ class SnackBarHelper {
     String message, {
     Duration duration = const Duration(seconds: 3),
   }) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       _buildSnackBar(
         message: '⚠️ $message',
@@ -78,6 +82,7 @@ class SnackBarHelper {
     String message, {
     Duration duration = const Duration(seconds: 10),
   }) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -123,6 +128,7 @@ class SnackBarHelper {
     Duration duration = const Duration(seconds: 3),
     SnackBarAction? action,
   }) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       _buildSnackBar(
         message: message,

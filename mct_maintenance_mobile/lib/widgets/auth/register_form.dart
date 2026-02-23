@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../utils/snackbar_helper.dart';
+import '../../screens/auth/email_verification_screen.dart';
+import '../../widgets/common/loading_indicator.dart';
 
 class RegisterForm extends StatefulWidget {
   const RegisterForm({super.key});
@@ -29,7 +31,83 @@ class _RegisterFormState extends State<RegisterForm> {
   String? _city;
   String? _commune;
 
+  // Méthode de vérification: SMS par défaut
+  final String _verificationMethod = 'sms';
+
   bool _isLoading = false;
+  int _currentStep = 0; // 0: Informations personnelles, 1: Mot de passe
+
+  // Valider la section 1
+  bool _validateSection1() {
+    // Validation civilité
+    if (_gender == null) {
+      _showError('Veuillez sélectionner votre civilité');
+      return false;
+    }
+
+    // Validation nom
+    if (_lastNameController.text.trim().isEmpty) {
+      _showError('Veuillez entrer votre nom');
+      return false;
+    }
+    if (_lastNameController.text.trim().length < 2) {
+      _showError('Le nom doit contenir au moins 2 caractères');
+      return false;
+    }
+
+    // Validation prénom
+    if (_firstNameController.text.trim().isEmpty) {
+      _showError('Veuillez entrer votre prénom');
+      return false;
+    }
+    if (_firstNameController.text.trim().length < 2) {
+      _showError('Le prénom doit contenir au moins 2 caractères');
+      return false;
+    }
+
+    // Validation téléphone
+    if (_phoneController.text.trim().isEmpty) {
+      _showError('Veuillez entrer votre numéro de téléphone');
+      return false;
+    }
+    final phoneRegex = RegExp(r'^[+]?[0-9]{8,15}$');
+    final cleanedPhone = _phoneController.text.replaceAll(RegExp(r'[\s-]'), '');
+    if (!phoneRegex.hasMatch(cleanedPhone)) {
+      _showError('Numéro de téléphone invalide');
+      return false;
+    }
+
+    // Email optionnel mais valide si renseigné
+    if (_emailController.text.trim().isNotEmpty) {
+      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+      if (!emailRegex.hasMatch(_emailController.text.trim())) {
+        _showError('Veuillez entrer une adresse email valide');
+        return false;
+      }
+    }
+
+    // Validation ville
+    if (_city == null) {
+      _showError('Veuillez sélectionner votre ville');
+      return false;
+    }
+
+    return true;
+  }
+
+  void _nextStep() {
+    if (_currentStep == 0) {
+      if (_validateSection1()) {
+        setState(() => _currentStep = 1);
+      }
+    }
+  }
+
+  void _previousStep() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+    }
+  }
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
@@ -60,27 +138,69 @@ class _RegisterFormState extends State<RegisterForm> {
         'commune': _commune,
         'password': _passwordController.text,
         'role': 'customer',
+        'verification_method': _verificationMethod, // 'auto', 'sms', ou 'email'
       });
 
       if (mounted) {
         // Cacher le snackbar de chargement
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-        // Sauvegarder le token et les données utilisateur
-        if (response['data'] != null) {
-          final data = response['data'];
+        // Vérification SMS uniquement (email désactivé)
+        final verificationMethod = response['verificationMethod'] ?? 'email';
+        final requiresSmsVerification = verificationMethod == 'sms' &&
+            (response['requiresVerification'] == true ||
+                response['verificationMethod'] != null);
 
-          // Sauvegarder le token d'authentification
-          if (data['accessToken'] != null) {
-            await api.setAuthToken(data['accessToken']);
-            debugPrint('✅ Token sauvegardé après inscription');
+        if (requiresSmsVerification) {
+          // Sauvegarder le token directement
+          if (response['accessToken'] != null) {
+            await api.setAuthToken(response['accessToken']);
+            debugPrint('✅ Token sauvegardé pour vérification SMS');
           }
 
           // Sauvegarder les données utilisateur
-          if (data['user'] != null) {
-            await api.saveUserData(data['user']);
+          if (response['user'] != null) {
+            await api.saveUserData(response['user']);
             debugPrint('✅ Données utilisateur sauvegardées');
           }
+
+          final userPhone = response['user']?['phone']?.toString() ??
+              _phoneController.text.trim();
+
+          SnackBarHelper.showInfo(
+            context,
+            'Un code de vérification a été envoyé par SMS au $userPhone',
+            duration: const Duration(seconds: 3),
+          );
+
+          // Rediriger vers l'écran de vérification SMS
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EmailVerificationScreen(
+                  email: userPhone, // Numéro de téléphone pour SMS
+                  userId: response['user']?['id'] ?? 0,
+                ),
+              ),
+            );
+          }
+          return;
+        }
+
+        // Pas de vérification email - sauvegarder directement
+        final accessToken =
+            response['accessToken'] ?? response['data']?['accessToken'];
+        if (accessToken != null) {
+          await api.setAuthToken(accessToken);
+          debugPrint('✅ Token sauvegardé après inscription');
+        }
+
+        final userData = response['user'] ?? response['data']?['user'];
+        if (userData != null) {
+          await api.saveUserData(userData);
+          debugPrint('✅ Données utilisateur sauvegardées');
         }
 
         // Afficher un message de succès
@@ -243,389 +363,13 @@ class _RegisterFormState extends State<RegisterForm> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            // Titre du formulaire
-            Text(
-              'Informations personnelles',
-              style: GoogleFonts.poppins(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF0a543d),
-              ),
-              textAlign: TextAlign.center,
-            ),
+            // Indicateur d'étapes
+            _buildStepIndicator(),
             const SizedBox(height: 24),
-            // Champ Prénom
-            _buildModernTextField(
-              controller: _firstNameController,
-              label: 'Prénom',
-              icon: Icons.person_outline,
-              textCapitalization: TextCapitalization.words,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Veuillez entrer votre prénom';
-                }
-                if (value.length < 2) {
-                  return 'Le prénom doit contenir au moins 2 caractères';
-                }
-                return null;
-              },
-            ),
 
-            const SizedBox(height: 14),
-
-            // Champ Nom
-            _buildModernTextField(
-              controller: _lastNameController,
-              label: 'Nom',
-              icon: Icons.person,
-              textCapitalization: TextCapitalization.words,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Veuillez entrer votre nom';
-                }
-                if (value.length < 2) {
-                  return 'Le nom doit contenir au moins 2 caractères';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Email
-            _buildModernTextField(
-              controller: _emailController,
-              label: 'Email',
-              icon: Icons.email_outlined,
-              keyboardType: TextInputType.emailAddress,
-              hintText: 'exemple@domaine.com',
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Veuillez entrer votre adresse email';
-                }
-                final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-                if (!emailRegex.hasMatch(value)) {
-                  return 'Veuillez entrer une adresse email valide';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Entreprise (optionnel)
-            _buildModernTextField(
-              controller: _companyNameController,
-              label: 'Entreprise (optionnel)',
-              icon: Icons.business_outlined,
-              textCapitalization: TextCapitalization.words,
-              hintText: 'Nom de votre entreprise',
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Type d'entreprise
-            _buildModernDropdown(
-              label: 'Type d\'entreprise (optionnel)',
-              icon: Icons.category_outlined,
-              value: _companyType,
-              items: [
-                DropdownMenuItem(
-                    value: 'particulier',
-                    child: Text('Particulier',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'sante',
-                    child: Text('Santé',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'commerce',
-                    child: Text('Commerce',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'entreprise',
-                    child: Text('Entreprise',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'administration',
-                    child: Text('Administration',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-              ],
-              onChanged: (value) => setState(() => _companyType = value),
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Sexe
-            _buildModernDropdown(
-              label: 'Sexe (optionnel)',
-              icon: Icons.wc_outlined,
-              value: _gender,
-              items: [
-                DropdownMenuItem(
-                    value: 'homme',
-                    child: Text('Homme',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'femme',
-                    child: Text('Femme',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'autre',
-                    child: Text('Autre',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-              ],
-              onChanged: (value) => setState(() => _gender = value),
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Téléphone
-            _buildModernTextField(
-              controller: _phoneController,
-              label: 'Téléphone',
-              icon: Icons.phone_outlined,
-              keyboardType: TextInputType.phone,
-              hintText: '+225 XX XX XX XX XX',
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Veuillez entrer votre numéro de téléphone';
-                }
-                final phoneRegex = RegExp(r'^[+]?[0-9]{8,15}$');
-                final cleanedPhone = value.replaceAll(RegExp(r'[\s-]'), '');
-                if (!phoneRegex.hasMatch(cleanedPhone)) {
-                  return 'Numéro de téléphone invalide';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Pays
-            _buildModernDropdown(
-              label: 'Pays',
-              icon: Icons.flag_outlined,
-              value: _country,
-              items: [
-                DropdownMenuItem(
-                    value: 'Côte d\'Ivoire',
-                    child: Text('Côte d\'Ivoire',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'Mali',
-                    child:
-                        Text('Mali', style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'Burkina Faso',
-                    child: Text('Burkina Faso',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-              ],
-              onChanged: (value) => setState(() {
-                _country = value!;
-                _city = null;
-                _commune = null;
-              }),
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Ville
-            _buildModernDropdown(
-              label: 'Ville (optionnel)',
-              icon: Icons.location_city_outlined,
-              value: _city,
-              items: [
-                DropdownMenuItem(
-                    value: 'Abidjan',
-                    child: Text('Abidjan',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'Bouaké',
-                    child: Text('Bouaké',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'Daloa',
-                    child: Text('Daloa',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'Yamoussoukro',
-                    child: Text('Yamoussoukro',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'San-Pédro',
-                    child: Text('San-Pédro',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'Korhogo',
-                    child: Text('Korhogo',
-                        style: GoogleFonts.poppins(fontSize: 14))),
-                DropdownMenuItem(
-                    value: 'Man',
-                    child:
-                        Text('Man', style: GoogleFonts.poppins(fontSize: 14))),
-              ],
-              onChanged: (value) => setState(() {
-                _city = value;
-                if (value != 'Abidjan') _commune = null;
-              }),
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Commune (seulement si Abidjan)
-            if (_city == 'Abidjan')
-              _buildModernDropdown(
-                label: 'Commune',
-                icon: Icons.location_on_outlined,
-                value: _commune,
-                items: [
-                  DropdownMenuItem(
-                      value: 'Abobo',
-                      child: Text('Abobo',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Adjamé',
-                      child: Text('Adjamé',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Attécoubé',
-                      child: Text('Attécoubé',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Cocody',
-                      child: Text('Cocody',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Koumassi',
-                      child: Text('Koumassi',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Marcory',
-                      child: Text('Marcory',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Plateau',
-                      child: Text('Plateau',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Port-Bouët',
-                      child: Text('Port-Bouët',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Treichville',
-                      child: Text('Treichville',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                  DropdownMenuItem(
-                      value: 'Yopougon',
-                      child: Text('Yopougon',
-                          style: GoogleFonts.poppins(fontSize: 14))),
-                ],
-                onChanged: (value) => setState(() => _commune = value),
-              ),
-
-            if (_city == 'Abidjan') const SizedBox(height: 14),
-
-            // Champ Mot de passe
-            _buildModernTextField(
-              controller: _passwordController,
-              label: 'Mot de passe',
-              icon: Icons.lock_outline,
-              obscureText: true,
-              hintText: '••••••••',
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Veuillez entrer un mot de passe';
-                }
-                if (value.length < 6) {
-                  return 'Le mot de passe doit contenir au moins 6 caractères';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 14),
-
-            // Champ Confirmation mot de passe
-            _buildModernTextField(
-              controller: _confirmPasswordController,
-              label: 'Confirmer le mot de passe',
-              icon: Icons.lock_outline,
-              obscureText: true,
-              hintText: '••••••••',
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Veuillez confirmer votre mot de passe';
-                }
-                if (value != _passwordController.text) {
-                  return 'Les mots de passe ne correspondent pas';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 28),
-
-            // Bouton de soumission
-            SizedBox(
-              height: 56,
-              child: _isLoading
-                  ? Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0a543d).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const CircularProgressIndicator(
-                          color: Color(0xFF0a543d),
-                          strokeWidth: 3,
-                        ),
-                      ),
-                    )
-                  : ElevatedButton(
-                      onPressed: _register,
-                      style: ElevatedButton.styleFrom(
-                        elevation: 0,
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Ink(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFF0a543d),
-                              Color(0xFF0d6b4d),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF0a543d).withOpacity(0.4),
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Container(
-                          alignment: Alignment.center,
-                          child: Text(
-                            'Créer mon compte',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
+            // Afficher la section appropriée selon l'étape
+            if (_currentStep == 0) _buildSection1(),
+            if (_currentStep == 1) _buildSection2(),
 
             const SizedBox(height: 24),
 
@@ -692,6 +436,517 @@ class _RegisterFormState extends State<RegisterForm> {
           ],
         ),
       ),
+    );
+  }
+
+  // Indicateur d'étapes
+  Widget _buildStepIndicator() {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _currentStep >= 0
+                      ? const Color(0xFF0a543d)
+                      : Colors.grey.shade300,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: _currentStep > 0
+                      ? const Icon(Icons.check, color: Colors.white, size: 20)
+                      : Text(
+                          '1',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Informations',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: _currentStep >= 0
+                      ? const Color(0xFF0a543d)
+                      : Colors.grey.shade600,
+                  fontWeight:
+                      _currentStep == 0 ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Container(
+            height: 2,
+            color: _currentStep >= 1
+                ? const Color(0xFF0a543d)
+                : Colors.grey.shade300,
+          ),
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _currentStep >= 1
+                      ? const Color(0xFF0a543d)
+                      : Colors.grey.shade300,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '2',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Mot de passe',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: _currentStep >= 1
+                      ? const Color(0xFF0a543d)
+                      : Colors.grey.shade600,
+                  fontWeight:
+                      _currentStep == 1 ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Section 1: Informations personnelles
+  Widget _buildSection1() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Titre
+        Text(
+          'Informations personnelles',
+          style: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF0a543d),
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+
+        // Civilité
+        _buildModernDropdown(
+          label: 'Civilité *',
+          icon: Icons.person_outline,
+          value: _gender,
+          items: [
+            DropdownMenuItem(
+                value: 'homme',
+                child: Text('M.', style: GoogleFonts.poppins(fontSize: 14))),
+            DropdownMenuItem(
+                value: 'femme',
+                child: Text('Mme', style: GoogleFonts.poppins(fontSize: 14))),
+            DropdownMenuItem(
+                value: 'autre',
+                child: Text('Mlle', style: GoogleFonts.poppins(fontSize: 14))),
+          ],
+          onChanged: (value) => setState(() => _gender = value),
+        ),
+        const SizedBox(height: 14),
+
+        // Nom
+        _buildModernTextField(
+          controller: _lastNameController,
+          label: 'Nom *',
+          icon: Icons.person,
+          textCapitalization: TextCapitalization.words,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Veuillez entrer votre nom';
+            }
+            if (value.length < 2) {
+              return 'Le nom doit contenir au moins 2 caractères';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 14),
+
+        // Prénom
+        _buildModernTextField(
+          controller: _firstNameController,
+          label: 'Prénom *',
+          icon: Icons.person_outline,
+          textCapitalization: TextCapitalization.words,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Veuillez entrer votre prénom';
+            }
+            if (value.length < 2) {
+              return 'Le prénom doit contenir au moins 2 caractères';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 14),
+
+        // Téléphone
+        _buildModernTextField(
+          controller: _phoneController,
+          label: 'Numéro de téléphone *',
+          icon: Icons.phone_outlined,
+          keyboardType: TextInputType.phone,
+          hintText: '225 XX XX XX XX XX',
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Veuillez entrer votre numéro de téléphone';
+            }
+            final phoneRegex = RegExp(r'^[+]?[0-9]{8,15}$');
+            final cleanedPhone = value.replaceAll(RegExp(r'[\s-]'), '');
+            if (!phoneRegex.hasMatch(cleanedPhone)) {
+              return 'Numéro de téléphone invalide';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 14),
+
+        // Email (optionnel)
+        _buildModernTextField(
+          controller: _emailController,
+          label: 'Email (optionnel)',
+          icon: Icons.email_outlined,
+          keyboardType: TextInputType.emailAddress,
+          hintText: 'exemple@domaine.com',
+          validator: (value) {
+            if (value != null && value.isNotEmpty) {
+              final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+              if (!emailRegex.hasMatch(value)) {
+                return 'Veuillez entrer une adresse email valide';
+              }
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 14),
+
+        // Ville
+        _buildModernDropdown(
+          label: 'Ville *',
+          icon: Icons.location_city_outlined,
+          value: _city,
+          items: [
+            DropdownMenuItem(
+                value: 'Abidjan',
+                child:
+                    Text('Abidjan', style: GoogleFonts.poppins(fontSize: 14))),
+            DropdownMenuItem(
+                value: 'Bouaké',
+                child:
+                    Text('Bouaké', style: GoogleFonts.poppins(fontSize: 14))),
+            DropdownMenuItem(
+                value: 'Daloa',
+                child: Text('Daloa', style: GoogleFonts.poppins(fontSize: 14))),
+            DropdownMenuItem(
+                value: 'Yamoussoukro',
+                child: Text('Yamoussoukro',
+                    style: GoogleFonts.poppins(fontSize: 14))),
+            DropdownMenuItem(
+                value: 'San-Pédro',
+                child: Text('San-Pédro',
+                    style: GoogleFonts.poppins(fontSize: 14))),
+            DropdownMenuItem(
+                value: 'Korhogo',
+                child:
+                    Text('Korhogo', style: GoogleFonts.poppins(fontSize: 14))),
+            DropdownMenuItem(
+                value: 'Man',
+                child: Text('Man', style: GoogleFonts.poppins(fontSize: 14))),
+          ],
+          onChanged: (value) => setState(() {
+            _city = value;
+            if (value != 'Abidjan') _commune = null;
+          }),
+        ),
+        const SizedBox(height: 14),
+
+        // Commune (seulement si Abidjan)
+        if (_city == 'Abidjan')
+          _buildModernDropdown(
+            label: 'Commune',
+            icon: Icons.location_on_outlined,
+            value: _commune,
+            items: [
+              DropdownMenuItem(
+                  value: 'Abobo',
+                  child:
+                      Text('Abobo', style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Adjamé',
+                  child:
+                      Text('Adjamé', style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Attécoubé',
+                  child: Text('Attécoubé',
+                      style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Cocody',
+                  child:
+                      Text('Cocody', style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Koumassi',
+                  child: Text('Koumassi',
+                      style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Marcory',
+                  child: Text('Marcory',
+                      style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Plateau',
+                  child: Text('Plateau',
+                      style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Port-Bouët',
+                  child: Text('Port-Bouët',
+                      style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Treichville',
+                  child: Text('Treichville',
+                      style: GoogleFonts.poppins(fontSize: 14))),
+              DropdownMenuItem(
+                  value: 'Yopougon',
+                  child: Text('Yopougon',
+                      style: GoogleFonts.poppins(fontSize: 14))),
+            ],
+            onChanged: (value) => setState(() => _commune = value),
+          ),
+
+        if (_city == 'Abidjan') const SizedBox(height: 14),
+
+        const SizedBox(height: 28),
+
+        // Bouton Suivant
+        SizedBox(
+          height: 56,
+          child: ElevatedButton(
+            onPressed: _nextStep,
+            style: ElevatedButton.styleFrom(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: Ink(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF0a543d),
+                    Color(0xFF0d6b4d),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0a543d).withOpacity(0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Container(
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Suivant',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward,
+                        color: Colors.white, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Section 2: Mot de passe
+  Widget _buildSection2() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Titre
+        Text(
+          'Définir le mot de passe',
+          style: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF0a543d),
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+
+        // Mot de passe
+        _buildModernTextField(
+          controller: _passwordController,
+          label: 'Mot de passe',
+          icon: Icons.lock_outline,
+          obscureText: true,
+          hintText: '••••••••',
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Veuillez entrer un mot de passe';
+            }
+            if (value.length < 6) {
+              return 'Le mot de passe doit contenir au moins 6 caractères';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 14),
+
+        // Confirmation mot de passe
+        _buildModernTextField(
+          controller: _confirmPasswordController,
+          label: 'Confirmer le mot de passe',
+          icon: Icons.lock_outline,
+          obscureText: true,
+          hintText: '••••••••',
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Veuillez confirmer votre mot de passe';
+            }
+            if (value != _passwordController.text) {
+              return 'Les mots de passe ne correspondent pas';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 28),
+
+        // Bouton Précédent
+        SizedBox(
+          height: 56,
+          child: OutlinedButton(
+            onPressed: _previousStep,
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: const Color(0xFF0a543d), width: 2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.arrow_back,
+                    color: Color(0xFF0a543d), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Précédent',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF0a543d),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Bouton Créer mon compte
+        SizedBox(
+          height: 56,
+          child: _isLoading
+              ? Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0a543d).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ButtonLoadingIndicator(
+                      color: Color(0xFF0a543d),
+                      size: 8.0,
+                    ),
+                  ),
+                )
+              : ElevatedButton(
+                  onPressed: _register,
+                  style: ElevatedButton.styleFrom(
+                    elevation: 0,
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFF0a543d),
+                          Color(0xFF0d6b4d),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0a543d).withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Container(
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Créer mon compte',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 

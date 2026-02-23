@@ -3,7 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
 import 'package:mct_maintenance_mobile/models/product_model.dart';
+import 'package:mct_maintenance_mobile/models/maintenance_offer_model.dart';
 import 'package:mct_maintenance_mobile/services/cart_service.dart';
+import 'package:mct_maintenance_mobile/widgets/common/support_fab_wrapper.dart';
 import 'cart_screen.dart';
 import '../../utils/snackbar_helper.dart';
 import '../../utils/test_keys.dart';
@@ -25,12 +27,59 @@ class _ShopScreenState extends State<ShopScreen> {
   String _selectedCategory = 'all';
   int? _selectedBrandId;
   String _searchQuery = '';
+  MaintenanceOffer? _premiumOffer; // Offre premium pour les climatiseurs
 
   @override
   void initState() {
     super.initState();
     _loadBrands();
     _loadProducts();
+    _loadPremiumOffer();
+  }
+
+  Future<void> _loadPremiumOffer() async {
+    try {
+      final offers = await _apiService.getMaintenanceOffers();
+      if (mounted && offers.isNotEmpty) {
+        // Chercher l'offre "Premium" en priorité, sinon la plus chère
+        MaintenanceOffer? premiumOffer;
+
+        // 1. Chercher par nom contenant "premium"
+        premiumOffer = offers
+            .where((o) => o.isActive)
+            .cast<MaintenanceOffer?>()
+            .firstWhere(
+              (o) => o!.title.toLowerCase().contains('premium'),
+              orElse: () => null,
+            );
+
+        // 2. Si pas trouvé, chercher par nom contenant "gold" ou "or"
+        premiumOffer ??= offers
+            .where((o) => o.isActive)
+            .cast<MaintenanceOffer?>()
+            .firstWhere(
+              (o) =>
+                  o!.title.toLowerCase().contains('gold') ||
+                  o.title.toLowerCase().contains('or'),
+              orElse: () => null,
+            );
+
+        // 3. Si toujours pas trouvé, prendre l'offre active la plus chère
+        if (premiumOffer == null) {
+          final activeOffers = offers.where((o) => o.isActive).toList();
+          if (activeOffers.isNotEmpty) {
+            activeOffers.sort((a, b) => b.price.compareTo(a.price));
+            premiumOffer = activeOffers.first;
+          }
+        }
+
+        setState(() {
+          _premiumOffer = premiumOffer;
+        });
+      }
+    } catch (e) {
+      print('Erreur lors du chargement de l\'offre premium: $e');
+    }
   }
 
   Future<void> _loadBrands() async {
@@ -125,280 +174,295 @@ class _ShopScreenState extends State<ShopScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Boutique',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            fontSize: 20,
-          ),
-        ),
-        backgroundColor: const Color(0xFF0a543d),
-        elevation: 0,
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 4),
-            child: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.refresh, size: 20),
-              ),
-              onPressed: () {
-                _loadBrands();
-                _loadProducts();
-              },
-              tooltip: 'Actualiser',
+    return SupportFabWrapper(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'Boutique',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 20,
             ),
           ),
-          Consumer<CartService>(
-            builder: (context, cart, child) {
-              return Container(
-                margin: const EdgeInsets.only(right: 8),
-                child: Stack(
-                  children: [
-                    IconButton(
-                      icon: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child:
-                            const Icon(Icons.shopping_cart_outlined, size: 20),
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CartScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    if (cart.itemCount > 0)
-                      Positioned(
-                        right: 6,
-                        top: 6,
-                        child: Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Colors.red, Colors.redAccent],
-                            ),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.red.withOpacity(0.5),
-                                blurRadius: 8,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          child: Text(
-                            '${cart.itemCount}',
-                            style: GoogleFonts.poppins(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Header avec filtres par marque
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    'Marques',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF0a543d),
-                    ),
+          backgroundColor: const Color(0xFF0a543d),
+          elevation: 0,
+          actions: [
+            Container(
+              margin: const EdgeInsets.only(right: 4),
+              child: IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
                   ),
+                  child: const Icon(Icons.refresh, size: 20),
                 ),
-                const SizedBox(height: 12),
-                Container(
-                  height: 52,
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _isLoadingBrands || _isLoading
-                      ? Center(
-                          child: CircularProgressIndicator(
-                            color: const Color(0xFF0a543d),
-                          ),
-                        )
-                      : _brandsWithProducts.isEmpty
-                          ? Center(
-                              child: Text(
-                                'Aucune marque disponible',
-                                style: GoogleFonts.poppins(
-                                  color: Colors.grey,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            )
-                          : ListView(
-                              scrollDirection: Axis.horizontal,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 20),
-                              children: [
-                                _buildBrandChip('Tout', null),
-                                ..._brandsWithProducts
-                                    .map((brand) => _buildBrandChip(
-                                          brand['nom'],
-                                          brand['id'],
-                                        )),
-                              ],
-                            ),
-                ),
-                const SizedBox(height: 12),
-                // Barre de recherche
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                      },
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: Colors.black87,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Rechercher un produit...',
-                        hintStyle: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                        prefixIcon: Container(
-                          margin: const EdgeInsets.all(8),
+                onPressed: () {
+                  _loadBrands();
+                  _loadProducts();
+                },
+                tooltip: 'Actualiser',
+              ),
+            ),
+            Consumer<CartService>(
+              builder: (context, cart, child) {
+                return Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  child: Stack(
+                    children: [
+                      IconButton(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
-                            ),
+                            color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(
-                            Icons.search,
-                            color: Colors.white,
-                            size: 20,
+                          child: const Icon(Icons.shopping_cart_outlined,
+                              size: 20),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const CartScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      if (cart.itemCount > 0)
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Colors.red, Colors.redAccent],
+                              ),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.red.withOpacity(0.5),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            child: Text(
+                              '${cart.itemCount}',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(
-                                  Icons.clear,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _searchController.clear();
-                                    _searchQuery = '';
-                                  });
-                                },
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(
+                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
+              fit: BoxFit.cover,
+              opacity: 0.4,
+            ),
+          ),
+          child: Column(
+            children: [
+              // Header avec filtres par marque
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        'Marques',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF0a543d),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Liste des produits
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredProducts.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.shopping_bag_outlined,
-                                size: 64, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Aucun produit disponible',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade600,
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 52,
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _isLoadingBrands || _isLoading
+                          ? Center(
+                              child: CircularProgressIndicator(
+                                color: const Color(0xFF0a543d),
                               ),
+                            )
+                          : _brandsWithProducts.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    'Aucune marque disponible',
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.grey,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                )
+                              : ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  children: [
+                                    _buildBrandChip('Tout', null),
+                                    ..._brandsWithProducts
+                                        .map((brand) => _buildBrandChip(
+                                              brand['nom'],
+                                              brand['id'],
+                                            )),
+                                  ],
+                                ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Barre de recherche
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
-                      )
-                    : GridView.builder(
-                        key: const ValueKey(TestKeys.productsList),
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.7,
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (value) {
+                            setState(() {
+                              _searchQuery = value;
+                            });
+                          },
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Rechercher un produit...',
+                            hintStyle: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
+                            prefixIcon: Container(
+                              margin: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF0a543d),
+                                    Color(0xFF0d6b4d)
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.search,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(
+                                      Icons.clear,
+                                      color: Colors.grey,
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _searchController.clear();
+                                        _searchQuery = '';
+                                      });
+                                    },
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                          ),
                         ),
-                        itemCount: _filteredProducts.length,
-                        itemBuilder: (context, index) {
-                          final product = _filteredProducts[index];
-                          return _buildProductCard(product);
-                        },
                       ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Liste des produits
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _filteredProducts.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.shopping_bag_outlined,
+                                    size: 64, color: Colors.grey.shade400),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Aucun produit disponible',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : GridView.builder(
+                            key: const ValueKey(TestKeys.productsList),
+                            padding: const EdgeInsets.all(16),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 0.7,
+                            ),
+                            itemCount: _filteredProducts.length,
+                            itemBuilder: (context, index) {
+                              final product = _filteredProducts[index];
+                              return _buildProductCard(product);
+                            },
+                          ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -532,6 +596,48 @@ class _ShopScreenState extends State<ShopScreen> {
                             ),
                           ),
                         ),
+                      // Badge Offre pour les climatiseurs (categorie_id = 1)
+                      if (product.categorieId == 1 && _premiumOffer != null)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.orange.withOpacity(0.4),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.star,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _premiumOffer!.title.toUpperCase(),
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -550,7 +656,7 @@ class _ShopScreenState extends State<ShopScreen> {
                             children: [
                               Text(
                                 product.nom,
-                                maxLines: 2,
+                                maxLines: product.categorieId == 1 ? 1 : 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.w600,
@@ -559,6 +665,46 @@ class _ShopScreenState extends State<ShopScreen> {
                                   height: 1.2,
                                 ),
                               ),
+                              // Offre pour les climatiseurs
+                              if (product.categorieId == 1 &&
+                                  _premiumOffer != null)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFF3CD),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: const Color(0xFFFFD700),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.card_giftcard,
+                                        size: 10,
+                                        color: Color(0xFFD4A800),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Flexible(
+                                        child: Text(
+                                          '${_premiumOffer!.title} incluse',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFFD4A800),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               const SizedBox(height: 4),
                               Text(
                                 '${product.prix.toStringAsFixed(0)} FCFA',
@@ -605,30 +751,20 @@ class _ShopScreenState extends State<ShopScreen> {
                                 onTap: product.inStock
                                     ? () {
                                         cart.addItem(product);
+                                        // Fermer tous les SnackBars existants
+                                        ScaffoldMessenger.of(context)
+                                            .clearSnackBars();
+                                        // Afficher un SnackBar simple qui se ferme automatiquement
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              '${product.nom} ajouté au panier',
-                                              style: GoogleFonts.poppins(),
-                                            ),
-                                            duration:
-                                                const Duration(seconds: 2),
-                                            backgroundColor:
-                                                const Color(0xFF0a543d),
-                                            action: SnackBarAction(
-                                              label: 'Voir',
-                                              textColor: Colors.white,
-                                              onPressed: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) =>
-                                                        const CartScreen(),
-                                                  ),
-                                                );
-                                              },
-                                            ),
+                                                '🛒 ${product.nom} ajouté au panier'),
+                                            duration: const Duration(
+                                                milliseconds: 1500),
+                                            behavior: SnackBarBehavior.floating,
+                                            margin: const EdgeInsets.all(16),
+                                            backgroundColor: Colors.green,
                                           ),
                                         );
                                       }
@@ -910,6 +1046,125 @@ class _ShopScreenState extends State<ShopScreen> {
                                 ),
                               ),
                             ],
+
+                            // Offre Premium pour les climatiseurs
+                            if (product.categorieId == 1 &&
+                                _premiumOffer != null) ...[
+                              const SizedBox(height: 24),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFFFFF8E1),
+                                      Color(0xFFFFECB3),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFFFFD700),
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.orange.withOpacity(0.2),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFFD700),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: const Icon(
+                                            Icons.star,
+                                            color: Colors.white,
+                                            size: 24,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                _premiumOffer!.title
+                                                    .toUpperCase(),
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color:
+                                                      const Color(0xFFD4A800),
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                              Text(
+                                                'Inclus avec l\'achat de ce climatiseur',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 12,
+                                                  color: Colors.brown.shade600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (_premiumOffer!
+                                        .description.isNotEmpty) ...[
+                                      const SizedBox(height: 12),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.7),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          _premiumOffer!.description,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 12,
+                                            color: Colors.brown.shade700,
+                                            fontStyle: FontStyle.italic,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 16),
+                                    const Divider(color: Color(0xFFFFD700)),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Fonctionnalités incluses:',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.brown.shade800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    ..._premiumOffer!.features.map((feature) =>
+                                        _buildPremiumFeature(
+                                            Icons.check_circle, feature)),
+                                    const SizedBox(height: 12)
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1083,25 +1338,39 @@ class _ShopScreenState extends State<ShopScreen> {
       ),
     );
   }
-}
 
-// Modèle de produit
-class Product {
-  final String id;
-  final String name;
-  final String description;
-  final double price;
-  final String category;
-  final String? imageUrl;
-  final bool inStock;
-
-  Product({
-    required this.id,
-    required this.name,
-    required this.description,
-    required this.price,
-    required this.category,
-    this.imageUrl,
-    required this.inStock,
-  });
+  Widget _buildPremiumFeature(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4CAF50),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              icon,
+              size: 16,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: Colors.brown.shade700,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

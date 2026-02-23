@@ -356,6 +356,56 @@ class _SupportScreenState extends State<SupportScreen>
     _chatService.sendMessage(text);
     _messageController.clear();
     _chatService.stopTyping();
+
+    // Vérifier si c'est hors des heures de service
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    final currentMinute = now.minute;
+    final dayOfWeek = now.weekday; // 1 = lundi, 7 = dimanche
+
+    // Définir les heures de service : Lundi-Vendredi 8h-17h30, Samedi 9h-12h
+    bool isOutsideBusinessHours = false;
+
+    if (dayOfWeek == 7) {
+      // Dimanche - fermé toute la journée
+      isOutsideBusinessHours = true;
+    } else if (dayOfWeek == 6) {
+      // Samedi - 9h à 12h
+      if (currentHour < 9 || (currentHour >= 12)) {
+        isOutsideBusinessHours = true;
+      }
+    } else {
+      // Lundi à Vendredi - 8h à 17h30
+      if (currentHour < 8 ||
+          currentHour > 17 ||
+          (currentHour == 17 && currentMinute > 30)) {
+        isOutsideBusinessHours = true;
+      }
+    }
+
+    // Envoyer un message automatique si hors des heures de service
+    if (isOutsideBusinessHours) {
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Créer un message automatique
+      final autoReplyMessage = ChatMessage(
+        id: DateTime.now().millisecondsSinceEpoch,
+        senderId: 0,
+        senderRole: 'system',
+        senderName: 'Service Client',
+        message:
+            '🤖 Message automatique\n\nMerci pour votre message. Notre service client est actuellement fermé.\n\nNos horaires :\n📅 Lundi - Vendredi : 8h - 17h30\n📅 Samedi : 9h - 12h\n📅 Dimanche : Fermé\n\nNous vous répondrons dès notre retour. Pour les urgences, appelez le $supportPhone.',
+        isRead: false,
+        createdAt: DateTime.now(),
+      );
+
+      if (mounted) {
+        setState(() {
+          _messages.add(autoReplyMessage);
+        });
+        _scrollToBottom();
+      }
+    }
   }
 
   Future<void> _makePhoneCall() async {
@@ -725,217 +775,229 @@ class _SupportScreenState extends State<SupportScreen>
           ),
         ),
       ),
-      body: Column(
-        children: [
-          // Zone de messages avec fond dégradé subtil
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.grey[50]!,
-                    Colors.white,
-                  ],
-                ),
-              ),
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF0a543d),
-                      ),
-                    )
-                  : Column(
-                      children: [
-                        Expanded(
-                          child: _messages.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(32),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0a543d)
-                                              .withOpacity(0.05),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.chat_bubble_outline_rounded,
-                                          size: 64,
-                                          color: const Color(0xFF0a543d)
-                                              .withOpacity(0.3),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 24),
-                                      const Text(
-                                        'Aucun message',
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF0a543d),
-                                          letterSpacing: 0.3,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Commencez une conversation',
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : ListView.builder(
-                                  controller: _scrollController,
-                                  padding: const EdgeInsets.all(16),
-                                  itemCount: _messages.length,
-                                  itemBuilder: (context, index) {
-                                    final message = _messages[index];
-                                    return _buildMessageBubble(message);
-                                  },
-                                ),
-                        ),
-                        if (_typingUser != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            child: Row(
-                              children: [
-                                const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '$_typingUser est en train d\'écrire...',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                      fontStyle: FontStyle.italic),
-                                ),
-                              ],
-                            ),
-                          ),
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(32),
-                              topRight: Radius.circular(32),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
-                                blurRadius: 20,
-                                offset: const Offset(0, -4),
-                              ),
-                            ],
-                          ),
-                          child: SafeArea(
-                            top: false,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Expanded(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[50],
-                                      borderRadius: BorderRadius.circular(28),
-                                      border: Border.all(
-                                        color: Colors.grey[200]!,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: TextField(
-                                      controller: _messageController,
-                                      decoration: InputDecoration(
-                                        hintText: _isConnected
-                                            ? 'Écrivez votre message...'
-                                            : 'Connexion...',
-                                        hintStyle: TextStyle(
-                                          color: Colors.grey[400],
-                                          fontSize: 15,
-                                        ),
-                                        border: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        focusedBorder: InputBorder.none,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                          horizontal: 20,
-                                          vertical: 14,
-                                        ),
-                                      ),
-                                      enabled: _isConnected,
-                                      maxLines: null,
-                                      textCapitalization:
-                                          TextCapitalization.sentences,
-                                      style: const TextStyle(fontSize: 15),
-                                      onChanged: (text) {
-                                        if (text.isNotEmpty) {
-                                          _chatService.startTyping();
-                                        } else {
-                                          _chatService.stopTyping();
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    gradient: _isConnected
-                                        ? const LinearGradient(
-                                            colors: [
-                                              Color(0xFF0a543d),
-                                              Color(0xFF0d6b4d),
-                                            ],
-                                          )
-                                        : null,
-                                    color:
-                                        _isConnected ? null : Colors.grey[300],
-                                    borderRadius: BorderRadius.circular(28),
-                                    boxShadow: _isConnected
-                                        ? [
-                                            BoxShadow(
-                                              color: const Color(0xFF0a543d)
-                                                  .withOpacity(0.3),
-                                              blurRadius: 12,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      onTap: _isConnected ? _sendMessage : null,
-                                      borderRadius: BorderRadius.circular(28),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(16),
-                                        child: const Icon(
-                                          Icons.send_rounded,
-                                          color: Colors.white,
-                                          size: 24,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/call_center.png'),
+            fit: BoxFit.cover,
+            opacity: 0.4,
           ),
-        ],
+        ),
+        child: Column(
+          children: [
+            // Zone de messages avec fond dégradé subtil
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.grey[50]!.withOpacity(0.3),
+                      Colors.white.withOpacity(0.3),
+                    ],
+                  ),
+                ),
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF0a543d),
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          Expanded(
+                            child: _messages.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(32),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF0a543d)
+                                                .withOpacity(0.05),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.chat_bubble_outline_rounded,
+                                            size: 64,
+                                            color: const Color(0xFF0a543d)
+                                                .withOpacity(0.3),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 24),
+                                        const Text(
+                                          'Aucun message',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF0a543d),
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Commencez une conversation',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    controller: _scrollController,
+                                    padding: const EdgeInsets.all(16),
+                                    itemCount: _messages.length,
+                                    itemBuilder: (context, index) {
+                                      final message = _messages[index];
+                                      return _buildMessageBubble(message);
+                                    },
+                                  ),
+                          ),
+                          if (_typingUser != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2)),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '$_typingUser est en train d\'écrire...',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                        fontStyle: FontStyle.italic),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(32),
+                                topRight: Radius.circular(32),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, -4),
+                                ),
+                              ],
+                            ),
+                            child: SafeArea(
+                              top: false,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[50],
+                                        borderRadius: BorderRadius.circular(28),
+                                        border: Border.all(
+                                          color: Colors.grey[200]!,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: TextField(
+                                        controller: _messageController,
+                                        decoration: InputDecoration(
+                                          hintText: _isConnected
+                                              ? 'Écrivez votre message...'
+                                              : 'Connexion...',
+                                          hintStyle: TextStyle(
+                                            color: Colors.grey[400],
+                                            fontSize: 15,
+                                          ),
+                                          border: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                            horizontal: 20,
+                                            vertical: 14,
+                                          ),
+                                        ),
+                                        enabled: _isConnected,
+                                        maxLines: null,
+                                        textCapitalization:
+                                            TextCapitalization.sentences,
+                                        style: const TextStyle(fontSize: 15),
+                                        onChanged: (text) {
+                                          if (text.isNotEmpty) {
+                                            _chatService.startTyping();
+                                          } else {
+                                            _chatService.stopTyping();
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      gradient: _isConnected
+                                          ? const LinearGradient(
+                                              colors: [
+                                                Color(0xFF0a543d),
+                                                Color(0xFF0d6b4d),
+                                              ],
+                                            )
+                                          : null,
+                                      color: _isConnected
+                                          ? null
+                                          : Colors.grey[300],
+                                      borderRadius: BorderRadius.circular(28),
+                                      boxShadow: _isConnected
+                                          ? [
+                                              BoxShadow(
+                                                color: const Color(0xFF0a543d)
+                                                    .withOpacity(0.3),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap:
+                                            _isConnected ? _sendMessage : null,
+                                        borderRadius: BorderRadius.circular(28),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(16),
+                                          child: const Icon(
+                                            Icons.send_rounded,
+                                            color: Colors.white,
+                                            size: 24,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
