@@ -281,14 +281,51 @@ router.post('/scheduled/renewal-requests/:id/process', authenticate, authorize('
       data = {};
     }
 
-    // Notifier le client
+    // Notifier le client et renouveler si approuvé
     const notificationService = require('../services/notificationService');
+    const { Subscription, Intervention } = require('../models');
+    
     if (action === 'approve') {
+      // Récupérer l'abonnement
+      const subscription = await Subscription.findByPk(data.contractId);
+      if (subscription) {
+        // Calculer la nouvelle période (1 an à partir de la date de fin actuelle ou aujourd'hui)
+        const currentEndDate = subscription.end_date ? new Date(subscription.end_date) : new Date();
+        const newStartDate = new Date(Math.max(currentEndDate.getTime(), Date.now()));
+        const newEndDate = new Date(newStartDate);
+        newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+
+        // Réinitialiser les compteurs et étendre la période
+        await subscription.update({
+          start_date: newStartDate,
+          end_date: newEndDate,
+          visits_completed: 0,
+          status: 'active',
+          payment_status: 'pending', // Nouveau paiement requis
+          first_payment_made: false,
+          second_payment_made: false
+        });
+
+        // Supprimer les anciennes interventions non effectuées
+        await Intervention.destroy({
+          where: {
+            subscription_id: subscription.id,
+            status: { [require('sequelize').Op.in]: ['pending', 'scheduled'] }
+          }
+        });
+
+        // Créer les nouvelles interventions planifiées
+        const contractSchedulingService = require('../services/contractSchedulingService');
+        await contractSchedulingService.scheduleContractVisits(subscription);
+
+        console.log(`✅ Contrat ${subscription.id} renouvelé: ${newStartDate.toISOString()} -> ${newEndDate.toISOString()}`);
+      }
+
       await notificationService.create({
         userId: data.customerId,
         type: 'contract_renewal_approved',
         title: 'Demande de renouvellement approuvée',
-        message: `Votre demande de renouvellement pour le contrat ${data.contractReference} a été approuvée. Notre équipe vous contactera pour finaliser le renouvellement.`,
+        message: `Votre demande de renouvellement pour le contrat ${data.contractReference} a été approuvée. Votre contrat est renouvelé pour une nouvelle année.`,
         data: { contractId: data.contractId },
         priority: 'high'
       });
