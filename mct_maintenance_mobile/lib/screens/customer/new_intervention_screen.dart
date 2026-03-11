@@ -91,9 +91,9 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
       // Charger les données appropriées selon le type
       if (_selectedType == 'Maintenance') {
         _loadMaintenanceOffersWithPreselection();
-      } else if (_selectedType == 'Réparation') {
+      } else if (_selectedType == 'repair') {
         _loadRepairServices();
-      } else if (_selectedType == 'Installation') {
+      } else if (_selectedType == 'installation') {
         _loadInstallationServices();
       }
     }
