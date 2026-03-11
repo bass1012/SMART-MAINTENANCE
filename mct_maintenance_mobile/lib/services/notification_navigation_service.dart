@@ -113,12 +113,10 @@ class NotificationNavigationService {
 
       case 'contract_expiring':
       case 'contract_renewal_request':
+      case 'contract_renewal_approved':
+      case 'contract_renewal_rejected':
       case 'maintenance_reminder':
-        navigator.pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const QuotesContractsScreen(),
-          ),
-        );
+        _navigateToContractWithReplace(navigator, notificationData);
         break;
 
       default:
@@ -380,7 +378,7 @@ class NotificationNavigationService {
   Future<void> _navigateToContractWithReplace(
       NavigatorState navigator, Map<String, dynamic> data) async {
     final int? contractId =
-        _parseId(data['subscriptionId']) ?? _parseId(data['subscription_id']);
+        _parseId(data['subscriptionId']) ?? _parseId(data['subscription_id']) ?? _parseId(data['contractId']) ?? _parseId(data['contract_id']);
 
     print('→ Navigation vers contrat #$contractId (replace)');
 

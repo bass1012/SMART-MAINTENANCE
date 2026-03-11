@@ -146,6 +146,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       'subscriptionId': additionalData?['subscriptionId'] ??
           additionalData?['subscription_id'] ??
           notification['subscription_id'],
+      'contractId': additionalData?['contractId'] ??
+          additionalData?['contract_id'] ??
+          notification['contract_id'],
       'paymentLink': additionalData?['paymentLink'] ??
           additionalData?['payment_link'] ??
           notification['payment_link'],
