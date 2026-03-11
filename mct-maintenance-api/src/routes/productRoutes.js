@@ -1,5 +1,5 @@
 const express = require('express');
-const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
+const { authenticate, authorize, optionalAuth, adminOnly } = require('../middleware/auth');
 const productController = require('../controllers/product/productController');
 
 const router = express.Router();
@@ -11,49 +11,49 @@ router.get('/:id', optionalAuth, productController.getProductById);
 // Protected routes (authentication required)
 router.use(authenticate);
 
-// Product management routes (admin only)
-router.post('/', authorize('admin'), productController.createProduct);
-router.put('/:id', authorize('admin'), productController.updateProduct);
-router.delete('/:id', authorize('admin'), productController.deleteProduct);
+// Product management routes (admin et manager)
+router.post('/', authorize('admin', 'manager'), productController.createProduct);
+router.put('/:id', authorize('admin', 'manager'), productController.updateProduct);
+router.delete('/:id', adminOnly, productController.deleteProduct);
 
-// Category management routes (admin only)
-router.post('/categories', authorize('admin'), (req, res) => {
+// Category management routes (admin and manager)
+router.post('/categories', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'Category created successfully'
   });
 });
 
-router.put('/categories/:id', authorize('admin'), (req, res) => {
+router.put('/categories/:id', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'Category updated successfully'
   });
 });
 
-router.delete('/categories/:id', authorize('admin'), (req, res) => {
+router.delete('/categories/:id', adminOnly, (req, res) => {
   res.json({
     success: true,
     message: 'Category deleted successfully'
   });
 });
 
-// Brand management routes (admin only)
-router.post('/brands', authorize('admin'), (req, res) => {
+// Brand management routes (admin and manager)
+router.post('/brands', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'Brand created successfully'
   });
 });
 
-router.put('/brands/:id', authorize('admin'), (req, res) => {
+router.put('/brands/:id', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'Brand updated successfully'
   });
 });
 
-router.delete('/brands/:id', authorize('admin'), (req, res) => {
+router.delete('/brands/:id', adminOnly, (req, res) => {
   res.json({
     success: true,
     message: 'Brand deleted successfully'

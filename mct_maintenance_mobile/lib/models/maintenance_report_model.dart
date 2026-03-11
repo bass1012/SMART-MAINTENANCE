@@ -1,5 +1,59 @@
-import 'dart:developer';
 import 'package:flutter/foundation.dart';
+
+// Classe pour représenter un équipement dans le rapport
+class ReportEquipment {
+  final int? index;
+  final String? state;
+  final String? type;
+  final String? brand;
+  final String? pression;
+  final String? puissance;
+  final String? intensite;
+  final String? tension;
+
+  ReportEquipment({
+    this.index,
+    this.state,
+    this.type,
+    this.brand,
+    this.pression,
+    this.puissance,
+    this.intensite,
+    this.tension,
+  });
+
+  factory ReportEquipment.fromJson(Map<String, dynamic> json) {
+    return ReportEquipment(
+      index: json['index'] as int?,
+      state: json['state']?.toString(),
+      type: json['type']?.toString(),
+      brand: json['brand']?.toString(),
+      pression: json['pression']?.toString(),
+      puissance: json['puissance']?.toString(),
+      intensite: json['intensite']?.toString(),
+      tension: json['tension']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'index': index,
+      'state': state,
+      'type': type,
+      'brand': brand,
+      'pression': pression,
+      'puissance': puissance,
+      'intensite': intensite,
+      'tension': tension,
+    };
+  }
+
+  bool get hasTechnicalMeasures =>
+      (pression != null && pression!.isNotEmpty) ||
+      (puissance != null && puissance!.isNotEmpty) ||
+      (intensite != null && intensite!.isNotEmpty) ||
+      (tension != null && tension!.isNotEmpty);
+}
 
 class MaintenanceReport {
   final String id;
@@ -15,9 +69,11 @@ class MaintenanceReport {
   final List<String>? imageUrls;
   final DateTime? createdAt;
   final DateTime? updatedAt;
-  // Mesures techniques
+  // Équipements (nouveau format)
+  final List<ReportEquipment>? equipments;
+  // Mesures techniques (format legacy)
   final String? pression;
-  final String? temperature;
+  final String? puissance;
   final String? intensite;
   final String? tension;
 
@@ -35,14 +91,23 @@ class MaintenanceReport {
     this.imageUrls,
     this.createdAt,
     this.updatedAt,
+    this.equipments,
     this.pression,
-    this.temperature,
+    this.puissance,
     this.intensite,
     this.tension,
   });
 
   factory MaintenanceReport.fromJson(Map<String, dynamic> json) {
     try {
+      // Parser les équipements si disponibles
+      List<ReportEquipment>? equipmentsList;
+      if (json['equipments'] != null && json['equipments'] is List) {
+        equipmentsList = (json['equipments'] as List)
+            .map((e) => ReportEquipment.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+
       return MaintenanceReport(
         id: json['id']?.toString() ?? '',
         reference: json['reference']?.toString(),
@@ -72,9 +137,12 @@ class MaintenanceReport {
             json['updatedAt'] != null && json['updatedAt'].toString().isNotEmpty
                 ? DateTime.tryParse(json['updatedAt'].toString())
                 : null,
-        // Mesures techniques
+        // Équipements
+        equipments: equipmentsList,
+        // Mesures techniques legacy
         pression: json['pression']?.toString(),
-        temperature: json['temperature']?.toString(),
+        puissance:
+            json['puissance']?.toString() ?? json['temperature']?.toString(),
         intensite: json['intensite']?.toString(),
         tension: json['tension']?.toString(),
       );
@@ -100,10 +168,22 @@ class MaintenanceReport {
       'imageUrls': imageUrls,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'equipments': equipments?.map((e) => e.toJson()).toList(),
       'pression': pression,
-      'temperature': temperature,
+      'puissance': puissance,
       'intensite': intensite,
       'tension': tension,
     };
+  }
+
+  // Vérifie si le rapport a des mesures techniques (nouveau ou legacy)
+  bool get hasTechnicalMeasures {
+    if (equipments != null && equipments!.isNotEmpty) {
+      return equipments!.any((e) => e.hasTechnicalMeasures);
+    }
+    return (pression != null && pression!.isNotEmpty) ||
+        (puissance != null && puissance!.isNotEmpty) ||
+        (intensite != null && intensite!.isNotEmpty) ||
+        (tension != null && tension!.isNotEmpty);
   }
 }

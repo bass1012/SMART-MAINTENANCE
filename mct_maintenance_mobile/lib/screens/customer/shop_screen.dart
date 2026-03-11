@@ -177,15 +177,59 @@ class _ShopScreenState extends State<ShopScreen> {
     return SupportFabWrapper(
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            'Boutique',
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              fontSize: 20,
-            ),
-          ),
           backgroundColor: const Color(0xFF0a543d),
           elevation: 0,
+          title: Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.white,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Rechercher...',
+                hintStyle: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.white70,
+                ),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: Colors.white70,
+                  size: 20,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(
+                          Icons.clear,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
           actions: [
             Container(
               margin: const EdgeInsets.only(right: 4),
@@ -297,22 +341,9 @@ class _ShopScreenState extends State<ShopScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Text(
-                        'Marques',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF0a543d),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      height: 52,
-                      padding: const EdgeInsets.only(bottom: 12),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 40,
                       child: _isLoadingBrands || _isLoading
                           ? Center(
                               child: CircularProgressIndicator(
@@ -343,80 +374,7 @@ class _ShopScreenState extends State<ShopScreen> {
                                   ],
                                 ),
                     ),
-                    const SizedBox(height: 12),
-                    // Barre de recherche
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (value) {
-                            setState(() {
-                              _searchQuery = value;
-                            });
-                          },
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: Colors.black87,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Rechercher un produit...',
-                            hintStyle: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                            prefixIcon: Container(
-                              margin: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFF0a543d),
-                                    Color(0xFF0d6b4d)
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.search,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                            suffixIcon: _searchQuery.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(
-                                      Icons.clear,
-                                      color: Colors.grey,
-                                      size: 20,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _searchController.clear();
-                                        _searchQuery = '';
-                                      });
-                                    },
-                                  )
-                                : null,
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -479,7 +437,7 @@ class _ShopScreenState extends State<ShopScreen> {
           });
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             gradient: isSelected
                 ? const LinearGradient(
@@ -653,16 +611,19 @@ class _ShopScreenState extends State<ShopScreen> {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                product.nom,
-                                maxLines: product.categorieId == 1 ? 1 : 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                  color: Colors.black87,
-                                  height: 1.2,
+                              Flexible(
+                                child: Text(
+                                  product.nom,
+                                  maxLines: product.categorieId == 1 ? 1 : 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                    color: Colors.black87,
+                                    height: 1.2,
+                                  ),
                                 ),
                               ),
                               // Offre pour les climatiseurs
@@ -705,13 +666,13 @@ class _ShopScreenState extends State<ShopScreen> {
                                     ],
                                   ),
                                 ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 2),
                               Text(
                                 '${product.prix.toStringAsFixed(0)} FCFA',
                                 style: GoogleFonts.poppins(
                                   color: const Color(0xFF0a543d),
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                                  fontSize: 13,
                                 ),
                               ),
                             ],

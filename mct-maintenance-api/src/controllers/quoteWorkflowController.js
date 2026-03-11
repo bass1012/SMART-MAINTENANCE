@@ -41,13 +41,21 @@ exports.createQuoteFromReport = async (req, res) => {
     const intervention = report.intervention;
     const customer = intervention.customer;
 
-    // Générer une référence unique pour le devis
-    const reference = `QTE-${Date.now()}-${report.id}`;
+    // Générer une référence unique pour le devis (format court: DEV-AAMMJJ-HHMM-ID)
+    const now = new Date();
+    const dateStr = now.toISOString().slice(2, 10).replace(/-/g, ''); // AAMMJJ
+    const timeStr = now.toISOString().slice(11, 16).replace(':', ''); // HHMM
+    const reference = `DEV-${dateStr}-${timeStr}-${report.id}`;
     const issueDate = new Date();
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + expiryDays);
 
-    // Créer le devis
+    // Calculer les montants pour le paiement en deux étapes (50/50)
+    const totalAmount = total || 0;
+    const firstPaymentAmount = Math.ceil(totalAmount / 2); // 50% arrondi au supérieur
+    const secondPaymentAmount = totalAmount - firstPaymentAmount; // Le reste
+
+    // Créer le devis avec paiement 50/50
     const quote = await Quote.create({
       reference,
       customerId: customer.id,
@@ -58,20 +66,26 @@ exports.createQuoteFromReport = async (req, res) => {
       subtotal: subtotal || 0,
       taxAmount: taxAmount || 0,
       discountAmount: discountAmount || 0,
-      total: total || 0,
+      total: totalAmount,
       notes,
       termsAndConditions,
       intervention_id: intervention.id,
       diagnostic_report_id: report.id,
       line_items: JSON.stringify(line_items || []),
       sent_at: new Date(),
-      payment_status: 'pending'
+      payment_status: 'pending',
+      // Paiement en deux étapes (50% à l'acceptation, 50% à la fin)
+      payment_type: 'split',
+      first_payment_amount: firstPaymentAmount,
+      first_payment_status: 'pending',
+      second_payment_amount: secondPaymentAmount,
+      second_payment_status: 'pending'
     }, { transaction });
 
     // Mettre à jour le statut du rapport ET le estimated_total
     await report.update({ 
       status: 'quote_sent',
-      estimated_total: total || 0  // 🆕 Mettre à jour le total estimé avec le montant du devis
+      estimated_total: totalAmount  // 🆕 Mettre à jour le total estimé avec le montant du devis
     }, { transaction });
 
     // NE PAS changer le statut de l'intervention de diagnostic - elle reste 'diagnostic_submitted'
@@ -218,9 +232,7 @@ exports.acceptQuote = async (req, res) => {
 
     // Notifier le technicien
     if (quote.intervention.assigned_to) {
-      const techMessage = execute_now 
-        ? `Le client a accepté le devis pour l'intervention #${quote.intervention_id}. En attente du paiement.`
-        : `Le client a accepté le devis pour l'intervention #${quote.intervention_id}. Intervention planifiée, paiement différé.`;
+      const techMessage = `Le client a accepté le devis pour l'intervention #${quote.intervention_id}. En attente du paiement de 50% (${quote.first_payment_amount || Math.ceil(quote.total / 2)} FCFA).`;
       
       await notificationService.create({
         userId: quote.intervention.assigned_to,
@@ -233,24 +245,37 @@ exports.acceptQuote = async (req, res) => {
       });
     }
 
-    // Retourner les infos différentes selon le mode d'exécution
-    const responseMessage = execute_now 
-      ? 'Devis accepté. Veuillez procéder au paiement.'
-      : 'Devis accepté. L\'intervention est planifiée. Le paiement sera effectué le jour de l\'intervention.';
+    // Récupérer le devis mis à jour
+    const updatedQuote = await Quote.findByPk(id, {
+      include: [
+        { model: Intervention, as: 'intervention' },
+        { model: DiagnosticReport, as: 'diagnosticReport' }
+      ]
+    });
 
+    // Calculer les montants si non définis
+    const firstPaymentAmount = updatedQuote.first_payment_amount || Math.ceil(updatedQuote.total / 2);
+    const secondPaymentAmount = updatedQuote.second_payment_amount || (updatedQuote.total - firstPaymentAmount);
+
+    // Retourner les infos avec paiement en deux étapes (50/50)
     res.json({
-      message: responseMessage,
-      quote: await Quote.findByPk(id, {
-        include: [
-          { model: Intervention, as: 'intervention' },
-          { model: DiagnosticReport, as: 'diagnosticReport' }
-        ]
-      }),
-      // Paiement immédiat seulement pour exécution immédiate
-      payment_required: execute_now === true,
-      payment_deferred: execute_now !== true,
-      scheduled_date: executionDate,
-      amount: quote.total
+      message: 'Devis accepté. Veuillez procéder au premier paiement de 50% pour démarrer l\'intervention.',
+      quote: updatedQuote,
+      // Paiement en deux étapes
+      payment_type: 'split',
+      payment_required: true,
+      first_payment: {
+        amount: firstPaymentAmount,
+        status: updatedQuote.first_payment_status || 'pending',
+        description: 'Paiement à l\'acceptation du devis (50%)'
+      },
+      second_payment: {
+        amount: secondPaymentAmount,
+        status: updatedQuote.second_payment_status || 'pending',
+        description: 'Paiement à la fin de l\'intervention (50%)'
+      },
+      total_amount: updatedQuote.total,
+      scheduled_date: executionDate
     });
 
   } catch (error) {

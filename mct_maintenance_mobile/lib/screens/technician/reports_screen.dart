@@ -117,9 +117,13 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                     'cost': item['cost'] ?? item['total_cost'] ?? 0,
                     'photos':
                         item['photos_count'] ?? item['photos']?.length ?? 0,
-                    // Mesures techniques
+                    // Équipements (nouveau format)
+                    'equipments':
+                        item['equipments'] is List ? item['equipments'] : [],
+                    // Mesures techniques (format legacy)
                     'pression': item['pression']?.toString() ?? '',
                     'temperature': item['temperature']?.toString() ?? '',
+                    'puissance': item['puissance']?.toString() ?? '',
                     'intensite': item['intensite']?.toString() ?? '',
                     'tension': item['tension']?.toString() ?? '',
                   })
@@ -705,8 +709,11 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                       ),
                     )),
 
-                // Mesures techniques
-                if (_hasTechnicalMeasures(report)) ...[
+                // Équipements (nouveau format multi-équipements)
+                if (_hasEquipments(report))
+                  _buildEquipmentsSection(report)
+                // Mesures techniques (format legacy)
+                else if (_hasTechnicalMeasures(report)) ...[
                   const SizedBox(height: 24),
                   const Text(
                     'Mesures Techniques',
@@ -733,12 +740,14 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                                   child: _buildMeasureItem(Icons.compress,
                                       'Pression', '${report['pression']} bar')),
                             if (report['temperature']?.toString().isNotEmpty ==
-                                true)
+                                    true ||
+                                report['puissance']?.toString().isNotEmpty ==
+                                    true)
                               Expanded(
                                   child: _buildMeasureItem(
-                                      Icons.thermostat,
-                                      'Température',
-                                      '${report['temperature']} °C')),
+                                      Icons.power,
+                                      'Puissance',
+                                      '${report['puissance'] ?? report['temperature']} CV')),
                           ],
                         ),
                         if (report['intensite']?.toString().isNotEmpty ==
@@ -1015,10 +1024,185 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
   }
 
   bool _hasTechnicalMeasures(Map<String, dynamic> report) {
+    // Vérifier le nouveau format multi-équipements
+    final equipments = report['equipments'] as List? ?? [];
+    if (equipments.isNotEmpty) {
+      return equipments.any((eq) {
+        final e = eq as Map<String, dynamic>;
+        return (e['pression']?.toString().isNotEmpty == true) ||
+            (e['puissance']?.toString().isNotEmpty == true) ||
+            (e['intensite']?.toString().isNotEmpty == true) ||
+            (e['tension']?.toString().isNotEmpty == true);
+      });
+    }
+    // Format legacy
     return (report['pression']?.toString().isNotEmpty == true) ||
         (report['temperature']?.toString().isNotEmpty == true) ||
+        (report['puissance']?.toString().isNotEmpty == true) ||
         (report['intensite']?.toString().isNotEmpty == true) ||
         (report['tension']?.toString().isNotEmpty == true);
+  }
+
+  bool _hasEquipments(Map<String, dynamic> report) {
+    final equipments = report['equipments'] as List? ?? [];
+    return equipments.isNotEmpty;
+  }
+
+  Widget _buildEquipmentsSection(Map<String, dynamic> report) {
+    final equipments = report['equipments'] as List? ?? [];
+    if (equipments.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Icon(Icons.build_circle, color: const Color(0xFF0a543d), size: 22),
+            const SizedBox(width: 8),
+            Text(
+              'Équipements (${equipments.length})',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...equipments.asMap().entries.map((entry) {
+          final index = entry.key;
+          final eq = entry.value as Map<String, dynamic>;
+          return _buildEquipmentCard(eq, index + 1);
+        }),
+      ],
+    );
+  }
+
+  Widget _buildEquipmentCard(Map<String, dynamic> equipment, int index) {
+    final state = equipment['state']?.toString() ?? '';
+    final type = equipment['type']?.toString() ?? '';
+    final brand = equipment['brand']?.toString() ?? '';
+    final pression = equipment['pression']?.toString() ?? '';
+    final puissance = equipment['puissance']?.toString() ?? '';
+    final intensite = equipment['intensite']?.toString() ?? '';
+    final tension = equipment['tension']?.toString() ?? '';
+
+    final hasMeasures = pression.isNotEmpty ||
+        puissance.isNotEmpty ||
+        intensite.isNotEmpty ||
+        tension.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // En-tête avec numéro
+          Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0a543d),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  brand.isNotEmpty ? '$brand - $type' : 'Équipement $index',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade900,
+                  ),
+                ),
+              ),
+              if (state.isNotEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _getStateColor(state),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    state,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          // Mesures techniques
+          if (hasMeasures) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  if (pression.isNotEmpty)
+                    _buildMeasureItem(
+                        Icons.compress, 'Pression', '$pression bar'),
+                  if (puissance.isNotEmpty)
+                    _buildMeasureItem(
+                        Icons.power, 'Puissance', '$puissance CV'),
+                  if (intensite.isNotEmpty)
+                    _buildMeasureItem(
+                        Icons.electrical_services, 'Intensité', '$intensite A'),
+                  if (tension.isNotEmpty)
+                    _buildMeasureItem(Icons.bolt, 'Tension', '$tension V'),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Color _getStateColor(String state) {
+    switch (state.toLowerCase()) {
+      case 'bon':
+      case 'bon état':
+        return Colors.green;
+      case 'moyen':
+        return Colors.orange;
+      case 'mauvais':
+      case 'hors service':
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
   }
 
   Widget _buildMeasureItem(IconData icon, String label, String value) {

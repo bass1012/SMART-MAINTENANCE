@@ -496,38 +496,31 @@ const register = async (req, res) => {
     const preferredMethod = verification_method || 'auto';
     console.log('📧 Méthode de vérification demandée:', preferredMethod);
 
-    // 🔒 RESTRICTION: Seul un admin peut créer un admin ou manager
+    // Vérifier si un admin est connecté (pour tous les rôles)
     let creatorId = null;
-    if (role === 'admin' || role === 'manager') {
-      // Vérifier si un token est présent dans la requête
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(403).json({
-          success: false,
-          message: 'Seul un administrateur peut créer un compte admin ou manager'
-        });
-      }
-      
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const currentUser = await User.findByPk(decoded.id);
         
-        if (!currentUser || currentUser.role !== 'admin') {
-          return res.status(403).json({
-            success: false,
-            message: 'Seul un administrateur peut créer un compte admin ou manager'
-          });
+        if (currentUser && currentUser.role === 'admin') {
+          creatorId = currentUser.id;
+          console.log(`🔐 Admin ${currentUser.id} crée un compte ${role}`);
         }
-        
-        creatorId = currentUser.id;
-        console.log(`🔐 Admin ${currentUser.id} crée un compte ${role}`);
       } catch (tokenError) {
-        return res.status(403).json({
-          success: false,
-          message: 'Seul un administrateur peut créer un compte admin ou manager'
-        });
+        // Token invalide - continuer en mode inscription normale
+        console.log('⚠️ Token invalide, inscription normale');
       }
+    }
+
+    // 🔒 RESTRICTION: Seul un admin peut créer un admin ou manager
+    if ((role === 'admin' || role === 'manager') && !creatorId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Seul un administrateur peut créer un compte admin ou manager'
+      });
     }
 
     // Nettoyer et valider les données
@@ -605,12 +598,14 @@ const register = async (req, res) => {
     }
 
     // Create user with pending status
+    // Si créé par un admin (creatorId défini), le compte est directement actif
+    const isCreatedByAdmin = creatorId !== null;
     const user = await User.create({
       email: cleanEmail, // Peut être NULL si inscription par téléphone uniquement
       password_hash: password,
       phone: cleanPhone,
       role: role || 'customer',
-      status: 'pending', // Toujours pending jusqu'à vérification
+      status: isCreatedByAdmin ? 'active' : 'pending', // Actif si créé par admin, sinon pending
       first_name,
       last_name,
       profile_image: req.body.profile_image || null,
@@ -622,7 +617,9 @@ const register = async (req, res) => {
       email: user.email,
       phone: user.phone,
       role: user.role,
-      created_by: user.created_by
+      status: user.status,
+      created_by: user.created_by,
+      isCreatedByAdmin
     });
 
     // Create profile based on role
@@ -643,7 +640,27 @@ const register = async (req, res) => {
       });
     }
 
-    // Generate verification code
+    // Si créé par un admin, pas besoin de vérification - retourner directement
+    if (isCreatedByAdmin) {
+      const { accessToken, refreshToken } = generateTokens(user);
+      return res.status(201).json({
+        success: true,
+        message: 'Utilisateur créé avec succès par l\'administrateur',
+        user: {
+          id: user.id,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          status: user.status
+        },
+        accessToken,
+        refreshToken
+      });
+    }
+
+    // Generate verification code (uniquement pour les inscriptions normales)
     const verificationCode = EmailVerificationCode.generateCode();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
     

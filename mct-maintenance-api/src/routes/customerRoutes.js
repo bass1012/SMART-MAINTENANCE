@@ -1,7 +1,7 @@
 const express = require('express');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const customerController = require('../controllers/customerController');
-const { Contract, User, InstallationService, RepairService } = require('../models');
+const { Contract, User, InstallationService, RepairService, Subscription, MaintenanceOffer } = require('../models');
 const { 
   listCustomers, 
   getCustomer, 
@@ -97,7 +97,8 @@ router.post('/quotes/:id/accept', async (req, res) => {
       console.error('⚠️  Erreur notification acceptation devis:', notifError.message);
     }
 
-    // 🔧 Si exécution immédiate, notifier le technicien du diagnostic et mettre à jour l'intervention
+    // 🔧 Si exécution immédiate, NE PAS notifier le technicien maintenant
+    // La notification sera envoyée APRÈS confirmation du paiement (webhook)
     if (execute_now === true && quote.intervention_id) {
       try {
         // Note: intervention.technician_id référence User.id directement
@@ -109,41 +110,23 @@ router.post('/quotes/:id/accept', async (req, res) => {
         });
         
         if (intervention && intervention.technician_id) {
-          // 🔄 Exécution immédiate = technicien déjà sur place → passer à execution_confirmed
-          // Le technicien devra cliquer sur "Exécuter la tâche" pour passer à in_progress
+          // 🔄 Marquer l'intervention en attente de paiement (pas encore execution_confirmed)
+          // Le statut passera à execution_confirmed APRÈS confirmation du paiement
           await intervention.update({
-            status: 'execution_confirmed',  // Technicien doit confirmer le démarrage de l'exécution
             intervention_type: 'execution', // Nouveau type: exécution suite au diagnostic
-            notes: `${intervention.notes || ''}\n\n[${new Date().toISOString()}] ⚡ EXÉCUTION IMMÉDIATE - Client a confirmé - Devis ${quote.reference} accepté - En attente démarrage technicien`
+            notes: `${intervention.notes || ''}\n\n[${new Date().toISOString()}] ⚡ EXÉCUTION IMMÉDIATE DEMANDÉE - Devis ${quote.reference} accepté - EN ATTENTE DE PAIEMENT`
           });
           
-          console.log(`🔄 Intervention ${intervention.id} mise à jour: status = execution_confirmed (exécution immédiate - en attente démarrage)`);
+          console.log(`🔄 Intervention ${intervention.id}: type = execution (en attente paiement avant notification technicien)`);
           
-          // L'id du technicien est directement dans intervention.technician_id (= User.id)
-          const technicianUserId = intervention.technician_id;
-          const technicianName = intervention.technician?.firstName || 'Technicien';
-          
-          await notificationService.create({
-            userId: technicianUserId,
-            type: 'quote_execution_confirmed',
-            title: '✅ Exécution confirmée',
-            message: `Le client a accepté le devis ${quote.reference} et demande une exécution immédiate. Vous pouvez procéder à l'intervention.`,
-            data: {
-              quote_id: quote.id,
-              quote_reference: quote.reference,
-              intervention_id: intervention.id,
-              execute_now: true
-            },
-            priority: 'high',
-            actionUrl: `/interventions/${intervention.id}`
-          });
-          
-          console.log(`📲 Notification envoyée au technicien ${technicianName} (user_id: ${technicianUserId})`);
+          // ⚠️ NE PAS envoyer de notification au technicien ici
+          // La notification sera envoyée par le webhook de paiement (fineoPayController.js)
+          console.log('⏳ Notification technicien reportée après confirmation paiement');
         } else {
           console.log('⚠️  Aucun technicien assigné à cette intervention');
         }
       } catch (techNotifError) {
-        console.error('⚠️  Erreur notification technicien:', techNotifError.message);
+        console.error('⚠️  Erreur mise à jour intervention:', techNotifError.message);
       }
     }
 
@@ -182,11 +165,21 @@ router.post('/quotes/:id/accept', async (req, res) => {
 
       // Extraire les valeurs avec fallback
       const customerId = fullQuote.customerId || fullQuote.customer_id;
-      const totalAmount = fullQuote.total || fullQuote.totalAmount || fullQuote.subtotal || 0;
+      
+      // Pour le split payment, utiliser le montant du premier paiement (50%)
+      const quoteTotal = fullQuote.total || fullQuote.totalAmount || fullQuote.subtotal || 0;
+      const firstPaymentAmount = fullQuote.first_payment_amount || Math.ceil(quoteTotal / 2);
+      const isSplitPayment = fullQuote.payment_type === 'split';
+      
+      // La commande représente le premier paiement (50% pour split, 100% pour full)
+      const totalAmount = isSplitPayment ? firstPaymentAmount : quoteTotal;
 
       console.log('🔍 Valeurs pour création commande:', {
         customerId,
         totalAmount,
+        quoteTotal,
+        firstPaymentAmount,
+        isSplitPayment,
         orderReference
       });
 
@@ -196,13 +189,15 @@ router.post('/quotes/:id/accept', async (req, res) => {
         customerId: customerId,
         quoteId: fullQuote.id,
         totalAmount: totalAmount,
+        paymentType: isSplitPayment ? 'split' : 'full',
+        paymentStep: 1, // Premier paiement
         status: execute_now ? 'pending' : 'scheduled',
         paymentStatus: execute_now ? 'pending' : 'deferred',
         paymentMethod: null,
         lineItems: JSON.stringify(lineItems),
-        notes: execute_now 
-          ? `Commande créée automatiquement - Exécution immédiate`
-          : `Commande créée automatiquement - Intervention planifiée, paiement différé`,
+        notes: isSplitPayment
+          ? `Commande créée automatiquement - Premier paiement (50%) de ${totalAmount} FCFA`
+          : `Commande créée automatiquement - Paiement intégral`,
         scheduledDate: scheduledDateTime
       });
 
@@ -210,11 +205,37 @@ router.post('/quotes/:id/accept', async (req, res) => {
       await fullQuote.update({ payment_status: execute_now ? 'pending' : 'deferred' });
 
       console.log(`✅ Commande ${orderReference} créée automatiquement pour le devis ${fullQuote.reference}`);
+      
+      // Calculer les montants pour la réponse
+      const secondPaymentAmount = quoteTotal - firstPaymentAmount;
+      
+      // Réponse avec first_payment pour le mobile
+      res.json({
+        success: true,
+        message: 'Devis accepté avec succès',
+        data: quote,
+        first_payment: {
+          amount: firstPaymentAmount,
+          status: 'pending',
+          description: 'Paiement à l\'acceptation du devis (50%)'
+        },
+        second_payment: {
+          amount: secondPaymentAmount,
+          status: 'pending',
+          description: 'Paiement à la fin de l\'intervention (50%)'
+        },
+        payment_type: 'split',
+        total_amount: quoteTotal,
+        order_id: order.id,
+        order_reference: orderReference
+      });
+      return; // Important: arrêter ici
     } catch (orderError) {
       console.error('⚠️  Erreur création commande automatique:', orderError.message);
-      // On ne bloque pas l'acceptation si la création de commande échoue
+      // En cas d'erreur, envoyer une réponse basique
     }
     
+    // Réponse de fallback si la création de commande a échoué
     res.json({
       success: true,
       message: 'Devis accepté avec succès',
@@ -350,7 +371,13 @@ router.get('/quotes', async (req, res) => {
       payment_status: quote.payment_status,
       scheduled_date: quote.scheduled_date,
       execute_now: quote.execute_now,
-      second_contact: quote.second_contact
+      second_contact: quote.second_contact,
+      // Champs split payment (50/50)
+      payment_type: quote.payment_type || 'split',
+      first_payment_amount: quote.first_payment_amount ? parseFloat(quote.first_payment_amount) : Math.ceil(parseFloat(quote.total) / 2),
+      first_payment_status: quote.first_payment_status || 'pending',
+      second_payment_amount: quote.second_payment_amount ? parseFloat(quote.second_payment_amount) : Math.floor(parseFloat(quote.total) / 2),
+      second_payment_status: quote.second_payment_status || 'pending'
     }));
     
     res.json({
@@ -443,9 +470,11 @@ router.get('/maintenance-reports', async (req, res) => {
         photosCount: reportData.photos_count || 0,
         imageUrls: [], // TODO: Ajouter les URLs des photos si disponibles
         createdAt: intervention.created_at,
-        // Mesures techniques
+        // Section Équipements (nouveau format - tableau)
+        equipments: reportData.equipments || [],
+        // Mesures techniques (format legacy)
         pression: reportData.pression || '',
-        temperature: reportData.temperature || '',
+        puissance: reportData.puissance || reportData.temperature || '',
         intensite: reportData.intensite || '',
         tension: reportData.tension || '',
       };
@@ -554,9 +583,11 @@ router.get('/maintenance-reports/:reportId', async (req, res) => {
       photosCount: imageUrls.length,
       imageUrls: imageUrls,
       createdAt: intervention.created_at,
-      // Mesures techniques
+      // Section Équipements (nouveau format - tableau)
+      equipments: reportData.equipments || [],
+      // Mesures techniques (format legacy)
       pression: reportData.pression || '',
-      temperature: reportData.temperature || '',
+      puissance: reportData.puissance || reportData.temperature || '',
       intensite: reportData.intensite || '',
       tension: reportData.tension || '',
     };
@@ -658,15 +689,64 @@ router.get('/maintenance-offers', async (req, res) => {
 // POST /api/customer/subscriptions - Créer une souscription
 router.post('/subscriptions', authenticate, async (req, res) => {
   try {
-    const { Subscription, MaintenanceOffer, InstallationService, RepairService, User } = require('../models');
-    const { maintenance_offer_id, installation_service_id, repair_service_id } = req.body;
+    const { Subscription, MaintenanceOffer, InstallationService, RepairService, User, Promotion } = require('../models');
+    const { maintenance_offer_id, installation_service_id, repair_service_id, promo_code, equipment_count = 1 } = req.body;
     const customerId = req.user.id;
     
     console.log(`📝 POST /api/customer/subscriptions - Customer ${customerId}`);
     
+    // Valider equipment_count
+    const equipmentCount = Math.max(1, parseInt(equipment_count) || 1);
+    console.log(`   📦 Nombre d'équipements: ${equipmentCount}`);
+    
     let serviceData = null;
     let serviceType = null;
     let duration = 1; // Par défaut 1 mois pour les services ponctuels
+    let promotion = null;
+    let discount = 0;
+    
+    // Valider le code promo si fourni
+    if (promo_code) {
+      const now = new Date();
+      promotion = await Promotion.findOne({ where: { code: promo_code } });
+      
+      if (!promotion) {
+        return res.status(400).json({
+          success: false,
+          message: 'Code promo invalide'
+        });
+      }
+      
+      if (!promotion.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cette promotion n\'est plus active'
+        });
+      }
+      
+      if (new Date(promotion.startDate) > now) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cette promotion n\'a pas encore commencé'
+        });
+      }
+      
+      if (new Date(promotion.endDate) < now) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cette promotion a expiré'
+        });
+      }
+      
+      if (promotion.usageLimit && promotion.usageCount >= promotion.usageLimit) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cette promotion a atteint sa limite d\'utilisation'
+        });
+      }
+      
+      console.log(`   ✅ Code promo valide: ${promo_code} (${promotion.type} - ${promotion.value})`);
+    }
     
     // Déterminer le type de service et récupérer ses données
     if (maintenance_offer_id) {
@@ -739,13 +819,36 @@ router.post('/subscriptions', authenticate, async (req, res) => {
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + duration);
     
+    // Calculer le prix final avec le nombre d'équipements et la réduction promo
+    // Prix unitaire par équipement
+    const unitPrice = serviceData.price;
+    // Prix total = prix unitaire × nombre d'équipements
+    let originalPrice = unitPrice * equipmentCount;
+    let finalPrice = originalPrice;
+    
+    console.log(`   💰 Prix unitaire: ${unitPrice} FCFA × ${equipmentCount} équipement(s) = ${originalPrice} FCFA`);
+    
+    if (promotion) {
+      if (promotion.type === 'percentage') {
+        discount = (originalPrice * promotion.value) / 100;
+      } else {
+        discount = promotion.value;
+      }
+      finalPrice = Math.max(0, originalPrice - discount);
+      console.log(`   💰 Réduction: ${discount} FCFA, Prix final: ${finalPrice} FCFA`);
+    }
+    
     // Créer la souscription avec les bons champs selon le type
     const subscriptionData = {
       customer_id: customerId,
+      equipment_count: equipmentCount,
       status: 'active',
       start_date: startDate,
       end_date: endDate,
-      price: serviceData.price,
+      price: finalPrice,
+      original_price: originalPrice,
+      discount_amount: discount,
+      promo_code: promo_code || null,
       payment_status: 'pending'
     };
     
@@ -761,6 +864,12 @@ router.post('/subscriptions', authenticate, async (req, res) => {
     
     console.log(`✅ Subscription created: ${subscription.id} (${serviceType})`);
     
+    // Incrémenter le compteur d'utilisation du code promo
+    if (promotion) {
+      await promotion.update({ usageCount: promotion.usageCount + 1 });
+      console.log(`   ✅ Compteur promo ${promo_code} incrémenté (${promotion.usageCount + 1})`);
+    }
+    
     // 🔔 Envoyer une notification au client
     try {
       const user = await User.findByPk(customerId);
@@ -770,13 +879,16 @@ router.post('/subscriptions', authenticate, async (req, res) => {
         userId: customerId,
         type: 'subscription_created',
         title: 'Paiement initié',
-        message: `Votre souscription à "${serviceData.title}" est en attente de confirmation de paiement`,
+        message: `Votre souscription à "${serviceData.title}" est en attente de confirmation de paiement.${discount > 0 ? ` Réduction appliquée: ${discount} FCFA` : ''}`,
         data: {
           subscriptionId: subscription.id,
           serviceName: serviceData.title,
           serviceType: serviceType,
-          amount: serviceData.price,
-          paymentStatus: 'pending'
+          originalPrice: originalPrice,
+          discount: discount,
+          amount: finalPrice,
+          paymentStatus: 'pending',
+          promoCode: promo_code || null
         },
         priority: 'medium',
         actionUrl: `/dashboard`
@@ -918,6 +1030,185 @@ router.get('/subscriptions/:id', authenticate, async (req, res) => {
   }
 });
 
+// POST /api/customer/subscriptions/upgrade - Calculer le coût d'upgrade pour plus d'équipements
+router.post('/subscriptions/upgrade-cost', authenticate, async (req, res) => {
+  try {
+    const { Subscription, MaintenanceOffer } = require('../models');
+    const { subscription_id, new_equipment_count } = req.body;
+    const customerId = req.user.id;
+    
+    console.log(`📝 POST /api/customer/subscriptions/upgrade-cost - Customer ${customerId}`);
+    
+    if (!subscription_id || !new_equipment_count) {
+      return res.status(400).json({
+        success: false,
+        message: 'subscription_id et new_equipment_count sont requis'
+      });
+    }
+    
+    const newCount = parseInt(new_equipment_count);
+    if (newCount < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le nombre d\'équipements doit être au moins 1'
+      });
+    }
+    
+    // Récupérer la souscription active
+    const subscription = await Subscription.findOne({
+      where: { 
+        id: subscription_id,
+        customer_id: customerId,
+        status: 'active',
+        payment_status: 'paid'
+      },
+      include: [{
+        model: MaintenanceOffer,
+        as: 'offer'
+      }]
+    });
+    
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Souscription active non trouvée'
+      });
+    }
+    
+    if (!subscription.offer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cette souscription n\'est pas liée à une offre de maintenance'
+      });
+    }
+    
+    const currentCount = subscription.equipment_count || 1;
+    const unitPrice = subscription.offer.price;
+    
+    if (newCount <= currentCount) {
+      return res.status(400).json({
+        success: false,
+        message: `Le nouveau nombre d'équipements (${newCount}) doit être supérieur au nombre actuel (${currentCount})`
+      });
+    }
+    
+    // Calculer la différence à payer
+    const additionalEquipments = newCount - currentCount;
+    const upgradeCost = unitPrice * additionalEquipments;
+    
+    console.log(`   📦 Équipements actuels: ${currentCount}, Nouveaux: ${newCount}, Différence: ${additionalEquipments}`);
+    console.log(`   💰 Prix unitaire: ${unitPrice} FCFA, Coût upgrade: ${upgradeCost} FCFA`);
+    
+    res.json({
+      success: true,
+      data: {
+        subscription_id: subscription.id,
+        current_equipment_count: currentCount,
+        new_equipment_count: newCount,
+        additional_equipments: additionalEquipments,
+        unit_price: unitPrice,
+        upgrade_cost: upgradeCost,
+        offer_title: subscription.offer.title
+      },
+      message: 'Coût d\'upgrade calculé avec succès'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error calculating upgrade cost:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors du calcul du coût d\'upgrade',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/customer/subscriptions/upgrade - Effectuer l'upgrade (après paiement)
+router.post('/subscriptions/upgrade', authenticate, async (req, res) => {
+  try {
+    const { Subscription, MaintenanceOffer } = require('../models');
+    const { subscription_id, new_equipment_count, payment_reference } = req.body;
+    const customerId = req.user.id;
+    
+    console.log(`📝 POST /api/customer/subscriptions/upgrade - Customer ${customerId}`);
+    
+    if (!subscription_id || !new_equipment_count) {
+      return res.status(400).json({
+        success: false,
+        message: 'subscription_id et new_equipment_count sont requis'
+      });
+    }
+    
+    const newCount = parseInt(new_equipment_count);
+    
+    // Récupérer la souscription
+    const subscription = await Subscription.findOne({
+      where: { 
+        id: subscription_id,
+        customer_id: customerId,
+        status: 'active',
+        payment_status: 'paid'
+      },
+      include: [{
+        model: MaintenanceOffer,
+        as: 'offer'
+      }]
+    });
+    
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Souscription active non trouvée'
+      });
+    }
+    
+    const currentCount = subscription.equipment_count || 1;
+    const unitPrice = subscription.offer.price;
+    
+    if (newCount <= currentCount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le nouveau nombre d\'équipements doit être supérieur au nombre actuel'
+      });
+    }
+    
+    // Calculer le nouveau prix total
+    const newTotalPrice = unitPrice * newCount;
+    const additionalEquipments = newCount - currentCount;
+    const upgradeCost = unitPrice * additionalEquipments;
+    
+    // Mettre à jour la souscription
+    await subscription.update({
+      equipment_count: newCount,
+      price: newTotalPrice,
+      original_price: newTotalPrice
+    });
+    
+    console.log(`✅ Souscription #${subscription.id} upgradée: ${currentCount} → ${newCount} équipements`);
+    console.log(`   💰 Nouveau prix: ${newTotalPrice} FCFA (upgrade: +${upgradeCost} FCFA)`);
+    
+    res.json({
+      success: true,
+      data: {
+        subscription_id: subscription.id,
+        previous_equipment_count: currentCount,
+        new_equipment_count: newCount,
+        new_total_price: newTotalPrice,
+        upgrade_cost: upgradeCost
+      },
+      message: 'Souscription mise à jour avec succès'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error upgrading subscription:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de l\'upgrade de la souscription',
+      error: error.message
+    });
+  }
+});
+
 // PATCH /api/customer/subscriptions/:id/cancel - Annuler une souscription
 router.patch('/subscriptions/:id/cancel', authenticate, async (req, res) => {
   try {
@@ -968,6 +1259,65 @@ router.patch('/subscriptions/:id/cancel', authenticate, async (req, res) => {
   }
 });
 
+// POST /api/customer/subscriptions/:id/confirm-payment - Confirmer le paiement d'un contrat
+router.post('/subscriptions/:id/confirm-payment', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { payment_reference, payment_method } = req.body;
+    
+    console.log(`💳 POST /api/customer/subscriptions/${id}/confirm-payment - User ${userId}`);
+    
+    const subscription = await Subscription.findOne({
+      where: { 
+        id,
+        customer_id: userId
+      }
+    });
+    
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contrat non trouvé'
+      });
+    }
+    
+    if (subscription.status !== 'pending_payment') {
+      return res.status(400).json({
+        success: false,
+        message: subscription.status === 'active' 
+          ? 'Ce contrat est déjà actif' 
+          : 'Ce contrat ne peut pas être payé'
+      });
+    }
+    
+    // Activer le contrat après paiement
+    const contractSchedulingService = require('../services/contractSchedulingService');
+    const result = await contractSchedulingService.activateContractAfterPayment(
+      subscription.id,
+      payment_reference
+    );
+    
+    console.log(`✅ Contrat ${id} activé après paiement`);
+    
+    res.json({
+      success: true,
+      data: {
+        subscription: result.subscription,
+        intervention: result.firstIntervention
+      },
+      message: 'Paiement confirmé, contrat activé !'
+    });
+  } catch (error) {
+    console.error('❌ Error confirming payment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la confirmation du paiement',
+      error: error.message
+    });
+  }
+});
+
 // ==================== ROUTES EXISTANTES ====================
 
 // Customer profile routes
@@ -991,6 +1341,7 @@ router.get('/contracts', async (req, res) => {
   try {
     const userId = req.user.id;
     
+    // Récupérer les contrats classiques
     const contracts = await Contract.findAll({
       where: { customer_id: userId },
       include: [
@@ -1003,10 +1354,61 @@ router.get('/contracts', async (req, res) => {
       order: [['created_at', 'DESC']]
     });
 
+    // Récupérer les subscriptions programmées (contrats de maintenance)
+    const scheduledSubscriptions = await Subscription.findAll({
+      where: { 
+        customer_id: userId,
+        contract_type: 'scheduled'
+      },
+      include: [
+        { 
+          model: MaintenanceOffer, 
+          as: 'offer'
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    // Convertir les subscriptions en format contract pour l'affichage
+    const subscriptionsAsContracts = scheduledSubscriptions.map(sub => ({
+      id: sub.id,
+      subscription_id: sub.id,
+      reference: `CTR-${sub.id}`,
+      customer_id: sub.customer_id,
+      type: 'scheduled_maintenance',
+      title: sub.offer?.title || `Contrat ${sub.equipment_model || ''} ${sub.equipment_description || ''}`.trim() || 'Contrat de maintenance',
+      description: `${sub.visits_total} visites planifiées - ${sub.visits_completed}/${sub.visits_total} effectuées`,
+      status: sub.status,
+      start_date: sub.start_date,
+      end_date: sub.end_date,
+      amount: sub.price || 0,
+      price: sub.price,
+      payment_frequency: 'yearly',
+      payment_status: sub.payment_status,
+      visits_total: sub.visits_total,
+      visits_completed: sub.visits_completed,
+      next_visit_date: sub.next_visit_date,
+      equipment_description: sub.equipment_description || 'Climatiseur',
+      equipment_model: sub.equipment_model,
+      first_payment_amount: sub.first_payment_amount || Math.ceil((sub.price || 0) / 2),
+      first_payment_status: sub.first_payment_status || 'pending',
+      second_payment_amount: sub.second_payment_amount || Math.floor((sub.price || 0) / 2),
+      second_payment_status: sub.second_payment_status || 'pending',
+      created_at: sub.created_at,
+      updated_at: sub.updated_at,
+      is_subscription: true
+    }));
+
+    // Combiner les deux listes
+    const allContracts = [...contracts, ...subscriptionsAsContracts];
+    
+    // Trier par date de création
+    allContracts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
     res.json({
       success: true,
       message: 'Customer contracts retrieved successfully',
-      data: contracts
+      data: allContracts
     });
   } catch (error) {
     console.error('Error fetching customer contracts:', error);
@@ -1068,8 +1470,8 @@ router.post('/contracts/:id/request-renewal', async (req, res) => {
     
     console.log(`🔄 Demande de renouvellement contrat ${contractId} par client ${userId}`);
     
-    // Vérifier que le contrat appartient au client
-    const contract = await Contract.findOne({
+    // Chercher d'abord dans Contract (contrats classiques)
+    let contract = await Contract.findOne({
       where: { 
         id: contractId,
         customer_id: userId
@@ -1083,6 +1485,48 @@ router.post('/contracts/:id/request-renewal', async (req, res) => {
       ]
     });
 
+    let isSubscription = false;
+    let contractReference = '';
+    let customerName = '';
+    let endDate = null;
+
+    // Si pas trouvé dans Contract, chercher dans Subscription (contrats de maintenance)
+    if (!contract) {
+      const subscription = await Subscription.findOne({
+        where: {
+          id: contractId,
+          customer_id: userId
+        }
+      });
+
+      if (subscription) {
+        isSubscription = true;
+        // Récupérer les infos du client
+        const user = await User.findByPk(userId, {
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        });
+        
+        contractReference = `CTR-${subscription.id}`;
+        customerName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : `Client #${userId}`;
+        endDate = subscription.end_date;
+        
+        // Créer un objet contract-like pour la suite
+        contract = {
+          id: subscription.id,
+          reference: contractReference,
+          status: subscription.status,
+          end_date: subscription.end_date,
+          customer: user,
+          equipment_description: subscription.equipment_description,
+          equipment_model: subscription.equipment_model
+        };
+      }
+    } else {
+      contractReference = contract.reference;
+      customerName = `${contract.customer?.first_name || ''} ${contract.customer?.last_name || ''}`.trim();
+      endDate = contract.end_date;
+    }
+
     if (!contract) {
       return res.status(404).json({
         success: false,
@@ -1092,9 +1536,14 @@ router.post('/contracts/:id/request-renewal', async (req, res) => {
 
     // Vérifier que le contrat peut être renouvelé (expiré, bientôt expiré, ou terminé)
     const now = new Date();
-    const daysUntilExpiry = Math.ceil((new Date(contract.end_date) - now) / (1000 * 60 * 60 * 24));
+    const daysUntilExpiry = Math.ceil((new Date(endDate) - now) / (1000 * 60 * 60 * 24));
     
-    if (contract.status === 'active' && daysUntilExpiry > 60) {
+    // Pour les subscriptions complétées ou en attente de second paiement, permettre le renouvellement
+    const canRenew = isSubscription 
+      ? (contract.status === 'completed' || contract.status === 'awaiting_second_payment' || daysUntilExpiry <= 60)
+      : (contract.status !== 'active' || daysUntilExpiry <= 60);
+    
+    if (!canRenew) {
       return res.status(400).json({
         success: false,
         message: `Votre contrat est encore valide pour ${daysUntilExpiry} jours. Vous pourrez demander un renouvellement 60 jours avant l'expiration.`
@@ -1106,12 +1555,13 @@ router.post('/contracts/:id/request-renewal', async (req, res) => {
     await notificationService.notifyAdmins({
       type: 'contract_renewal_request',
       title: 'Demande de renouvellement de contrat',
-      message: `${contract.customer.first_name} ${contract.customer.last_name} souhaite renouveler le contrat ${contract.reference}`,
+      message: `${customerName} souhaite renouveler le contrat ${contractReference}`,
       data: {
         contractId: contract.id,
-        contractReference: contract.reference,
+        contractReference: contractReference,
         customerId: userId,
-        customerName: `${contract.customer.first_name} ${contract.customer.last_name}`
+        customerName: customerName,
+        isSubscription: isSubscription
       },
       priority: 'high',
       actionUrl: `/contrats`
@@ -1122,26 +1572,26 @@ router.post('/contracts/:id/request-renewal', async (req, res) => {
       user_id: userId,
       type: 'contract_renewal_request',
       title: 'Demande de renouvellement envoyée',
-      message: `Votre demande de renouvellement pour le contrat ${contract.reference} a été envoyée à notre équipe.`,
+      message: `Votre demande de renouvellement pour le contrat ${contractReference} a été envoyée à notre équipe.`,
       data: JSON.stringify({
         contractId: contract.id,
-        contractReference: contract.reference
+        contractReference: contractReference
       }),
       priority: 'medium',
       is_read: false,
       action_url: `/contrats`
     });
 
-    console.log(`✅ Demande de renouvellement envoyée pour contrat ${contract.reference}`);
+    console.log(`✅ Demande de renouvellement envoyée pour contrat ${contractReference}`);
 
     res.json({
       success: true,
       message: 'Votre demande de renouvellement a été envoyée avec succès. Notre équipe vous contactera prochainement.',
       data: {
         contractId: contract.id,
-        reference: contract.reference,
+        reference: contractReference,
         status: contract.status,
-        endDate: contract.end_date
+        endDate: endDate
       }
     });
   } catch (error) {
@@ -1595,7 +2045,13 @@ router.get('/quotes/:id', async (req, res) => {
       payment_status: quote.payment_status,
       scheduled_date: quote.scheduled_date,
       execute_now: quote.execute_now,
-      second_contact: quote.second_contact
+      second_contact: quote.second_contact,
+      // Champs split payment (50/50)
+      payment_type: quote.payment_type || 'split',
+      first_payment_amount: quote.first_payment_amount ? parseFloat(quote.first_payment_amount) : Math.ceil(parseFloat(quote.total) / 2),
+      first_payment_status: quote.first_payment_status || 'pending',
+      second_payment_amount: quote.second_payment_amount ? parseFloat(quote.second_payment_amount) : Math.floor(parseFloat(quote.total) / 2),
+      second_payment_status: quote.second_payment_status || 'pending'
     };
     
     res.json({
@@ -1939,7 +2395,7 @@ router.post('/complaints/:id/notes', async (req, res) => {
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  */
-router.get('/', authorize('admin'), listCustomers);
+router.get('/', authorize('admin', 'manager'), listCustomers);
 
 /**
  * @swagger
@@ -2000,7 +2456,7 @@ router.get('/', authorize('admin'), listCustomers);
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  */
-router.post('/', authorize('admin'), createCustomer);
+router.post('/', authorize('admin', 'manager'), createCustomer);
 
 /**
  * @swagger
@@ -2036,7 +2492,7 @@ router.post('/', authorize('admin'), createCustomer);
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.get('/:id', authorize('admin'), getCustomer);
+router.get('/:id', authorize('admin', 'manager'), getCustomer);
 
 /**
  * @swagger
@@ -2089,7 +2545,7 @@ router.get('/:id', authorize('admin'), getCustomer);
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.put('/:id', authorize('admin'), updateCustomer);
+router.put('/:id', authorize('admin', 'manager'), updateCustomer);
 
 /**
  * @swagger
@@ -2144,7 +2600,7 @@ router.put('/:id', authorize('admin'), updateCustomer);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.put('/:id/deactivate', authorize('admin'), deactivateCustomer);
+router.put('/:id/deactivate', adminOnly, deactivateCustomer);
 
 /**
  * @swagger
@@ -2247,8 +2703,8 @@ router.put('/:id/deactivate', authorize('admin'), deactivateCustomer);
  *                 errorCount:
  *                   type: number
  */
-router.delete('/purge-deleted', authorize('admin'), purgeDeletedCustomers);
+router.delete('/purge-deleted', adminOnly, purgeDeletedCustomers);
 
-router.delete('/:id', authorize('admin'), deleteCustomer);
+router.delete('/:id', adminOnly, deleteCustomer);
 
 module.exports = router;

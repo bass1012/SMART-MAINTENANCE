@@ -33,7 +33,7 @@ const TechnicianProfile = sequelize.define('TechnicianProfile', {
     }
   },
   phone: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.STRING(30),
     allowNull: false,
     validate: {
       notEmpty: true,
@@ -158,7 +158,7 @@ const TechnicianProfile = sequelize.define('TechnicianProfile', {
     allowNull: true
   },
   emergency_contact_phone: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.STRING(30),
     allowNull: true
   },
   emergency_contact_relation: {

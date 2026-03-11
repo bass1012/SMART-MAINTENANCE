@@ -579,18 +579,22 @@ Rapport officiel soumis
 
   bool _hasTechnicalMeasures(Map<String, dynamic> report) {
     final pression = report['pression']?.toString() ?? '';
-    final temperature = report['temperature']?.toString() ?? '';
+    final puissance = report['puissance']?.toString() ??
+        report['temperature']?.toString() ??
+        '';
     final intensite = report['intensite']?.toString() ?? '';
     final tension = report['tension']?.toString() ?? '';
     return pression.isNotEmpty ||
-        temperature.isNotEmpty ||
+        puissance.isNotEmpty ||
         intensite.isNotEmpty ||
         tension.isNotEmpty;
   }
 
   Widget _buildTechnicalMeasuresSection(Map<String, dynamic> report) {
     final pression = report['pression']?.toString() ?? '';
-    final temperature = report['temperature']?.toString() ?? '';
+    final puissance = report['puissance']?.toString() ??
+        report['temperature']?.toString() ??
+        '';
     final intensite = report['intensite']?.toString() ?? '';
     final tension = report['tension']?.toString() ?? '';
 
@@ -631,12 +635,12 @@ Rapport officiel soumis
                         '$pression bar',
                       ),
                     ),
-                  if (temperature.isNotEmpty)
+                  if (puissance.isNotEmpty)
                     Expanded(
                       child: _buildMeasureItem(
-                        Icons.thermostat,
-                        'Température',
-                        '$temperature °C',
+                        Icons.power,
+                        'Puissance',
+                        '$puissance CV',
                       ),
                     ),
                 ],

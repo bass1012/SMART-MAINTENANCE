@@ -52,6 +52,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Suivi de livraison
+            _buildDeliveryTrackingCard(),
+            const SizedBox(height: 16),
+
             // Statut de la commande
             _buildStatusCard(),
             const SizedBox(height: 16),
@@ -101,6 +105,223 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeliveryTrackingCard() {
+    final status =
+        (widget.order['status'] ?? 'pending').toString().toLowerCase();
+
+    // Définir les étapes de livraison
+    final List<Map<String, dynamic>> steps = [
+      {
+        'key': 'pending',
+        'label': 'Commande reçue',
+        'icon': Icons.receipt_long,
+        'description': 'Votre commande a été enregistrée',
+      },
+      {
+        'key': 'processing',
+        'label': 'En préparation',
+        'icon': Icons.inventory_2,
+        'description': 'Nous préparons votre commande',
+      },
+      {
+        'key': 'shipped',
+        'label': 'Expédiée',
+        'icon': Icons.local_shipping,
+        'description': 'Votre commande est en route',
+      },
+      {
+        'key': 'delivered',
+        'label': 'Livrée',
+        'icon': Icons.home,
+        'description': 'Commande livrée avec succès',
+      },
+    ];
+
+    // Déterminer l'index actuel
+    int currentIndex = 0;
+    if (status == 'cancelled') {
+      currentIndex = -1; // Annulée
+    } else if (status == 'delivered' || status == 'completed') {
+      currentIndex = 3;
+    } else if (status == 'shipped') {
+      currentIndex = 2;
+    } else if (status == 'processing' || status == 'confirmed') {
+      currentIndex = 1;
+    } else {
+      currentIndex = 0;
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.local_shipping, color: Color(0xFF0a543d)),
+                const SizedBox(width: 8),
+                const Text(
+                  'Suivi de livraison',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            if (status == 'cancelled')
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.cancel, color: Colors.red, size: 32),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Commande annulée',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red,
+                              fontSize: 16,
+                            ),
+                          ),
+                          Text(
+                            'Cette commande a été annulée',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...steps.asMap().entries.map((entry) {
+                final index = entry.key;
+                final step = entry.value;
+                final isCompleted = index <= currentIndex;
+                final isCurrent = index == currentIndex;
+                final isLast = index == steps.length - 1;
+
+                return Column(
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Indicateur vertical
+                        Column(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: isCompleted
+                                    ? const Color(0xFF0a543d)
+                                    : Colors.grey.shade300,
+                                shape: BoxShape.circle,
+                                boxShadow: isCurrent
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFF0a543d)
+                                              .withOpacity(0.4),
+                                          blurRadius: 8,
+                                          spreadRadius: 2,
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                              child: Icon(
+                                step['icon'],
+                                color: isCompleted ? Colors.white : Colors.grey,
+                                size: 20,
+                              ),
+                            ),
+                            if (!isLast)
+                              Container(
+                                width: 3,
+                                height: 40,
+                                color: isCompleted && index < currentIndex
+                                    ? const Color(0xFF0a543d)
+                                    : Colors.grey.shade300,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(width: 16),
+                        // Contenu de l'étape
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  step['label'],
+                                  style: TextStyle(
+                                    fontWeight: isCurrent
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
+                                    fontSize: isCurrent ? 16 : 14,
+                                    color: isCompleted
+                                        ? Colors.black
+                                        : Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  step['description'],
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isCompleted
+                                        ? Colors.grey.shade700
+                                        : Colors.grey.shade400,
+                                  ),
+                                ),
+                                if (isCurrent && isCompleted)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0a543d)
+                                            .withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        'Étape actuelle',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF0a543d),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }).toList(),
           ],
         ),
       ),
@@ -339,18 +560,29 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Map<String, dynamic> _getStatusInfo(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
+        return {
+          'label': 'Terminée',
+          'color': Colors.green,
+          'icon': Icons.check_circle,
+        };
       case 'delivered':
         return {
           'label': 'Livrée',
           'color': Colors.green,
-          'icon': Icons.check_circle,
+          'icon': Icons.home,
+        };
+      case 'shipped':
+        return {
+          'label': 'Expédiée',
+          'color': Colors.cyan,
+          'icon': Icons.local_shipping,
         };
       case 'processing':
       case 'confirmed':
         return {
-          'label': 'En cours',
+          'label': 'En préparation',
           'color': Colors.blue,
-          'icon': Icons.hourglass_empty,
+          'icon': Icons.inventory,
         };
       case 'cancelled':
         return {

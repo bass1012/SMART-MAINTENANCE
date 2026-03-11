@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../utils/snackbar_helper.dart';
 import '../../screens/auth/email_verification_screen.dart';
+import '../../screens/customer/cgu_cgv_screen.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 class RegisterForm extends StatefulWidget {
@@ -31,11 +32,12 @@ class _RegisterFormState extends State<RegisterForm> {
   String? _city;
   String? _commune;
 
-  // Méthode de vérification: SMS par défaut
+  // Méthode de vérification: SMS en priorité avec fallback email
   final String _verificationMethod = 'sms';
 
   bool _isLoading = false;
   int _currentStep = 0; // 0: Informations personnelles, 1: Mot de passe
+  bool _acceptedCGU = false; // Acceptation des CGU/CGV
 
   // Valider la section 1
   bool _validateSection1() {
@@ -77,7 +79,7 @@ class _RegisterFormState extends State<RegisterForm> {
       return false;
     }
 
-    // Email optionnel mais valide si renseigné
+    // Email optionnel mais valide si renseigné (recommandé pour le fallback SMS)
     if (_emailController.text.trim().isNotEmpty) {
       final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
       if (!emailRegex.hasMatch(_emailController.text.trim())) {
@@ -112,6 +114,13 @@ class _RegisterFormState extends State<RegisterForm> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Vérifier l'acceptation des CGU/CGV
+    if (!_acceptedCGU) {
+      _showError(
+          'Veuillez accepter les Conditions Générales d\'Utilisation et de Vente');
+      return;
+    }
+
     try {
       setState(() => _isLoading = true);
 
@@ -145,17 +154,15 @@ class _RegisterFormState extends State<RegisterForm> {
         // Cacher le snackbar de chargement
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-        // Vérification SMS uniquement (email désactivé)
-        final verificationMethod = response['verificationMethod'] ?? 'email';
-        final requiresSmsVerification = verificationMethod == 'sms' &&
-            (response['requiresVerification'] == true ||
-                response['verificationMethod'] != null);
+        // Vérification requise
+        final requiresVerification = response['requiresVerification'] == true ||
+            response['verificationMethod'] != null;
 
-        if (requiresSmsVerification) {
+        if (requiresVerification) {
           // Sauvegarder le token directement
           if (response['accessToken'] != null) {
             await api.setAuthToken(response['accessToken']);
-            debugPrint('✅ Token sauvegardé pour vérification SMS');
+            debugPrint('✅ Token sauvegardé pour vérification');
           }
 
           // Sauvegarder les données utilisateur
@@ -164,23 +171,26 @@ class _RegisterFormState extends State<RegisterForm> {
             debugPrint('✅ Données utilisateur sauvegardées');
           }
 
+          // Toujours afficher le message SMS (même si fallback email a été utilisé)
+          // Le client pourra renvoyer le code par email s'il ne reçoit pas le SMS
           final userPhone = response['user']?['phone']?.toString() ??
               _phoneController.text.trim();
-
           SnackBarHelper.showInfo(
             context,
             'Un code de vérification a été envoyé par SMS au $userPhone',
             duration: const Duration(seconds: 3),
           );
 
-          // Rediriger vers l'écran de vérification SMS
+          // Rediriger vers l'écran de vérification avec le numéro de téléphone
+          // L'écran affichera "Vérifiez votre numéro" et proposera SMS/Email pour le renvoi
           await Future.delayed(const Duration(milliseconds: 500));
           if (mounted) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
                 builder: (context) => EmailVerificationScreen(
-                  email: userPhone, // Numéro de téléphone pour SMS
+                  email:
+                      userPhone, // Toujours le téléphone pour afficher l'écran SMS
                   userId: response['user']?['id'] ?? 0,
                 ),
               ),
@@ -189,7 +199,7 @@ class _RegisterFormState extends State<RegisterForm> {
           return;
         }
 
-        // Pas de vérification email - sauvegarder directement
+        // Pas de vérification requise - sauvegarder directement
         final accessToken =
             response['accessToken'] ?? response['data']?['accessToken'];
         if (accessToken != null) {
@@ -627,10 +637,10 @@ class _RegisterFormState extends State<RegisterForm> {
         ),
         const SizedBox(height: 14),
 
-        // Email (optionnel)
+        // Email (optionnel - recommandé pour recevoir le code par email si SMS indisponible)
         _buildModernTextField(
           controller: _emailController,
-          label: 'Email (optionnel)',
+          label: 'Email (recommandé)',
           icon: Icons.email_outlined,
           keyboardType: TextInputType.emailAddress,
           hintText: 'exemple@domaine.com',
@@ -886,6 +896,10 @@ class _RegisterFormState extends State<RegisterForm> {
         ),
         const SizedBox(height: 14),
 
+        // Checkbox CGU/CGV
+        _buildCGUCheckbox(),
+        const SizedBox(height: 14),
+
         // Bouton Créer mon compte
         SizedBox(
           height: 56,
@@ -947,6 +961,110 @@ class _RegisterFormState extends State<RegisterForm> {
                 ),
         ),
       ],
+    );
+  }
+
+  // Widget checkbox CGU/CGV
+  Widget _buildCGUCheckbox() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _acceptedCGU
+            ? const Color(0xFF0a543d).withOpacity(0.05)
+            : Colors.orange.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _acceptedCGU
+              ? const Color(0xFF0a543d).withOpacity(0.2)
+              : Colors.orange.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Checkbox personnalisée
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _acceptedCGU = !_acceptedCGU;
+              });
+            },
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: _acceptedCGU ? const Color(0xFF0a543d) : Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _acceptedCGU
+                      ? const Color(0xFF0a543d)
+                      : Colors.grey.shade400,
+                  width: 2,
+                ),
+              ),
+              child: _acceptedCGU
+                  ? const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 18,
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Texte avec lien
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                      height: 1.4,
+                    ),
+                    children: [
+                      const TextSpan(text: 'J\'accepte les '),
+                      WidgetSpan(
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const CGUCGVScreen(),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            'Conditions Générales d\'Utilisation et de Vente',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: const Color(0xFF0a543d),
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const TextSpan(text: ' de Smart Maintenance by MCT.'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '* Requis pour créer votre compte',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.orange.shade700,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

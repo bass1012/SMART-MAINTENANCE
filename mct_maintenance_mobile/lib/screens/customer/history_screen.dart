@@ -123,7 +123,7 @@ class _HistoryScreenState extends State<HistoryScreen>
       case 'maintenance':
         return 'Maintenance';
       case 'repair':
-        return 'Réparation';
+        return 'Dépannage';
       case 'installation':
         return 'Installation';
       case 'diagnostic':

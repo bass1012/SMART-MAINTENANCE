@@ -7,5 +7,8 @@
     "notistack": "^3.0.2",
     "react-to-print": "^3.1.1",
     "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "agentation": "^2.3.0"
   }
 }

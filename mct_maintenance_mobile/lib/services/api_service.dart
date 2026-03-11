@@ -371,13 +371,13 @@ class ApiService {
     return QuoteContract.fromJson(response['data']);
   }
 
-  Future<void> acceptQuote(
+  Future<Map<String, dynamic>> acceptQuote(
     String quoteId, {
     DateTime? scheduledDate,
     bool executeNow = false,
     String? secondContact,
   }) async {
-    await _handleRequest(
+    final response = await _handleRequest(
       'POST',
       '/api/customer/quotes/$quoteId/accept',
       body: {
@@ -388,6 +388,7 @@ class ApiService {
       },
       successMessage: 'Devis accepté avec succès',
     );
+    return response;
   }
 
   Future<QuoteContract> rejectQuote(String quoteId, String reason) async {
@@ -516,12 +517,35 @@ class ApiService {
 
   // ==================== SOUSCRIPTIONS ====================
 
-  Future<Map<String, dynamic>> createSubscription(
-      int maintenanceOfferId) async {
+  /// Valider un code promo
+  Future<Map<String, dynamic>?> validatePromoCode(String code) async {
+    try {
+      final response = await _handleRequest(
+        'POST',
+        '/api/promotions/validate',
+        body: {'code': code},
+        successMessage: 'Code promo valide',
+      );
+      return response['data'];
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> createSubscription(int maintenanceOfferId,
+      {String? promoCode, int equipmentCount = 1}) async {
+    final body = <String, dynamic>{
+      'maintenance_offer_id': maintenanceOfferId,
+      'equipment_count': equipmentCount,
+    };
+    if (promoCode != null && promoCode.isNotEmpty) {
+      body['promo_code'] = promoCode;
+    }
+
     final response = await _handleRequest(
       'POST',
       '/api/customer/subscriptions',
-      body: {'maintenance_offer_id': maintenanceOfferId},
+      body: body,
       successMessage: 'Souscription créée avec succès',
     );
 
@@ -531,10 +555,17 @@ class ApiService {
   Future<Map<String, dynamic>> createServiceSubscription({
     required int serviceId,
     required String serviceType, // 'installation' ou 'repair'
+    String? promoCode,
   }) async {
-    final body = serviceType == 'installation'
-        ? {'installation_service_id': serviceId}
-        : {'repair_service_id': serviceId};
+    final body = <String, dynamic>{};
+    if (serviceType == 'installation') {
+      body['installation_service_id'] = serviceId;
+    } else {
+      body['repair_service_id'] = serviceId;
+    }
+    if (promoCode != null && promoCode.isNotEmpty) {
+      body['promo_code'] = promoCode;
+    }
 
     final response = await _handleRequest(
       'POST',
@@ -830,6 +861,36 @@ class ApiService {
     return response;
   }
 
+  // Méthode pour confirmer le paiement d'un contrat
+  Future<Map<String, dynamic>> confirmContractPayment(int subscriptionId,
+      {String? paymentReference}) async {
+    final response = await _handleRequest(
+      'POST',
+      '/api/customer/subscriptions/$subscriptionId/confirm-payment',
+      body: {
+        if (paymentReference != null) 'payment_reference': paymentReference,
+        'payment_method': 'mobile',
+      },
+    );
+
+    return response;
+  }
+
+  // Méthode pour récupérer un contrat par ID
+  Future<Contract?> getContractById(int contractId) async {
+    try {
+      // Récupérer tous les contrats et filtrer
+      final contracts = await getCustomerContracts();
+      return contracts.firstWhere(
+        (c) => c.id == contractId || c.subscriptionId == contractId,
+        orElse: () => throw Exception('Contrat non trouvé'),
+      );
+    } catch (e) {
+      print('⚠️  Erreur récupération contrat #$contractId: $e');
+      return null;
+    }
+  }
+
   // Méthode générique GET
   Future<Map<String, dynamic>> get(String endpoint,
       {Map<String, String>? queryParams}) async {
@@ -984,15 +1045,37 @@ class ApiService {
   // ==================== NOTIFICATIONS FCM ====================
 
   /// Mettre à jour le token FCM de l'utilisateur
-  Future<void> updateFcmToken(String fcmToken) async {
-    print('📤 Envoi du token FCM au backend...');
+  /// Retourne true si le token a été enregistré avec succès
+  Future<bool> updateFcmToken(String fcmToken) async {
+    print('📤 [FCM] Envoi du token FCM au backend...');
+    print('📱 [FCM] Token: ${fcmToken.substring(0, 30)}...');
+    print('🔐 [FCM] Auth token présent: ${_authToken != null}');
 
-    await _handleRequest(
-      'POST',
-      '/api/auth/fcm-token',
-      body: {'fcm_token': fcmToken},
-      successMessage: 'Token FCM enregistré',
-    );
+    if (_authToken == null) {
+      print(
+          '❌ [FCM] ERREUR: Pas de token d\'authentification, impossible d\'envoyer le token FCM');
+      return false;
+    }
+
+    try {
+      final response = await _handleRequest(
+        'POST',
+        '/api/auth/fcm-token',
+        body: {'fcm_token': fcmToken},
+        successMessage: 'Token FCM enregistré',
+      );
+
+      final success = response['success'] == true;
+      if (success) {
+        print('✅ [FCM] Token FCM enregistré avec succès dans le backend');
+      } else {
+        print('⚠️  [FCM] Réponse inattendue du backend: $response');
+      }
+      return success;
+    } catch (e) {
+      print('❌ [FCM] ERREUR lors de l\'envoi du token FCM: $e');
+      return false;
+    }
   }
 
   // Créer une demande d'intervention
@@ -1134,6 +1217,15 @@ class ApiService {
     );
   }
 
+  // Récupérer les frais de diagnostic configurés
+  Future<Map<String, dynamic>> getDiagnosticConfig() async {
+    return await _handleRequest(
+      'GET',
+      '/api/interventions/config/diagnostic-fee',
+      successMessage: 'Configuration diagnostic récupérée',
+    );
+  }
+
   // Annuler une intervention (customer)
   Future<Map<String, dynamic>> cancelIntervention(int interventionId) async {
     return await _handleRequest(
@@ -1160,6 +1252,25 @@ class ApiService {
         'review': review,
       },
       successMessage: 'Évaluation enregistrée',
+    );
+  }
+
+  // Confirmer ou contester la fin d'une intervention
+  Future<Map<String, dynamic>> confirmInterventionCompletion(
+      int interventionId, bool confirmed,
+      {String? rejectionReason}) async {
+    print(
+        '🔔 Confirmation intervention #$interventionId - confirmed: $confirmed');
+    final body = <String, dynamic>{'confirmed': confirmed};
+    if (!confirmed && rejectionReason != null) {
+      body['rejection_reason'] = rejectionReason;
+    }
+    return await _handleRequest(
+      'POST',
+      '/api/interventions/$interventionId/confirm-completion',
+      body: body,
+      successMessage:
+          confirmed ? 'Intervention confirmée' : 'Contestation enregistrée',
     );
   }
 
@@ -1612,15 +1723,44 @@ class ApiService {
         request.fields['observations'] =
             reportData['observations']?.toString() ?? '';
 
-        // Ajouter les mesures techniques
+        // Section Équipement
+        request.fields['equipment_state'] =
+            reportData['equipment_state']?.toString() ?? '';
+        request.fields['equipment_type'] =
+            reportData['equipment_type']?.toString() ?? '';
+        request.fields['equipment_brand'] =
+            reportData['equipment_brand']?.toString() ?? '';
+
+        // Mesures techniques
         request.fields['pression'] = reportData['pression']?.toString() ?? '';
-        request.fields['temperature'] =
-            reportData['temperature']?.toString() ?? '';
+        request.fields['puissance'] = reportData['puissance']?.toString() ?? '';
         request.fields['intensite'] = reportData['intensite']?.toString() ?? '';
         request.fields['tension'] = reportData['tension']?.toString() ?? '';
 
-        // Ajouter materials_used en JSON
-        if (reportData['materials_used'] != null) {
+        // Section Détail Intervention
+        request.fields['technician_name'] =
+            reportData['technician_name']?.toString() ?? '';
+        request.fields['intervention_date'] =
+            reportData['intervention_date']?.toString() ?? '';
+        request.fields['start_time'] =
+            reportData['start_time']?.toString() ?? '';
+        request.fields['end_time'] = reportData['end_time']?.toString() ?? '';
+        request.fields['intervention_nature'] =
+            reportData['intervention_nature']?.toString() ?? '';
+
+        // Ajouter equipments en JSON (nouveau format multi-équipements)
+        if (reportData['equipments'] != null) {
+          request.fields['equipments'] = jsonEncode(reportData['equipments']);
+          request.fields['equipment_count'] =
+              (reportData['equipments'] as List).length.toString();
+        }
+
+        // Ajouter materials_used / spare_parts en JSON
+        if (reportData['spare_parts'] != null) {
+          request.fields['spare_parts'] = jsonEncode(reportData['spare_parts']);
+          request.fields['materials_used'] =
+              jsonEncode(reportData['spare_parts']);
+        } else if (reportData['materials_used'] != null) {
           request.fields['materials_used'] =
               jsonEncode(reportData['materials_used']);
         }

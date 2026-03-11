@@ -53,21 +53,31 @@ class FCMService {
     }
 
     try {
+      // Sanitiser les données - FCM requiert que toutes les valeurs soient des strings
+      const sanitizedData = {};
+      for (const [key, value] of Object.entries(data || {})) {
+        // Ignorer les valeurs null/undefined et les objets complexes
+        if (value !== null && value !== undefined && typeof value !== 'object') {
+          sanitizedData[key] = String(value);
+        } else if (typeof value === 'object' && value !== null) {
+          // Pour les objets, on les stringify
+          try {
+            sanitizedData[key] = JSON.stringify(value);
+          } catch (e) {
+            sanitizedData[key] = String(value);
+          }
+        }
+      }
+      
+      sanitizedData.click_action = 'FLUTTER_NOTIFICATION_CLICK';
+      
       const message = {
         token: fcmToken,
         notification: {
           title: notification.title || 'MCT Maintenance',
           body: notification.body || 'Nouvelle notification'
         },
-        data: {
-          ...data,
-          // Convertir tous les champs en string (requis par FCM)
-          click_action: 'FLUTTER_NOTIFICATION_CLICK',
-          ...Object.keys(data).reduce((acc, key) => {
-            acc[key] = String(data[key]);
-            return acc;
-          }, {})
-        },
+        data: sanitizedData,
         android: {
           priority: 'high',
           notification: {

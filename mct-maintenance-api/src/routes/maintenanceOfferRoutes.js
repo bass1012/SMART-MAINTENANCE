@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { MaintenanceOffer, User } = require('../models');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const notificationService = require('../services/notificationService');
 
-// GET all maintenance offers (admin only)
-router.get('/', authenticate, authorize('admin'), async (req, res) => {
+// GET all maintenance offers (admin and manager)
+router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     console.log('🔍 GET /api/maintenance-offers');
     
@@ -31,7 +31,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // GET maintenance offer by ID (admin only)
-router.get('/:id', authenticate, authorize('admin'), async (req, res) => {
+router.get('/:id', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`🔍 GET /api/maintenance-offers/${id}`);
@@ -63,16 +63,16 @@ router.get('/:id', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // POST create new maintenance offer (admin only)
-router.post('/', authenticate, authorize('admin'), async (req, res) => {
+router.post('/', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { title, description, price, duration, features, isActive } = req.body;
     
     console.log('📝 POST /api/maintenance-offers - Creating new offer:', title);
     
-    if (!title || !price || !duration) {
+    if (!title || !price) {
       return res.status(400).json({
         success: false,
-        message: 'Le titre, le prix et la durée sont requis'
+        message: 'Le titre et le prix sont requis'
       });
     }
     
@@ -151,7 +151,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // PUT update maintenance offer (admin only)
-router.put('/:id', authenticate, authorize('admin'), async (req, res) => {
+router.put('/:id', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, price, duration, features, isActive } = req.body;
@@ -194,7 +194,7 @@ router.put('/:id', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // PATCH toggle active status (admin only)
-router.patch('/:id/toggle', authenticate, authorize('admin'), async (req, res) => {
+router.patch('/:id/toggle', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.body;
@@ -278,8 +278,8 @@ router.patch('/:id/toggle', authenticate, authorize('admin'), async (req, res) =
   }
 });
 
-// DELETE maintenance offer (admin only)
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+// DELETE maintenance offer (admin only - suppression réservée aux admins)
+router.delete('/:id', authenticate, adminOnly, async (req, res) => {
   try {
     const { id } = req.params;
     

@@ -173,7 +173,7 @@ const interventionCreatedTemplate = (intervention, customer) => ({
               <tr>
                 <td style="background-color: #f9f9f9; padding: 20px; text-align: center; color: #666; font-size: 12px;">
                   <p style="margin: 5px 0; font-weight: bold;">SMART MAINTENANCE</p>
-                  <p style="margin: 5px 0;">Email: contact@mct-maintenance.com | Téléphone: +225 XX XX XX XX XX</p>
+                  <p style="margin: 5px 0;">Email: smartmaintenance@mct.ci | Téléphone: +225 XX XX XX XX XX</p>
                   <p style="margin: 10px 0 5px 0;">Cet email a été envoyé automatiquement, merci de ne pas y répondre directement.</p>
                 </td>
               </tr>

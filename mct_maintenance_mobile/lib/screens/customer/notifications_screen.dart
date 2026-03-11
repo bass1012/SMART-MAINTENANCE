@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../utils/snackbar_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -26,8 +27,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _loadNotifications() async {
     try {
+      if (!mounted) return;
       setState(() => _isLoading = true);
       final response = await _apiService.getNotifications();
+
+      if (!mounted) return;
 
       if (response['success']) {
         setState(() {
@@ -37,18 +41,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               _notifications.where((n) => !(n['is_read'] ?? false)).length;
           _isLoading = false;
         });
+      } else {
+        setState(() => _isLoading = false);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        SnackBarHelper.showError(
-            context, 'Erreur lors du chargement des notifications');
-      }
+      SnackBarHelper.showError(
+          context, 'Erreur lors du chargement des notifications');
     }
   }
 
   Future<void> _markAsRead(int notificationId) async {
     try {
+      if (!mounted) return;
       // Mise à jour optimiste de l'interface
       setState(() {
         final index =
@@ -64,8 +70,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await _apiService.markNotificationAsRead(notificationId);
     } catch (e) {
       // En cas d'erreur, recharger pour avoir l'état correct
-      await _loadNotifications();
       if (mounted) {
+        await _loadNotifications();
         SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
     }
@@ -73,6 +79,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _markAllAsRead() async {
     try {
+      if (!mounted) return;
       // Mise à jour optimiste de l'interface
       setState(() {
         for (var notification in _notifications) {
@@ -91,8 +98,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       }
     } catch (e) {
       // En cas d'erreur, recharger pour avoir l'état correct
-      await _loadNotifications();
       if (mounted) {
+        await _loadNotifications();
         SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
     }
@@ -102,18 +109,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void _handleNotificationTap(Map<String, dynamic> notification) {
     print('📱 Clic sur notification: ${notification['type']}');
 
-    // Extraire les données additionnelles du champ 'data' (JSON)
-    final Map<String, dynamic>? additionalData = notification['data'] is Map
-        ? Map<String, dynamic>.from(notification['data'])
-        : null;
-
-    print('   Données brutes: ${notification['data']}');
-    print('   Données extraites: $additionalData');
+    // Extraire les données additionnelles du champ 'data' (JSON ou Map)
+    Map<String, dynamic>? additionalData;
+    if (notification['data'] != null) {
+      print('   Données brutes: ${notification['data']}');
+      if (notification['data'] is String) {
+        try {
+          additionalData = jsonDecode(notification['data']);
+        } catch (e) {
+          print('   Erreur parsing JSON: $e');
+        }
+      } else if (notification['data'] is Map) {
+        additionalData = Map<String, dynamic>.from(notification['data']);
+      }
+      print('   Données extraites: $additionalData');
+    }
 
     // Créer l'objet de données pour la navigation
     final Map<String, dynamic> notificationData = {
       'type': notification['type'],
-      'role': notification['role'],
+      'role': notification['role'] ??
+          'customer', // Par défaut customer pour cet écran
       // Essayer d'abord dans 'data', puis directement dans notification (pour compatibilité)
       'interventionId': additionalData?['interventionId'] ??
           additionalData?['intervention_id'] ??
@@ -137,12 +153,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     print('   Données finales pour navigation: $notificationData');
 
-    // Fermer l'écran de notifications avant de naviguer
-    Navigator.pop(context);
+    // Obtenir le NavigatorState AVANT de fermer l'écran
+    final navigator = Navigator.of(context);
 
-    // Utiliser le service de navigation
+    // Utiliser le service de navigation avec pushReplacement pour éviter le context invalide
     final navigationService = NotificationNavigationService();
-    navigationService.navigateFromNotification(context, notificationData);
+    navigationService.navigateFromNotificationWithReplace(
+        navigator, notificationData);
   }
 
   void _showDeleteAllConfirmation() {
@@ -300,22 +317,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: LoadingIndicator())
-          : _notifications.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                  onRefresh: _loadNotifications,
-                  color: const Color(0xFF0a543d),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _notifications.length,
-                    itemBuilder: (context, index) {
-                      final notification = _notifications[index];
-                      return _buildNotificationCard(notification);
-                    },
-                  ),
-                ),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background_tech_2.png'),
+            fit: BoxFit.cover,
+            opacity: 0.4,
+          ),
+        ),
+        child: Container(
+          color: Colors.black.withOpacity(0.35),
+          child: _isLoading
+              ? const Center(child: LoadingIndicator())
+              : _notifications.isEmpty
+                  ? _buildEmptyState()
+                  : RefreshIndicator(
+                      onRefresh: _loadNotifications,
+                      color: const Color(0xFF0a543d),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _notifications.length,
+                        itemBuilder: (context, index) {
+                          final notification = _notifications[index];
+                          return _buildNotificationCard(notification);
+                        },
+                      ),
+                    ),
+        ),
+      ),
     );
   }
 
@@ -369,19 +398,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color:
-            isRead ? Colors.white : const Color(0xFF0a543d).withOpacity(0.05),
+        color: isRead
+            ? Colors.white
+            : const Color(0xFF0a543d)
+                .withOpacity(0.45), // Vert AppBar moins transparent
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isRead
               ? Colors.grey.shade200
-              : const Color(0xFF0a543d).withOpacity(0.2),
-          width: 1,
+              : const Color(0xFF0a543d).withOpacity(
+                  0.70), // Vert AppBar plus marqué et moins transparent
+          width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
@@ -436,7 +468,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             style: GoogleFonts.poppins(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: Colors.black87,
+                              color: isRead ? Colors.black87 : Colors.white,
                             ),
                           ),
                         ),
@@ -456,7 +488,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       notification['message'] ?? '',
                       style: GoogleFonts.poppins(
                         fontSize: 13,
-                        color: Colors.black54,
+                        color: isRead ? Colors.black54 : Colors.white,
                         height: 1.4,
                       ),
                     ),
@@ -466,14 +498,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         Icon(
                           Icons.access_time,
                           size: 14,
-                          color: Colors.grey.shade500,
+                          color: isRead ? Colors.grey.shade500 : Colors.white70,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           timeAgo,
                           style: GoogleFonts.poppins(
                             fontSize: 12,
-                            color: Colors.grey.shade500,
+                            color:
+                                isRead ? Colors.grey.shade500 : Colors.white70,
                           ),
                         ),
                       ],
@@ -501,19 +534,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'payment_confirmed':
       case 'payment_success':
       case 'payment_paid':
+      case 'diagnostic_payment_confirmed':
         return Icons.check_circle_outline;
       case 'payment_pending':
+      case 'second_payment_required':
         return Icons.schedule_outlined;
       case 'payment_failed':
+      case 'diagnostic_payment_failed':
         return Icons.error_outline;
       case 'payment_refunded':
         return Icons.money_off_outlined;
       case 'success':
+      case 'intervention_confirmed':
         return Icons.check_circle_outline;
       case 'warning':
         return Icons.warning_amber_outlined;
       case 'error':
+      case 'intervention_rejected':
+      case 'intervention_dispute':
         return Icons.error_outline;
+      case 'report_submitted':
+        return Icons.assignment_turned_in_outlined;
       default:
         return Icons.notifications_outlined;
     }
@@ -532,10 +573,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'payment_confirmed':
       case 'payment_success':
       case 'payment_paid':
+      case 'diagnostic_payment_confirmed':
+      case 'intervention_confirmed':
         return [const Color(0xFF4CAF50), const Color(0xFF388E3C)]; // Vert
       case 'payment_pending':
+      case 'report_submitted':
+      case 'second_payment_required':
         return [const Color(0xFFFF9800), const Color(0xFFF57C00)]; // Orange
       case 'payment_failed':
+      case 'diagnostic_payment_failed':
+      case 'intervention_rejected':
+      case 'intervention_dispute':
         return [const Color(0xFFF44336), const Color(0xFFD32F2F)]; // Rouge
       case 'payment_refunded':
         return [const Color(0xFF2196F3), const Color(0xFF1976D2)]; // Bleu

@@ -10,18 +10,25 @@ class PaymentService {
   Future<Map<String, dynamic>> initializeOrderPayment(
     int orderId,
     double amount,
-    String reference,
-  ) async {
+    String reference, {
+    int paymentStep = 1, // 1 = premier paiement 50%, 2 = second paiement 50%
+  }) async {
     try {
-      print('💳 Initialisation paiement pour commande $orderId');
+      print(
+          '💳 Initialisation paiement pour commande $orderId (étape $paymentStep)');
 
       final response = await _apiService.post(
         '/payments/fineopay/initialize',
         {
           'orderId': orderId,
           'amount': amount,
-          'title': 'Commande $reference',
-          'description': 'Paiement pour la commande $reference',
+          'title': paymentStep == 1
+              ? 'Commande $reference - Premier paiement (50%)'
+              : 'Commande $reference - Paiement final (50%)',
+          'description': paymentStep == 1
+              ? 'Premier paiement (50%) pour la commande $reference'
+              : 'Paiement final (50%) pour la commande $reference',
+          'paymentStep': paymentStep,
         },
       );
 
@@ -135,6 +142,46 @@ class PaymentService {
     } catch (e) {
       print('❌ Erreur processus paiement: $e');
       return false;
+    }
+  }
+
+  /// Initialiser un paiement FineoPay pour un contrat/subscription
+  Future<Map<String, dynamic>> initializeSubscriptionPayment(
+    int subscriptionId,
+    double amount,
+    String reference, {
+    int? paymentPhase,
+  }) async {
+    try {
+      final phaseLabel = paymentPhase == 1
+          ? '1er paiement (50%)'
+          : (paymentPhase == 2 ? '2ème paiement (50%)' : '');
+      print(
+          '💳 Initialisation paiement pour contrat $subscriptionId - $phaseLabel');
+
+      final response = await _apiService.post(
+        '/payments/fineopay/initialize-subscription',
+        {
+          'subscriptionId': subscriptionId,
+          'amount': amount,
+          'title':
+              'Contrat $reference${paymentPhase != null ? ' - ${paymentPhase == 1 ? "1er" : "2ème"} paiement' : ''}',
+          'description':
+              'Paiement du contrat de maintenance $reference${paymentPhase != null ? ' (${paymentPhase == 1 ? "50% à la validation" : "50% dernière visite"})' : ''}',
+          'paymentPhase': paymentPhase,
+        },
+      );
+
+      if (response['success'] == true) {
+        print('✅ Paiement contrat initialisé avec FineoPay');
+        return response['data'];
+      } else {
+        throw Exception(
+            response['message'] ?? 'Erreur initialisation paiement contrat');
+      }
+    } catch (e) {
+      print('❌ Erreur initialisation paiement contrat: $e');
+      rethrow;
     }
   }
 }

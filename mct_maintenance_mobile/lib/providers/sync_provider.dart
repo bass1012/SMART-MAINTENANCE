@@ -44,6 +44,10 @@ class SyncProvider extends ChangeNotifier {
     print('🔄 Initialisation SyncProvider...');
 
     _connectivityService.initialize();
+
+    // Nettoyer les éléments bloqués au démarrage
+    _cleanupOldItems();
+
     _updatePendingCount();
 
     // Écouter changements connectivité
@@ -73,6 +77,30 @@ class SyncProvider extends ChangeNotifier {
         }
       },
     );
+  }
+
+  /// Nettoyer les éléments de sync obsolètes/bloqués au démarrage
+  Future<void> _cleanupOldItems() async {
+    try {
+      final cleaned = await _cacheService.clearOldSyncItems();
+      if (cleaned > 0) {
+        print(
+            '🧹 Nettoyage au démarrage: $cleaned éléments obsolètes supprimés');
+      }
+    } catch (e) {
+      print('❌ Erreur nettoyage éléments obsolètes: $e');
+    }
+  }
+
+  /// Forcer le nettoyage complet de la queue de synchronisation
+  Future<void> clearSyncQueue() async {
+    try {
+      await _cacheService.clearSyncQueue();
+      await _updatePendingCount();
+      notifyListeners();
+    } catch (e) {
+      print('❌ Erreur vidage queue sync: $e');
+    }
   }
 
   /// Mettre à jour le compteur d'éléments en attente
@@ -172,12 +200,13 @@ class SyncProvider extends ChangeNotifier {
         final typeA = a['type'] as String;
         final typeB = b['type'] as String;
 
-        // Ordre de priorité: intervention_status > intervention_update > report_upload > photo_upload
+        // Ordre de priorité: intervention_status > intervention_update > report_upload > diagnostic_report_upload > photo_upload
         final priorityMap = {
           'intervention_status': 0,
           'intervention_update': 1,
           'report_upload': 2,
-          'photo_upload': 3,
+          'diagnostic_report_upload': 3,
+          'photo_upload': 4,
         };
 
         final priorityA = priorityMap[typeA] ?? 99;
@@ -217,11 +246,13 @@ class SyncProvider extends ChangeNotifier {
               '✅ Élément ${item['id']} synchronisé (${_syncedItemsCount}/${sortedItems.length})');
         } catch (e) {
           final errorMessage = e.toString();
-          final itemType = item['type'] as String;
 
           // Détecter UNIQUEMENT les vraies actions obsolètes (déjà effectuées avec succès)
           final isReallyObsolete = errorMessage.contains('déjà acceptée') ||
               errorMessage.contains('déjà terminée') ||
+              errorMessage.contains('déjà été confirmée') ||
+              errorMessage.contains('déjà confirmée') ||
+              errorMessage.contains('already confirmed') ||
               errorMessage.contains('Intervention non trouvée');
 
           // Erreurs d'ordre = pas obsolète, juste dans le mauvais ordre (retry sans incrémenter le compteur)
@@ -295,6 +326,10 @@ class SyncProvider extends ChangeNotifier {
 
       case 'report_upload':
         await _syncReportUpload(entityId!, data);
+        break;
+
+      case 'diagnostic_report_upload':
+        await _syncDiagnosticReportUpload(entityId!, data);
         break;
 
       case 'photo_upload':
@@ -390,7 +425,7 @@ class SyncProvider extends ChangeNotifier {
       }
 
       // Soumettre le rapport (upload multipart inclus)
-      final response = await _apiService.submitInterventionReport(
+      await _apiService.submitInterventionReport(
         interventionId,
         reportData,
       );
@@ -406,6 +441,36 @@ class SyncProvider extends ChangeNotifier {
       }
     } catch (e) {
       print('❌ Erreur upload rapport: $e');
+      rethrow;
+    }
+  }
+
+  /// Synchroniser upload rapport de diagnostic
+  Future<void> _syncDiagnosticReportUpload(
+      int interventionId, Map<String, dynamic> diagnosticData) async {
+    print('🔬 Début upload rapport diagnostic intervention $interventionId');
+
+    try {
+      // Soumettre le rapport de diagnostic
+      await _apiService.post(
+        '/diagnostic-reports',
+        {
+          'intervention_id': interventionId,
+          'problem_description': diagnosticData['problem_description'],
+          'recommended_solution': diagnosticData['recommended_solution'],
+          'parts_needed': diagnosticData['parts_needed'] ?? [],
+          'labor_cost': diagnosticData['labor_cost'] ?? 0,
+          'estimated_total': diagnosticData['estimated_total'] ?? 0,
+          'urgency_level': diagnosticData['urgency_level'] ?? 'medium',
+          'estimated_duration': diagnosticData['estimated_duration'] ?? '',
+          'photos': [], // TODO: Support photos diagnostic
+          'notes': diagnosticData['notes'] ?? '',
+        },
+      );
+
+      print('✅ Rapport diagnostic uploadé avec succès');
+    } catch (e) {
+      print('❌ Erreur upload rapport diagnostic: $e');
       rethrow;
     }
   }

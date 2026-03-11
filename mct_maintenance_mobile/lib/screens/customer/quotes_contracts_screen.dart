@@ -468,15 +468,6 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
                 ),
               ),
               const SizedBox(height: 8),
-              if (quote.description.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    quote.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
               const Divider(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -914,6 +905,8 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
         return 'Expiré';
       case 'pending':
         return 'En attente';
+      case 'pending_payment':
+        return 'Paiement en attente';
       case 'active':
         return 'Actif';
       case 'terminated':
@@ -1011,18 +1004,6 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
                   ),
                 ],
               ),
-              if (contract.description.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  contract.description,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
               const SizedBox(height: 12),
               const Divider(),
               const SizedBox(height: 12),
@@ -1149,6 +1130,8 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
         return Colors.blueGrey;
       case 'pending':
         return Colors.orange;
+      case 'pending_payment':
+        return Colors.deepOrange;
       case 'active':
         return Colors.green;
       case 'expired':
@@ -1164,6 +1147,8 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
     switch (type) {
       case 'maintenance':
         return Icons.build_circle;
+      case 'scheduled_maintenance':
+        return Icons.calendar_month;
       case 'support':
         return Icons.support_agent;
       case 'warranty':

@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
+dotenv.config(); // Charger les variables d'environnement depuis .env
 const path = require('path');
 const fs = require('fs');
 const { testConnection, syncDatabase } = require('./config/database');
@@ -42,6 +43,10 @@ const activityRoutes = require('./routes/activityRoutes');
 const smsWebhookRoutes = require('./routes/smsWebhookRoutes');
 
 const app = express();
+
+// Faire confiance au proxy (ngrok, nginx, etc.) pour rate limiting
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
@@ -58,8 +63,11 @@ const corsOptions = {
       'http://localhost:3001', 
       'http://localhost:3000', 
       'http://192.168.1.139:3001',
-      'http://192.168.1.139:3000'
-    ];
+      'http://192.168.1.139:3000',
+      'https://dashboard.sandbox.mct.ci',
+      'https://dashboard.mct.ci',
+      process.env.FRONTEND_URL
+    ].filter(Boolean);
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {

@@ -32,6 +32,8 @@ router.post('/fineopay/initialize', authenticate, fineoPayController.createPayme
 router.post('/fineopay/callback', fineoPayController.handleCallback);
 router.get('/fineopay/status/:reference', authenticate, fineoPayController.checkTransactionStatus);
 router.post('/fineopay/initialize-diagnostic', authenticate, fineoPayController.initializeDiagnosticPayment);
+router.post('/fineopay/initialize-subscription', authenticate, fineoPayController.initializeSubscriptionPayment);
+router.get('/fineopay/verify-subscription-payment/:subscriptionId', authenticate, fineoPayController.verifySubscriptionPaymentStatus);
 
 // Routes pour les paiements de souscriptions
 router.post('/subscription/initiate', authenticate, paymentController.initiateSubscriptionPayment);

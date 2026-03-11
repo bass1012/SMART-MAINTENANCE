@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
+import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
+import '../../services/connectivity_service.dart';
+import '../../services/local_cache_service.dart';
+import '../../providers/sync_provider.dart';
 
 class DiagnosticReportScreen extends StatefulWidget {
   final int interventionId;
@@ -113,22 +116,61 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
       _isSubmitting = true;
     });
 
+    final connectivityService = ConnectivityService();
+    final cacheService = LocalCacheService();
+
+    final diagnosticData = {
+      'intervention_id': widget.interventionId,
+      'problem_description': _problemController.text,
+      'recommended_solution': _solutionController.text,
+      'parts_needed': _partsList,
+      'labor_cost': 0,
+      'estimated_total': 0,
+      'urgency_level': _selectedUrgency,
+      'estimated_duration': _durationController.text,
+      'photos': [],
+      'notes': _notesController.text,
+    };
+
     try {
+      // Vérifier la connectivité
+      if (!connectivityService.isConnected) {
+        // Mode hors ligne - mettre en queue
+        print('📴 Mode hors ligne - Mise en queue du rapport diagnostic');
+        await cacheService.addToSyncQueue(
+          'diagnostic_report_upload',
+          widget.interventionId,
+          diagnosticData,
+        );
+
+        // Notifier le SyncProvider
+        if (mounted) {
+          context.read<SyncProvider>().addToQueue(
+                'diagnostic_report_upload',
+                widget.interventionId,
+                diagnosticData,
+              );
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Rapport sauvegardé hors ligne. Sera synchronisé au retour du réseau.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Navigator.pop(context, true);
+        }
+        return;
+      }
+
+      // Mode en ligne - soumettre directement
       final apiService = ApiService();
       final response = await apiService.post(
         '/diagnostic-reports',
-        {
-          'intervention_id': widget.interventionId,
-          'problem_description': _problemController.text,
-          'recommended_solution': _solutionController.text,
-          'parts_needed': _partsList,
-          'labor_cost': 0, // Sera défini par le back-office
-          'estimated_total': 0, // Sera calculé par le back-office
-          'urgency_level': _selectedUrgency,
-          'estimated_duration': _durationController.text,
-          'photos': [], // TODO: Implémenter l'upload de photos
-          'notes': _notesController.text,
-        },
+        diagnosticData,
       );
 
       if (response['message'] != null) {
@@ -139,17 +181,42 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pop(context, true); // Retourner à l'écran précédent
+          Navigator.pop(context, true);
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur: $e'),
-            backgroundColor: Colors.red,
-          ),
+      // En cas d'erreur réseau, mettre en queue
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('TimeoutException') ||
+          e.toString().contains('Connection') ||
+          e.toString().contains('Network')) {
+        print('📴 Erreur réseau - Mise en queue du rapport diagnostic');
+        await cacheService.addToSyncQueue(
+          'diagnostic_report_upload',
+          widget.interventionId,
+          diagnosticData,
         );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Erreur réseau. Rapport sauvegardé et sera synchronisé automatiquement.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Navigator.pop(context, true);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) {

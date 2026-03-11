@@ -1,5 +1,5 @@
 const express = require('express');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, adminOnly } = require('../middleware/auth');
 const userController = require('../controllers/user/userController');
 
 const router = express.Router();
@@ -12,7 +12,7 @@ router.get('/:id', authenticate, userController.getUser);
 router.put('/:id', authenticate, userController.updateUser);
 // Update status only
 router.patch('/:id/status', authenticate, userController.updateStatus);
-// Delete
-router.delete('/:id', authenticate, userController.deleteUser);
+// Delete (admin only)
+router.delete('/:id', authenticate, adminOnly, userController.deleteUser);
 
 module.exports = router;

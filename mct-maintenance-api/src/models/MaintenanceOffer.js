@@ -19,12 +19,17 @@ MaintenanceOffer.init({
   },
   price: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
+    allowNull: false,
+    get() {
+      const value = this.getDataValue('price');
+      return value ? parseFloat(value) : 0;
+    }
   },
   duration: {
     type: DataTypes.INTEGER,
-    allowNull: false,
-    comment: 'Durée en mois'
+    allowNull: true,
+    defaultValue: 1,
+    comment: 'Durée en mois (obsolète - les souscriptions expirent après utilisation)'
   },
   features: {
     type: DataTypes.TEXT,

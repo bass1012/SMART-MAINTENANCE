@@ -79,7 +79,7 @@ exports.getDashboardStats = async (req, res, next) => {
     const ordersSum = await Order.sum('totalAmount', {
       where: { 
         customerId: customerId,
-        status: 'paid'
+        paymentStatus: 'paid'
       }
     });
     const totalSpent = ordersSum || 0;

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const { body, query, param } = require('express-validator');
 const notificationController = require('../controllers/notificationController');
 const broadcastController = require('../controllers/broadcastController');
@@ -171,7 +171,7 @@ router.delete('/:id', authenticate, notificationController.deleteNotification);
 router.post(
   '/broadcast/send',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   broadcastController.sendBroadcastNotification
 );
 
@@ -182,7 +182,7 @@ router.post(
 router.get(
   '/broadcast/stats',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   broadcastController.getBroadcastStats
 );
 
@@ -193,7 +193,7 @@ router.get(
 router.get(
   '/broadcast/users',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   broadcastController.getUsers
 );
 

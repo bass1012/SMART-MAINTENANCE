@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../models/contract_model.dart';
 import '../../services/api_service.dart';
 import '../../utils/snackbar_helper.dart';
+import 'contract_payment_screen.dart';
 
 class ContractDetailScreen extends StatefulWidget {
   final Contract contract;
@@ -20,6 +21,32 @@ class ContractDetailScreen extends StatefulWidget {
 class _ContractDetailScreenState extends State<ContractDetailScreen> {
   final ApiService _apiService = ApiService();
   bool _isRequestingRenewal = false;
+  late Contract _contract;
+
+  @override
+  void initState() {
+    super.initState();
+    _contract = widget.contract;
+  }
+
+  /// Ouvrir l'écran de paiement
+  void _openPaymentScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ContractPaymentScreen(
+          subscriptionId: _contract.subscriptionId ?? _contract.id,
+          reference: _contract.reference,
+          amount: _contract.amount,
+          contractType: _contract.type,
+          equipment: _contract.equipmentDescription ?? 'Équipement',
+          model: _contract.equipmentModel,
+          firstPaymentStatus: _contract.firstPaymentStatus,
+          secondPaymentStatus: _contract.secondPaymentStatus,
+        ),
+      ),
+    );
+  }
 
   Future<void> _requestRenewal() async {
     setState(() => _isRequestingRenewal = true);
@@ -80,7 +107,7 @@ class _ContractDetailScreenState extends State<ContractDetailScreen> {
 
     // Créer le message de partage
     final String shareText = '''
-📄 CONTRAT DE MAINTENANCE - MCT MAINTENANCE
+📄 CONTRAT DE MAINTENANCE - SMART MAINTENANCE
 
 Référence: ${contract.reference}
 ${contract.title.isNotEmpty ? 'Titre: ${contract.title}\n' : ''}
@@ -98,13 +125,13 @@ ${contract.description.isNotEmpty ? '\n📝 Description:\n${contract.description
 ${contract.termsAndConditions?.isNotEmpty == true ? '\n📋 Termes et Conditions:\n${contract.termsAndConditions}\n' : ''}
 ${contract.notes?.isNotEmpty == true ? '\n📌 Notes:\n${contract.notes}\n' : ''}
 ---
-MCT Maintenance - Service de qualité
+Smart Maintenance - Service de qualité
     '''
         .trim();
 
     Share.share(
       shareText,
-      subject: 'Contrat ${contract.reference} - MCT Maintenance',
+      subject: 'Contrat ${contract.reference} - Smart Maintenance',
     );
   }
 
@@ -133,7 +160,7 @@ MCT Maintenance - Service de qualité
             image: AssetImage(
                 'assets/images/Maintenancier_SMART_Maintenance_two.png'),
             fit: BoxFit.cover,
-            opacity: 0.4,
+            opacity: 0.15,
           ),
         ),
         child: SingleChildScrollView(
@@ -174,7 +201,9 @@ MCT Maintenance - Service de qualité
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -186,6 +215,7 @@ MCT Maintenance - Service de qualité
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(_getTypeIcon(widget.contract.type),
                                   size: 16, color: statusColor),
@@ -200,7 +230,6 @@ MCT Maintenance - Service de qualité
                             ],
                           ),
                         ),
-                        const SizedBox(width: 12),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -252,7 +281,7 @@ MCT Maintenance - Service de qualité
                   ),
                 ),
 
-              // Montant
+              // Montant avec split payment
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 padding: const EdgeInsets.all(20),
@@ -271,46 +300,236 @@ MCT Maintenance - Service de qualité
                     ),
                   ],
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    // Montant total
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Montant',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Montant Total',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${widget.contract.amount.toStringAsFixed(0)} FCFA',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${widget.contract.amount.toStringAsFixed(0)} FCFA',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _formatPaymentFrequency(
+                                widget.contract.paymentFrequency),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    // Divider
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        _formatPaymentFrequency(
-                            widget.contract.paymentFrequency),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
+                      height: 1,
+                      color: Colors.white.withOpacity(0.3),
+                    ),
+                    const SizedBox(height: 16),
+                    // Split payment breakdown
+                    Row(
+                      children: [
+                        // 1er paiement - 50%
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  '1er paiement',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${(widget.contract.amount / 2).ceil().toStringAsFixed(0)} FCFA',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'À la validation',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
+                        const SizedBox(width: 12),
+                        // 2ème paiement - 50%
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              children: [
+                                const Icon(
+                                  Icons.event_available,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  '2ème paiement',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${(widget.contract.amount / 2).floor().toStringAsFixed(0)} FCFA',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  '4ème visite',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Modalités de paiement - 50/50
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.blue.shade50,
+                      Colors.blue.shade100.withOpacity(0.5),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            color: Colors.blue.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Modalités de paiement',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPaymentStep(
+                      step: '1',
+                      title: 'Premier paiement (50%)',
+                      description: 'À la validation du contrat',
+                      amount: (widget.contract.amount / 2).ceil().toDouble(),
+                      icon: Icons.check_circle_outline,
+                      color: Colors.green,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildPaymentStep(
+                      step: '2',
+                      title: 'Deuxième paiement (50%)',
+                      description:
+                          'À la dernière visite (4ème visite de l\'année)',
+                      amount: (widget.contract.amount / 2).floor().toDouble(),
+                      icon: Icons.event_available,
+                      color: Colors.orange,
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_month,
+                              color: Colors.blue.shade600, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Votre contrat inclut 4 visites de maintenance par an',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.blue.shade800,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -483,7 +702,234 @@ MCT Maintenance - Service de qualité
               ],
 
               // Actions
-              if (isActive)
+              // Bouton de paiement si en attente de paiement
+              if (_contract.status == 'pending_payment')
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      // Alerte paiement en attente
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border:
+                              Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.payment,
+                                color: Colors.orange, size: 32),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Paiement en attente',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Montant: ${_contract.amount.toStringAsFixed(0)} FCFA',
+                                    style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _openPaymentScreen(),
+                          icon: const Icon(Icons.credit_card),
+                          label: const Text('Payer maintenant'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            SnackBarHelper.showInfo(context,
+                                'Contactez-nous au +225 XX XX XX XX XX');
+                          },
+                          icon: const Icon(Icons.support_agent),
+                          label: const Text('Contacter le support'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: const BorderSide(color: Color(0xFF0a543d)),
+                            foregroundColor: const Color(0xFF0a543d),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Bouton de second paiement pour contrats actifs
+              if (_contract.status == 'active' ||
+                  _contract.status == 'awaiting_second_payment')
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      // Alerte second paiement requis
+                      Builder(
+                        builder: (context) {
+                          final visitsCompleted =
+                              _contract.visitsCompleted ?? 0;
+                          final visitsTotal = _contract.visitsTotal ?? 4;
+                          final allVisitsDone = visitsCompleted >= visitsTotal;
+
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: allVisitsDone
+                                  ? Colors.blue.withOpacity(0.1)
+                                  : Colors.grey.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: allVisitsDone
+                                    ? Colors.blue.withOpacity(0.3)
+                                    : Colors.grey.withOpacity(0.3),
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      allVisitsDone
+                                          ? Icons.celebration
+                                          : Icons.hourglass_empty,
+                                      color: allVisitsDone
+                                          ? Colors.blue
+                                          : Colors.grey,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            allVisitsDone
+                                                ? 'Maintenance terminée !'
+                                                : 'Maintenance en cours',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: allVisitsDone
+                                                  ? Colors.blue
+                                                  : Colors.grey[700],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            allVisitsDone
+                                                ? 'Toutes les $visitsTotal visites ont été effectuées.'
+                                                : '$visitsCompleted/$visitsTotal visites effectuées. Le paiement final sera disponible après la dernière visite.',
+                                            style: TextStyle(
+                                              color: Colors.grey[700],
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: allVisitsDone
+                                        ? Colors.orange.shade50
+                                        : Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.payment,
+                                        color: allVisitsDone
+                                            ? Colors.orange
+                                            : Colors.grey,
+                                        size: 24,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Paiement final: ${(_contract.secondPaymentAmount ?? (_contract.amount / 2)).toStringAsFixed(0)} FCFA',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: allVisitsDone
+                                                ? Colors.orange
+                                                : Colors.grey,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Builder(
+                        builder: (context) {
+                          final visitsCompleted =
+                              _contract.visitsCompleted ?? 0;
+                          final visitsTotal = _contract.visitsTotal ?? 4;
+                          final canPay = visitsCompleted >= visitsTotal ||
+                              _contract.status == 'awaiting_second_payment';
+
+                          return SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed:
+                                  canPay ? () => _openPaymentScreen() : null,
+                              icon: const Icon(Icons.credit_card),
+                              label: const Text('Payer le solde (50%)'),
+                              style: ElevatedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                backgroundColor:
+                                    canPay ? Colors.blue : Colors.grey,
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: Colors.grey.shade300,
+                                disabledForegroundColor: Colors.grey.shade600,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Actions pour contrats complétés (après second paiement)
+              if (_contract.status == 'completed')
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -571,14 +1017,92 @@ MCT Maintenance - Service de qualité
     );
   }
 
+  Widget _buildPaymentStep({
+    required String step,
+    required String title,
+    required String description,
+    required double amount,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.2),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              step,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: color,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${amount.toStringAsFixed(0)} FCFA',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Color _getStatusColor(String status) {
     switch (status) {
       case 'draft':
         return Colors.blueGrey;
       case 'pending':
         return Colors.orange;
+      case 'pending_payment':
+        return Colors.orange;
       case 'active':
         return Colors.green;
+      case 'awaiting_second_payment':
+        return Colors.blue;
+      case 'completed':
+        return Colors.teal;
+      case 'used':
+        return Colors.purple;
       case 'expired':
         return Colors.red;
       case 'terminated':
@@ -594,12 +1118,20 @@ MCT Maintenance - Service de qualité
         return 'Brouillon';
       case 'pending':
         return 'En attente';
+      case 'pending_payment':
+        return 'Paiement en attente';
       case 'active':
         return 'Actif';
+      case 'awaiting_second_payment':
+        return 'Paiement final requis';
+      case 'completed':
+        return 'Terminé';
       case 'expired':
         return 'Expiré';
       case 'terminated':
-        return 'Terminé';
+        return 'Résilié';
+      case 'used':
+        return 'Consommé';
       default:
         return status;
     }
@@ -609,6 +1141,8 @@ MCT Maintenance - Service de qualité
     switch (type) {
       case 'maintenance':
         return 'Maintenance';
+      case 'scheduled_maintenance':
+        return 'Maintenance programmée';
       case 'support':
         return 'Support';
       case 'warranty':
@@ -624,6 +1158,8 @@ MCT Maintenance - Service de qualité
     switch (type) {
       case 'maintenance':
         return Icons.build_circle;
+      case 'scheduled_maintenance':
+        return Icons.calendar_month;
       case 'support':
         return Icons.support_agent;
       case 'warranty':

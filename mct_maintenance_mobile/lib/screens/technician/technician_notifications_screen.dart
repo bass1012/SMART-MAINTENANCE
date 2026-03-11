@@ -30,9 +30,11 @@ class _TechnicianNotificationsScreenState
 
   Future<void> _loadNotifications() async {
     try {
+      if (!mounted) return;
       setState(() => _isLoading = true);
       final response = await _apiService.getNotifications();
 
+      if (!mounted) return;
       if (response['success']) {
         setState(() {
           _notifications =
@@ -43,16 +45,16 @@ class _TechnicianNotificationsScreenState
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        SnackBarHelper.showError(
-            context, 'Erreur lors du chargement des notifications');
-      }
+      SnackBarHelper.showError(
+          context, 'Erreur lors du chargement des notifications');
     }
   }
 
   Future<void> _markAsRead(int notificationId) async {
     try {
+      if (!mounted) return;
       // Mise à jour optimiste de l'interface
       setState(() {
         final index =
@@ -68,8 +70,8 @@ class _TechnicianNotificationsScreenState
       await _apiService.markNotificationAsRead(notificationId);
     } catch (e) {
       // En cas d'erreur, recharger pour avoir l'état correct
-      await _loadNotifications();
       if (mounted) {
+        await _loadNotifications();
         SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
     }
@@ -77,6 +79,7 @@ class _TechnicianNotificationsScreenState
 
   Future<void> _markAllAsRead() async {
     try {
+      if (!mounted) return;
       // Mise à jour optimiste de l'interface
       setState(() {
         for (var notification in _notifications) {
@@ -95,8 +98,8 @@ class _TechnicianNotificationsScreenState
       }
     } catch (e) {
       // En cas d'erreur, recharger pour avoir l'état correct
-      await _loadNotifications();
       if (mounted) {
+        await _loadNotifications();
         SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
     }
@@ -145,17 +148,13 @@ class _TechnicianNotificationsScreenState
 
     print('   Données finales pour navigation: $notificationData');
 
-    // Fermer l'écran de notifications avant de naviguer
-    Navigator.pop(context);
+    // Obtenir le NavigatorState AVANT de fermer l'écran
+    final navigator = Navigator.of(context);
 
-    // Attendre la fin de l'animation de fermeture
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    // Utiliser le service de navigation
-    if (mounted) {
-      final navigationService = NotificationNavigationService();
-      navigationService.navigateFromNotification(context, notificationData);
-    }
+    // Utiliser le service de navigation avec pushReplacement
+    final navigationService = NotificationNavigationService();
+    navigationService.navigateFromNotificationWithReplace(
+        navigator, notificationData);
   }
 
   Future<void> _deleteNotification(int notificationId) async {
@@ -555,6 +554,13 @@ class _TechnicianNotificationsScreenState
         return [Colors.orange.shade600, Colors.orange.shade400];
       case 'urgent':
         return [Colors.red.shade600, Colors.red.shade400];
+      case 'intervention_confirmed':
+        return [Colors.green.shade600, Colors.green.shade400];
+      case 'intervention_rejected':
+      case 'intervention_dispute':
+        return [Colors.red.shade600, Colors.red.shade400];
+      case 'report_submitted':
+        return [Colors.orange.shade600, Colors.orange.shade400];
       default:
         return [Colors.grey.shade600, Colors.grey.shade400];
     }
@@ -572,6 +578,13 @@ class _TechnicianNotificationsScreenState
         return Icons.warning_amber;
       case 'urgent':
         return Icons.priority_high;
+      case 'intervention_confirmed':
+        return Icons.check_circle;
+      case 'intervention_rejected':
+      case 'intervention_dispute':
+        return Icons.error;
+      case 'report_submitted':
+        return Icons.assignment_turned_in;
       default:
         return Icons.notifications;
     }

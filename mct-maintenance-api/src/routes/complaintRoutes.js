@@ -3,7 +3,7 @@ const router = express.Router();
 const { body } = require('express-validator');
 const complaintController = require('../controllers/complaintController');
 console.log('DEBUG complaintController keys:', Object.keys(complaintController));
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 
 // Validation pour la création de réclamation
 const createComplaintValidation = [
@@ -81,11 +81,11 @@ router.post('/', authenticate, createComplaintValidation, complaintController.cr
 // Routes pour les clients (peuvent modifier leurs propres réclamations)
 router.put('/:id', authenticate, updateComplaintValidation, complaintController.updateComplaint);
 
-// Routes admin/tech (peuvent modifier le statut et assigner)
-router.patch('/:id/status', authenticate, authorize('admin', 'technician'), updateStatusValidation, complaintController.updateComplaintStatus);
+// Routes admin/tech/manager (peuvent modifier le statut et assigner)
+router.patch('/:id/status', authenticate, authorize('admin', 'manager', 'technician'), updateStatusValidation, complaintController.updateComplaintStatus);
 
-// Routes admin uniquement
-router.delete('/:id', authenticate, authorize('admin'), complaintController.deleteComplaint);
+// Routes admin uniquement (suppression)
+router.delete('/:id', authenticate, adminOnly, complaintController.deleteComplaint);
 
 // POST /api/complaints/:id/notes - Ajouter une note à une réclamation (Admin/Tech)
 router.post('/:id/notes', authenticate, authorize('admin', 'technician'), async (req, res) => {

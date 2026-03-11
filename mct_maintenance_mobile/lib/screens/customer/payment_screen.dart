@@ -9,12 +9,14 @@ class PaymentScreen extends StatefulWidget {
   final String invoiceId;
   final String invoiceNumber;
   final double amount;
+  final int paymentStep; // 1 = premier paiement 50%, 2 = second paiement 50%
 
   const PaymentScreen({
     super.key,
     required this.invoiceId,
     required this.invoiceNumber,
     required this.amount,
+    this.paymentStep = 1,
   });
 
   @override
@@ -65,84 +67,93 @@ class _PaymentScreenState extends State<PaymentScreen>
         backgroundColor: const Color(0xFF0a543d),
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Résumé de la facture
-            _buildInvoiceSummary(),
-            const SizedBox(height: 24),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background_tech_2.png'),
+            fit: BoxFit.cover,
+            opacity: 0.4,
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Résumé de la facture
+              _buildInvoiceSummary(),
+              const SizedBox(height: 24),
 
-            // Information sur FineoPay
-            _buildFineoPayInfo(),
-            const SizedBox(height: 32),
+              // Information sur FineoPay
+              _buildFineoPayInfo(),
+              const SizedBox(height: 32),
 
-            // Bouton de paiement
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _processPayment,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              // Bouton de paiement
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isProcessing ? null : _processPayment,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                ),
-                icon: _isProcessing
-                    ? const SizedBox.shrink()
-                    : const Icon(Icons.credit_card),
-                label: _isProcessing
-                    ? SizedBox(
-                        height: 20,
-                        child: ButtonLoadingIndicator(
-                          color: Colors.white,
-                          size: 6.0,
+                  icon: _isProcessing
+                      ? const SizedBox.shrink()
+                      : const Icon(Icons.credit_card),
+                  label: _isProcessing
+                      ? SizedBox(
+                          height: 20,
+                          child: ButtonLoadingIndicator(
+                            color: Colors.white,
+                            size: 6.0,
+                          ),
+                        )
+                      : Text(
+                          'Payer ${_formatCurrency(widget.amount)}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      )
-                    : Text(
-                        'Payer ${_formatCurrency(widget.amount)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Bouton paiement en espèces
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _isProcessing ? null : _showCashPaymentInfo,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF0a543d),
-                  side: const BorderSide(color: Color(0xFF0a543d), width: 2),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                icon: const Icon(Icons.money),
-                label: const Text(
-                  'Payer en espèces',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-            // Note de sécurité
-            _buildSecurityNote(),
-          ],
+              // Bouton paiement en espèces
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isProcessing ? null : _showCashPaymentInfo,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0a543d),
+                    side: const BorderSide(color: Color(0xFF0a543d), width: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.money),
+                  label: const Text(
+                    'Payer en espèces',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Note de sécurité
+              _buildSecurityNote(),
+            ],
+          ),
         ),
       ),
     );
@@ -176,12 +187,75 @@ class _PaymentScreenState extends State<PaymentScreen>
               ],
             ),
             const Divider(height: 24),
+            // Afficher info 50% si c'est un paiement split
+            if (widget.paymentStep == 1) ...[
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: Colors.blue.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Premier paiement (50%) - Le reste sera dû après les travaux',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (widget.paymentStep == 2) ...[
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline,
+                        color: Colors.green.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Paiement final (50%) - Travaux terminés',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Montant à payer',
-                  style: TextStyle(
+                Text(
+                  widget.paymentStep > 0
+                      ? 'Montant à payer (50%)'
+                      : 'Montant à payer',
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -241,15 +315,48 @@ class _PaymentScreenState extends State<PaymentScreen>
               children: [
                 const SizedBox(width: 4),
                 Image.asset('assets/images/orange_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
                 Image.asset('assets/images/mtn_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
                 Image.asset('assets/images/moov_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
-                Image.asset('assets/images/wave.png', height: 40, width: 40),
+                Image.asset('assets/images/wave.png',
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Logos Cartes Bancaires
+            Row(
+              children: [
+                const SizedBox(width: 4),
+                Image.asset('assets/images/logo_visa.png',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/MasterCard_Logo.png',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/logo_cb.jpg',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
               ],
             ),
             const SizedBox(height: 8),
@@ -333,13 +440,15 @@ class _PaymentScreenState extends State<PaymentScreen>
       final orderId = int.parse(widget.invoiceId);
       _currentOrderId = orderId;
 
-      print('💳 Initialisation paiement FineoPay pour commande #$orderId');
+      print(
+          '💳 Initialisation paiement FineoPay pour commande #$orderId (étape ${widget.paymentStep})');
 
       // Initialiser le paiement FineoPay
       final paymentData = await _paymentService.initializeOrderPayment(
         orderId,
         widget.amount,
         widget.invoiceNumber,
+        paymentStep: widget.paymentStep,
       );
       final paymentUrl = paymentData['paymentUrl'] as String;
 

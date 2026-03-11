@@ -109,7 +109,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
 
     Color statusColor = Colors.green;
     String statusText = 'Active';
-    
+
     if (status == 'expired') {
       statusColor = Colors.orange;
       statusText = 'Expirée';
@@ -203,7 +203,9 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   child: Text(
                     paymentStatus == 'paid' ? 'Payé' : 'En attente',
                     style: TextStyle(
-                      color: paymentStatus == 'paid' ? Colors.green : Colors.orange,
+                      color: paymentStatus == 'paid'
+                          ? Colors.green
+                          : Colors.orange,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -228,7 +230,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                           ),
                         ),
                       );
-                      
+
                       // Recharger si le paiement a réussi
                       if (result == true) {
                         _loadSubscriptions();

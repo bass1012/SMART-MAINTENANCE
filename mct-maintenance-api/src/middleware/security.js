@@ -22,14 +22,14 @@ const createRateLimiter = (windowMs, max, message) => {
 // Rate limiting général
 const generalLimiter = createRateLimiter(
   15 * 60 * 1000, // 15 minutes
-  process.env.NODE_ENV === 'development' ? 1000 : 100, // limite chaque IP (1000 en dev, 100 en prod)
+  process.env.NODE_ENV === 'development' ? 1000 : 500, // limite chaque IP (1000 en dev, 500 en prod)
   'Trop de requêtes depuis cette IP, veuillez réessayer après 15 minutes'
 );
 
 // Rate limiting pour l'authentification
 const authLimiter = createRateLimiter(
   15 * 60 * 1000, // 15 minutes
-  process.env.NODE_ENV === 'development' ? 1000 : 100, // limite en dev : 1000, prod : 100
+  process.env.NODE_ENV === 'development' ? 1000 : 200, // limite en dev : 1000, prod : 200
   'Trop de tentatives de connexion, veuillez réessayer après 15 minutes'
 );
 
@@ -55,8 +55,12 @@ const corsOptions = {
       'http://localhost:8080',
       'https://mct-maintenance.com',
       'https://admin.mct-maintenance.com',
-      'https://mobile.mct-maintenance.com'
-    ];
+      'https://mobile.mct-maintenance.com',
+      'https://dashboard.sandbox.mct.ci',
+      'https://dashboard.mct.ci',
+      'https://api.sandbox.mct.ci',
+      process.env.FRONTEND_URL
+    ].filter(Boolean);
     
     // Autoriser les requêtes sans origin (mobile apps, Postman)
     if (!origin) return callback(null, true);

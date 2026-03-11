@@ -93,7 +93,7 @@ exports.getGlobalStats = async (req, res) => {
     // Interventions par mois (derniers 6 mois)
     const interventionsByMonth = await Intervention.findAll({
       attributes: [
-        [sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at')), 'month'],
+        [sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM'), 'month'],
         [sequelize.fn('COUNT', sequelize.col('id')), 'count']
       ],
       where: {
@@ -101,14 +101,14 @@ exports.getGlobalStats = async (req, res) => {
           [Op.gte]: new Date(new Date().setMonth(new Date().getMonth() - 6))
         }
       },
-      group: [sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at'))],
-      order: [[sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at')), 'ASC']]
+      group: [sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM')],
+      order: [[sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM'), 'ASC']]
     });
 
     // Chiffre d'affaires par mois
     const revenueByMonth = await Order.findAll({
       attributes: [
-        [sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at')), 'month'],
+        [sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM'), 'month'],
         [sequelize.fn('SUM', sequelize.col('total_amount')), 'revenue']
       ],
       where: {
@@ -117,8 +117,8 @@ exports.getGlobalStats = async (req, res) => {
           [Op.gte]: new Date(new Date().setMonth(new Date().getMonth() - 6))
         }
       },
-      group: [sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at'))],
-      order: [[sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at')), 'ASC']]
+      group: [sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM')],
+      order: [[sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM'), 'ASC']]
     });
 
     res.json({
@@ -539,7 +539,7 @@ exports.getChartData = async (req, res) => {
         // Évolution de la satisfaction client
         chartData = await Intervention.findAll({
           attributes: [
-            [sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at')), 'month'],
+            [sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM'), 'month'],
             [sequelize.fn('AVG', sequelize.col('rating')), 'avgRating'],
             [sequelize.fn('COUNT', sequelize.col('id')), 'count']
           ],
@@ -547,8 +547,8 @@ exports.getChartData = async (req, res) => {
             rating: { [Op.ne]: null },
             created_at: { [Op.gte]: startDate }
           },
-          group: [sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at'))],
-          order: [[sequelize.fn('strftime', '%Y-%m', sequelize.col('created_at')), 'ASC']]
+          group: [sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM')],
+          order: [[sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM'), 'ASC']]
         });
         break;
 

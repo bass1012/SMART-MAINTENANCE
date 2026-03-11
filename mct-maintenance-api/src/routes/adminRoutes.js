@@ -6,9 +6,9 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const { User, CustomerProfile, TechnicianProfile, Intervention, Order, Subscription, MaintenanceOffer, InstallationService, RepairService, Complaint, SystemConfig, sequelize } = require('../models');
 
-// All admin routes require authentication and admin role
+// All admin routes require authentication and admin/manager role
 router.use(authenticate);
-router.use(authorize('admin'));
+router.use(authorize('admin', 'manager'));
 
 // Admin dashboard routes
 router.get('/dashboard', (req, res) => {
@@ -1017,9 +1017,23 @@ router.get('/reports', async (req, res, next) => {
           submitted_at: intervention.report_submitted_at,
           // Mesures techniques
           pression: reportData.pression || '',
-          temperature: reportData.temperature || '',
+          puissance: reportData.puissance || reportData.temperature || '',
           intensite: reportData.intensite || '',
           tension: reportData.tension || '',
+          // Section Équipements (nouveau format - tableau)
+          equipments: reportData.equipments || [],
+          // Section Équipement (format legacy)
+          equipment_state: reportData.equipment_state || '',
+          equipment_type: reportData.equipment_type || '',
+          equipment_brand: reportData.equipment_brand || '',
+          // Section Détail Intervention
+          technician_name: reportData.technician_name || '',
+          intervention_date: reportData.intervention_date || '',
+          start_time: reportData.start_time || '',
+          end_time: reportData.end_time || '',
+          intervention_nature: reportData.intervention_nature || '',
+          // Pièces de rechange
+          spare_parts: reportData.spare_parts || [],
         },
       };
     });
@@ -1111,9 +1125,23 @@ router.get('/reports/:interventionId', async (req, res, next) => {
         submitted_at: intervention.report_submitted_at,
         // Mesures techniques
         pression: reportData.pression || '',
-        temperature: reportData.temperature || '',
+        puissance: reportData.puissance || reportData.temperature || '',
         intensite: reportData.intensite || '',
         tension: reportData.tension || '',
+        // Section Équipements (nouveau format - tableau)
+        equipments: reportData.equipments || [],
+        // Section Équipement (format legacy)
+        equipment_state: reportData.equipment_state || '',
+        equipment_type: reportData.equipment_type || '',
+        equipment_brand: reportData.equipment_brand || '',
+        // Section Détail Intervention
+        technician_name: reportData.technician_name || '',
+        intervention_date: reportData.intervention_date || '',
+        start_time: reportData.start_time || '',
+        end_time: reportData.end_time || '',
+        intervention_nature: reportData.intervention_nature || '',
+        // Pièces de rechange
+        spare_parts: reportData.spare_parts || [],
       },
     };
 

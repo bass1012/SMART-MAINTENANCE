@@ -320,8 +320,8 @@ const updateQuote = async (req, res) => {
           productName: item.productName,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          discount: item.discount || 0,
-          taxRate: item.taxRate || 20
+          discount: item.discount ?? 0,
+          taxRate: item.taxRate ?? 0
         }, { transaction });
       }
     }

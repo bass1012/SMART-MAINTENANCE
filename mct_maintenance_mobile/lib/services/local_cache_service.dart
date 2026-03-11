@@ -249,6 +249,31 @@ class LocalCacheService {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Nettoyer complètement la queue de synchronisation
+  Future<void> clearSyncQueue() async {
+    final db = await database;
+    final count = await db.delete('sync_queue');
+    print('🗑️ Queue de synchronisation vidée: $count éléments supprimés');
+  }
+
+  /// Nettoyer les éléments de sync bloqués ou anciens (plus de 24h)
+  Future<int> clearOldSyncItems() async {
+    final db = await database;
+    final yesterday = DateTime.now().subtract(const Duration(hours: 24));
+
+    // Supprimer les éléments créés il y a plus de 24h OU qui ont atteint max_retries
+    final count = await db.delete(
+      'sync_queue',
+      where: 'created_at < ? OR retry_count >= max_retries',
+      whereArgs: [yesterday.toIso8601String()],
+    );
+
+    if (count > 0) {
+      print('🧹 $count élément(s) de sync obsolètes/bloqués nettoyés');
+    }
+    return count;
+  }
+
   // ==================== CACHE PHOTOS ====================
 
   /// Ajouter photo au cache (avant upload)

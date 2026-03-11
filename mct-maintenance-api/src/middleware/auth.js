@@ -84,14 +84,9 @@ const authorize = (...roles) => {
       });
     }
 
-    // Le rôle 'manager' a les mêmes droits que 'admin'
-    const effectiveRoles = [...roles];
-    if (roles.includes('admin') && !roles.includes('manager')) {
-      effectiveRoles.push('manager');
-    }
-
-    if (!effectiveRoles.includes(req.user.role)) {
-      console.log(`❌ Authorization failed: User role '${req.user.role}' not in [${effectiveRoles.join(', ')}]`);
+    // Vérification stricte des rôles - pas d'auto-inclusion manager/admin
+    if (!roles.includes(req.user.role)) {
+      console.log(`❌ Authorization failed: User role '${req.user.role}' not in [${roles.join(', ')}]`);
       return res.status(403).json({
         success: false,
         message: 'Access denied. Insufficient permissions.'
@@ -101,6 +96,29 @@ const authorize = (...roles) => {
     console.log('✅ Authorization successful');
     next();
   };
+};
+
+// Admin-only middleware - pour les opérations sensibles (suppression, gestion des admins/managers)
+const adminOnly = (req, res, next) => {
+  console.log(`🔒 Admin-only check - User: ${req.user ? `ID=${req.user.id}, Role=${req.user.role}` : 'NOT AUTHENTICATED'}`);
+  
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: 'Access denied. User not authenticated.'
+    });
+  }
+
+  if (req.user.role !== 'admin') {
+    console.log(`❌ Admin-only failed: User role '${req.user.role}' is not admin`);
+    return res.status(403).json({
+      success: false,
+      message: 'Accès refusé. Cette action est réservée aux administrateurs.'
+    });
+  }
+
+  console.log('✅ Admin-only check successful');
+  next();
 };
 
 // Optional authentication middleware (doesn't fail if no token)
@@ -208,6 +226,7 @@ const logout = async (req, res, next) => {
 module.exports = {
   authenticate,
   authorize,
+  adminOnly,
   optionalAuth,
   refreshToken,
   logout

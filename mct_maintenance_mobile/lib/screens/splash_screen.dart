@@ -67,10 +67,18 @@ class _SplashScreenState extends State<SplashScreen>
       final isLoggedIn = await _apiService.isLoggedIn();
 
       if (isLoggedIn) {
-        // Initialiser FCM (notifications push)
+        // Initialiser FCM (notifications push) et rafraîchir le token
         try {
           await FCMService().initialize();
           print('✅ FCM initialisé avec succès');
+
+          // Toujours rafraîchir le token au démarrage pour s'assurer qu'il est à jour
+          final fcmSuccess = await FCMService().refreshToken();
+          if (fcmSuccess) {
+            print('✅ Token FCM rafraîchi et envoyé au backend');
+          } else {
+            print('⚠️  Échec de l\'envoi du token FCM au backend');
+          }
         } catch (e) {
           print('⚠️  Erreur initialisation FCM: $e');
           // Continuer même si FCM échoue

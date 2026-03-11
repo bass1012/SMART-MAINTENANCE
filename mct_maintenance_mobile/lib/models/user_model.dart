@@ -15,6 +15,14 @@ class UserModel {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  // Helper pour parser les valeurs qui peuvent être String ou num
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   UserModel({
     this.id,
     this.firstName,
@@ -37,23 +45,38 @@ class UserModel {
     // Si json contient 'user' et 'profile', fusionner les données
     final userData = json['user'] ?? json;
     final profileData = json['profile'] ?? {};
-    
+
     return UserModel(
       id: userData['id']?.toString(),
-      firstName: userData['first_name'] ?? userData['firstName'] ?? profileData['first_name'] ?? profileData['firstName'],
-      lastName: userData['last_name'] ?? userData['lastName'] ?? profileData['last_name'] ?? profileData['lastName'],
+      firstName: userData['first_name'] ??
+          userData['firstName'] ??
+          profileData['first_name'] ??
+          profileData['firstName'],
+      lastName: userData['last_name'] ??
+          userData['lastName'] ??
+          profileData['last_name'] ??
+          profileData['lastName'],
       email: userData['email'],
       phone: userData['phone'] ?? profileData['phone'],
       role: userData['role'],
       status: userData['status'],
-      emailVerified: userData['email_verified'] ?? userData['emailVerified'] ?? false,
-      phoneVerified: userData['phone_verified'] ?? userData['phoneVerified'] ?? false,
+      emailVerified:
+          userData['email_verified'] ?? userData['emailVerified'] ?? false,
+      phoneVerified:
+          userData['phone_verified'] ?? userData['phoneVerified'] ?? false,
       profileImage: userData['profile_image'] ?? userData['profileImage'],
-      preferences: userData['preferences'] is Map ? Map<String, dynamic>.from(userData['preferences']) : {},
-      latitude: (userData['latitude'] ?? profileData['latitude'])?.toDouble(),
-      longitude: (userData['longitude'] ?? profileData['longitude'])?.toDouble(),
-      createdAt: userData['createdAt'] != null ? DateTime.parse(userData['createdAt']) : null,
-      updatedAt: userData['updatedAt'] != null ? DateTime.parse(userData['updatedAt']) : null,
+      preferences: userData['preferences'] is Map
+          ? Map<String, dynamic>.from(userData['preferences'])
+          : {},
+      latitude: _parseDouble(userData['latitude'] ?? profileData['latitude']),
+      longitude:
+          _parseDouble(userData['longitude'] ?? profileData['longitude']),
+      createdAt: userData['createdAt'] != null
+          ? DateTime.parse(userData['createdAt'])
+          : null,
+      updatedAt: userData['updatedAt'] != null
+          ? DateTime.parse(userData['updatedAt'])
+          : null,
     );
   }
 

@@ -137,14 +137,24 @@ router.post('/register', registerValidation, authController.register);
  */
 router.post('/login', loginValidation, authController.login);
 
-// Email verification routes
+// Email/Phone verification routes
 router.post('/verify-email-code', [
-  body('email').isEmail().withMessage('Email valide requis'),
+  body().custom((value, { req }) => {
+    if (!req.body.email && !req.body.phone) {
+      throw new Error('Email ou téléphone requis');
+    }
+    return true;
+  }),
   body('code').isLength({ min: 6, max: 6 }).withMessage('Code à 6 chiffres requis')
 ], authController.verifyEmailCode);
 
 router.post('/resend-verification-code', [
-  body('email').isEmail().withMessage('Email valide requis')
+  body().custom((value, { req }) => {
+    if (!req.body.email && !req.body.phone) {
+      throw new Error('Email ou téléphone requis');
+    }
+    return true;
+  })
 ], authController.resendEmailVerificationCode);
 
 /**
