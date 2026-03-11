@@ -1564,7 +1564,7 @@ router.post('/contracts/:id/request-renewal', async (req, res) => {
         isSubscription: isSubscription
       },
       priority: 'high',
-      actionUrl: `/contrats`
+      actionUrl: `/contrats-programmes`
     });
 
     // Créer une notification pour le client
