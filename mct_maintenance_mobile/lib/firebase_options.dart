@@ -50,19 +50,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA6hi1B3SN0M0vZgb8pC38VcZObR50hlAs',
-    appId: '1:650086379747:android:PLACEHOLDER',
-    messagingSenderId: '650086379747',
-    projectId: 'mct-maintenance-10748',
-    storageBucket: 'mct-maintenance-10748.appspot.com',
+    apiKey: 'AIzaSyAtCXi6WkyO1G1vFMA3MGVUrL4KvVqiXjU',
+    appId: '1:21954295422:android:f6782f709bd480edd28a2f',
+    messagingSenderId: '21954295422',
+    projectId: 'smart-maintenance-fbd60',
+    storageBucket: 'smart-maintenance-fbd60.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyA6hi1B3SN0M0vZgb8pC38VcZObR50hlAs',
-    appId: '1:650086379747:ios:8d91bcb0f8e78f8f8b9c9d',
-    messagingSenderId: '650086379747',
-    projectId: 'mct-maintenance-10748',
-    storageBucket: 'mct-maintenance-10748.appspot.com',
-    iosBundleId: 'com.bassoued.mctMaintenanceMobile',
+    apiKey: 'AIzaSyC5Q2FTUitHC7x50CAS_Dw4WuBmwH_Il7g',
+    appId: '1:21954295422:ios:cd09b83785b8bf90d28a2f',
+    messagingSenderId: '21954295422',
+    projectId: 'smart-maintenance-fbd60',
+    storageBucket: 'smart-maintenance-fbd60.firebasestorage.app',
+    iosBundleId: 'com.smartmaintenance.mctMobile',
   );
 }

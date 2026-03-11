@@ -51,7 +51,7 @@ const User = sequelize.define('User', {
     }
   },
   phone: {
-    type: DataTypes.STRING(20),
+    type: DataTypes.STRING(50),
     allowNull: true,
     validate: {
       // Allow both regular phone numbers and soft-deleted format (deleted_timestamp_+number)

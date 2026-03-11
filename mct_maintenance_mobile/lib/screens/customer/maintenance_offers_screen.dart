@@ -321,7 +321,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                             children: [
                               Icon(Icons.engineering_outlined, size: 16),
                               SizedBox(width: 4),
-                              Text('Entretien'),
+                              Text('Maintenance'),
                             ],
                           ),
                         ),
@@ -343,7 +343,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                             children: [
                               Icon(Icons.handyman_outlined, size: 16),
                               SizedBox(width: 4),
-                              Text('Réparation'),
+                              Text('Dépannage'),
                             ],
                           ),
                         ),
@@ -605,24 +605,6 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${offer.duration} mois',
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -686,13 +668,6 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                             color: Colors.blue,
                           ),
                         ),
-                        Text(
-                          'pour ${offer.duration} mois',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                        ),
                       ],
                     ),
                     ElevatedButton(
@@ -721,120 +696,236 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
   }
 
   void _showSubscriptionDialog(MaintenanceOffer offer) {
+    int equipmentCount = 1;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmer la souscription'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Vous êtes sur le point de souscrire à l\'offre:',
-              style: TextStyle(color: Colors.grey[700]),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Demander une intervention'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Vous avez sélectionné l\'offre:',
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  offer.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${offer.price.toStringAsFixed(0)} FCFA / équipement',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Sélection du nombre d'équipements
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Nombre d\'équipements',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            onPressed: equipmentCount > 1
+                                ? () {
+                                    setDialogState(() {
+                                      equipmentCount--;
+                                    });
+                                  }
+                                : null,
+                            icon: const Icon(Icons.remove_circle_outline),
+                            color:
+                                equipmentCount > 1 ? Colors.blue : Colors.grey,
+                            iconSize: 32,
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue),
+                            ),
+                            child: Text(
+                              '$equipmentCount',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: equipmentCount < 10
+                                ? () {
+                                    setDialogState(() {
+                                      equipmentCount++;
+                                    });
+                                  }
+                                : null,
+                            icon: const Icon(Icons.add_circle_outline),
+                            color:
+                                equipmentCount < 10 ? Colors.blue : Colors.grey,
+                            iconSize: 32,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Text(
+                          'Total: ${(offer.price * equipmentCount).toStringAsFixed(0)} FCFA',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Color(0xFF0a543d),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Message d'information
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.green.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Vous allez être redirigé vers le formulaire d\'intervention avec cette offre pré-sélectionnée.',
+                          style: TextStyle(
+                            color: Colors.green.shade700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              offer.title,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('ANNULER'),
             ),
-            const SizedBox(height: 4),
-            Text(
-              '${offer.price.toStringAsFixed(0)} FCFA pour ${offer.duration} mois',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'En confirmant, vous acceptez les conditions générales de vente.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ElevatedButton(
+              onPressed: () {
+                // Fermer le dialogue
+                Navigator.pop(context);
+
+                // Naviguer vers la page de création d'intervention avec les paramètres pré-remplis
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => NewInterventionScreen(
+                      preSelectedType: 'Maintenance',
+                      preSelectedOfferId: offer.id,
+                      preSelectedEquipmentCount: equipmentCount,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('CONTINUER'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('ANNULER'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              // Capturer le contexte avant l'opération async
-              final navigator = Navigator.of(context);
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-              // Fermer le dialogue de confirmation
-              navigator.pop();
-
-              // Afficher un loader
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (ctx) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-
-              try {
-                // Créer la souscription
-                await _apiService.createSubscription(offer.id);
-
-                // Fermer le loader
-                navigator.pop();
-
-                // Afficher le succès
-                if (mounted) {
-                  _showSuccessDialog(offer);
-                }
-              } catch (e) {
-                // Fermer le loader
-                navigator.pop();
-
-                // Afficher l'erreur
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(
-                    content: Text('Erreur: ${e.toString()}'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            child: const Text('CONFIRMER'),
-          ),
-        ],
       ),
     );
   }
 
-  void _showSuccessDialog(MaintenanceOffer offer) {
+  void _showSuccessDialog(MaintenanceOffer offer,
+      {double discount = 0, double? finalPrice, int equipmentCount = 1}) {
+    final displayPrice = finalPrice ?? (offer.price * equipmentCount);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Paiement initié'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.pending_outlined,
-              color: Colors.orange,
-              size: 64,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'En attente de confirmation',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Votre souscription à "${offer.title}" est en attente de confirmation de paiement.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[700]),
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.pending_outlined,
+                color: Colors.orange,
+                size: 64,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'En attente de confirmation',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Votre souscription à "${offer.title}" pour $equipmentCount équipement(s) est en attente de confirmation de paiement.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[700]),
+              ),
+              if (discount > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.discount, color: Colors.green, size: 18),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Réduction: -${discount.toStringAsFixed(0)} FCFA',
+                        style: const TextStyle(
+                            color: Colors.green, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Montant à payer: ${displayPrice.toStringAsFixed(0)} FCFA',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -953,23 +1044,23 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Souscription confirmée'),
+        title: const Text('Paiement initié'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.check_circle,
-              color: Colors.green,
+              Icons.pending_outlined,
+              color: Colors.orange,
               size: 64,
             ),
             const SizedBox(height: 16),
             Text(
-              'Souscription réussie',
+              'En attente de confirmation',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
-              'Vous avez souscrit au service "${service.title}" avec succès.',
+              'Votre souscription au service "${service.title}" est en attente de confirmation de paiement.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[700]),
             ),
@@ -1085,23 +1176,23 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Souscription confirmée'),
+        title: const Text('Paiement initié'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.check_circle,
-              color: Colors.green,
+              Icons.pending_outlined,
+              color: Colors.orange,
               size: 64,
             ),
             const SizedBox(height: 16),
             Text(
-              'Souscription réussie',
+              'En attente de confirmation',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Text(
-              'Vous avez souscrit au service "${service.title}" avec succès.',
+              'Votre souscription au service "${service.title}" est en attente de confirmation de paiement.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[700]),
             ),
@@ -1164,12 +1255,23 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
     final endDate = DateTime.parse(subscription['end_date']);
     final price = subscription['price'] as num;
     final id = subscription['id'] as int;
+    final equipmentCount = subscription['equipment_count'] as int? ?? 1;
+    final equipmentUsed = subscription['equipment_used'] as int? ?? 0;
+    final equipmentRemaining = equipmentCount - equipmentUsed;
+    final usedAt = subscription['used_at'] != null
+        ? DateTime.parse(subscription['used_at'])
+        : null;
+    final interventionId = subscription['intervention_id'] as int?;
 
     Color statusColor = Colors.green;
     String statusText = 'Active';
     IconData statusIcon = Icons.check_circle;
 
-    if (status == 'expired') {
+    if (status == 'used') {
+      statusColor = Colors.blue;
+      statusText = 'Utilisée';
+      statusIcon = Icons.check_circle_outline;
+    } else if (status == 'expired') {
       statusColor = Colors.orange;
       statusText = 'Expirée';
       statusIcon = Icons.warning;
@@ -1190,12 +1292,57 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    offer?['title'] ?? 'Offre',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        offer?['title'] ?? 'Offre',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$equipmentUsed/$equipmentCount utilisé${equipmentUsed > 1 ? 's' : ''}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (status == 'active' && equipmentRemaining > 0) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '$equipmentRemaining restant${equipmentRemaining > 1 ? 's' : ''}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
                   ),
                 ),
                 Container(
@@ -1336,6 +1483,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                                 subscriptionName:
                                     offer?['title'] ?? 'Souscription',
                                 amount: price.toDouble(),
+                                offerId: offer?['id'] as int?,
                               ),
                             ),
                           );
@@ -1354,6 +1502,88 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                       ),
                     ),
                   ],
+                ),
+              ),
+            // Bouton pour utiliser la souscription active et payée
+            if (status == 'active' && paymentStatus == 'paid')
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // Naviguer vers la création d'intervention avec l'offre pré-sélectionnée
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NewInterventionScreen(
+                            preSelectedType: 'Maintenance',
+                            preSelectedOfferId: offer?['id'] as int?,
+                          ),
+                        ),
+                      ).then((_) {
+                        // Recharger les souscriptions après retour
+                        _loadSubscriptions();
+                      });
+                    },
+                    icon: const Icon(Icons.build, size: 18),
+                    label: const Text('UTILISER MAINTENANT'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0a543d),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ),
+            // Afficher les infos d'utilisation pour les souscriptions utilisées
+            if (status == 'used' && usedAt != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline,
+                          color: Colors.blue, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Souscription utilisée',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Le ${_formatDate(usedAt)}',
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                            if (interventionId != null)
+                              Text(
+                                'Intervention #$interventionId',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 11,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
           ],
@@ -1423,7 +1653,11 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
     String statusText = 'Active';
     IconData statusIcon = Icons.check_circle;
 
-    if (status == 'expired') {
+    if (status == 'used') {
+      statusColor = Colors.blue;
+      statusText = 'Utilisée';
+      statusIcon = Icons.check_circle_outline;
+    } else if (status == 'expired') {
       statusColor = Colors.orange;
       statusText = 'Expirée';
       statusIcon = Icons.warning;
@@ -1628,7 +1862,11 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
     String statusText = 'Active';
     IconData statusIcon = Icons.check_circle;
 
-    if (status == 'expired') {
+    if (status == 'used') {
+      statusColor = Colors.blue;
+      statusText = 'Utilisée';
+      statusIcon = Icons.check_circle_outline;
+    } else if (status == 'expired') {
       statusColor = Colors.orange;
       statusText = 'Expirée';
       statusIcon = Icons.warning;
@@ -1650,7 +1888,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
               children: [
                 Expanded(
                   child: Text(
-                    service?['name'] ?? 'Service de réparation',
+                    service?['name'] ?? 'Service de dépannage',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1793,7 +2031,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                               builder: (context) => SubscriptionPaymentScreen(
                                 subscriptionId: id,
                                 subscriptionName: service?['name'] ??
-                                    'Souscription Réparation',
+                                    'Souscription Dépannage',
                                 amount: price.toDouble(),
                               ),
                             ),
@@ -2140,7 +2378,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
               child: Column(
                 children: [
                   const Text(
-                    'Toutes les réparations/dépannages de splits sont soumis à élaboration d\'un devis à la suite d\'un diagnostic* et la réparation se fera une fois le devis validé par le client.',
+                    'Tous les dépannages de splits sont soumis à élaboration d\'un devis à la suite d\'un diagnostic* et le dépannage se fera une fois le devis validé par le client.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
@@ -2235,7 +2473,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
         child: Padding(
           padding: EdgeInsets.all(24.0),
           child: Text(
-            'Aucun service de réparation disponible pour le moment.',
+            'Aucun service de dépannage disponible pour le moment.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: Colors.grey),
           ),
@@ -2372,7 +2610,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 48),
               child: Text(
-                'Vous n\'avez pas encore de souscription pour la réparation.',
+                'Vous n\'avez pas encore de souscription pour le dépannage.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),

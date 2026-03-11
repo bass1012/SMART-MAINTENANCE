@@ -1,4 +1,4 @@
-const { Contract, User } = require('../../models');
+const { Contract, User, Subscription, Intervention } = require('../../models');
 const { Op } = require('sequelize');
 const { notifyNewContract } = require('../../services/notificationHelpers');
 const { sendEmail } = require('../../services/emailService');
@@ -6,6 +6,7 @@ const {
   sendContractSubscribedEmail,
   sendContractExpiringEmail
 } = require('../../services/emailHelper');
+const contractSchedulingService = require('../../services/contractSchedulingService');
 
 // Contract Controller - Implementation complète
 const getAllContracts = async (req, res) => {
@@ -302,6 +303,166 @@ const cancelContract = async (req, res) => {
   }
 };
 
+// ============================================
+// CONTRATS PROGRAMMÉS (Maintenance planifiée)
+// ============================================
+
+/**
+ * Récupérer tous les contrats programmés
+ */
+const getScheduledContracts = async (req, res) => {
+  try {
+    const { customerId, status } = req.query;
+    
+    const where = { contract_type: 'scheduled' };
+    
+    if (customerId) {
+      where.customer_id = customerId;
+    }
+    
+    if (status) {
+      where.status = status;
+    }
+    
+    const contracts = await Subscription.findAll({
+      where,
+      order: [['created_at', 'DESC']]
+    });
+    
+    res.status(200).json({
+      success: true,
+      data: contracts,
+      message: 'Contrats programmés récupérés avec succès'
+    });
+  } catch (error) {
+    console.error('Erreur récupération contrats programmés:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des contrats programmés',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Créer un contrat programmé avec visites automatiques
+ */
+const createScheduledContract = async (req, res) => {
+  try {
+    const {
+      customerId,
+      equipment,
+      model,
+      firstInterventionDate,
+      visitsTotal = 4,
+      visitIntervalMonths = 3,
+      durationMonths = 12,
+      price = 0
+    } = req.body;
+    
+    const result = await contractSchedulingService.createScheduledContract({
+      customer_id: customerId,
+      equipment_description: equipment,
+      equipment_model: model,
+      first_intervention_date: new Date(firstInterventionDate),
+      visits_total: visitsTotal,
+      visit_interval_months: visitIntervalMonths,
+      duration_months: durationMonths,
+      price
+    });
+    
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: `Contrat programmé créé avec ${visitsTotal} visites planifiées`
+    });
+  } catch (error) {
+    console.error('Erreur création contrat programmé:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la création du contrat programmé',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Récupérer les visites d'un contrat programmé
+ */
+const getScheduledVisits = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Récupérer le contrat
+    const subscription = await Subscription.findByPk(id);
+    
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contrat non trouvé'
+      });
+    }
+    
+    if (subscription.contract_type !== 'scheduled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce contrat n\'est pas un contrat programmé'
+      });
+    }
+    
+    // Récupérer toutes les interventions liées à ce contrat
+    const interventions = await Intervention.findAll({
+      where: { subscription_id: id },
+      order: [['scheduled_date', 'ASC']]
+    });
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        contract: subscription,
+        visits: interventions,
+        progress: {
+          completed: subscription.visits_completed,
+          total: subscription.visits_total,
+          remaining: subscription.visits_total - subscription.visits_completed
+        }
+      },
+      message: 'Visites récupérées avec succès'
+    });
+  } catch (error) {
+    console.error('Erreur récupération visites:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des visites',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Récupérer toutes les visites à venir
+ */
+const getUpcomingVisits = async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    
+    const visits = await contractSchedulingService.getUpcomingVisits(parseInt(days));
+    
+    res.status(200).json({
+      success: true,
+      data: visits,
+      message: `${visits.length} visite(s) à venir dans les ${days} prochains jours`
+    });
+  } catch (error) {
+    console.error('Erreur récupération visites à venir:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des visites à venir',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getAllContracts,
   getContractById,
@@ -309,6 +470,11 @@ module.exports = {
   updateContract,
   deleteContract,
   renewContract,
-  cancelContract
+  cancelContract,
+  // Contrats programmés
+  getScheduledContracts,
+  createScheduledContract,
+  getScheduledVisits,
+  getUpcomingVisits
 };
 

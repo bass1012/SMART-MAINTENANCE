@@ -10,7 +10,7 @@ QuoteItem.init({
   quantity: { type: DataTypes.INTEGER, allowNull: false },
   unitPrice: { type: DataTypes.FLOAT, allowNull: false, field: 'unitPrice' },
   discount: { type: DataTypes.FLOAT, defaultValue: 0 },
-  taxRate: { type: DataTypes.FLOAT, defaultValue: 20, field: 'taxRate' },
+  taxRate: { type: DataTypes.FLOAT, defaultValue: 0, field: 'taxRate' },
   isCustom: { type: DataTypes.BOOLEAN, defaultValue: false, field: 'is_custom' }
 }, {
   sequelize,

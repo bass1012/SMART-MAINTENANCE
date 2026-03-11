@@ -62,7 +62,7 @@ const CustomerProfile = sequelize.define('CustomerProfile', {
     allowNull: true
   },
   gender: {
-    type: DataTypes.ENUM('male', 'female', 'other'),
+    type: DataTypes.ENUM('male', 'female', 'other', 'homme', 'femme'),
     allowNull: true
   },
   preferences: {

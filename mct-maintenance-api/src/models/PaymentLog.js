@@ -23,14 +23,15 @@ PaymentLog.init({
   // Type d'événement
   eventType: { 
     type: DataTypes.ENUM(
-      'checkout_created',      // Lien de paiement créé
-      'webhook_received',      // Webhook reçu de FineoPay
-      'status_check',          // Vérification active du statut
-      'payment_confirmed',     // Paiement confirmé
-      'payment_failed',        // Paiement échoué
-      'signature_invalid',     // Signature webhook invalide
-      'duplicate_blocked',     // Double traitement bloqué
-      'manual_sync'            // Synchronisation manuelle
+      'checkout_created',           // Lien de paiement créé
+      'diagnostic_checkout_created', // Paiement diagnostic créé
+      'webhook_received',           // Webhook reçu de FineoPay
+      'status_check',               // Vérification active du statut
+      'payment_confirmed',          // Paiement confirmé
+      'payment_failed',             // Paiement échoué
+      'signature_invalid',          // Signature webhook invalide
+      'duplicate_blocked',          // Double traitement bloqué
+      'manual_sync'                 // Synchronisation manuelle
     ),
     allowNull: false,
     field: 'event_type'

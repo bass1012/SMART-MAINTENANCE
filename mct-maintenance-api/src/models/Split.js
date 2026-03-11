@@ -35,7 +35,7 @@ const Split = sequelize.define('Split', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'Users',
+      model: 'users',
       key: 'id'
     }
   },
@@ -142,7 +142,7 @@ const Split = sequelize.define('Split', {
     comment: 'Adresse d\'installation si différente de l\'adresse du client'
   }
 }, {
-  tableName: 'Splits',
+  tableName: 'splits',
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',

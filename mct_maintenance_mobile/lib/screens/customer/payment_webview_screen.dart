@@ -8,6 +8,7 @@ class PaymentWebViewScreen extends StatefulWidget {
   final String paymentUrl;
   final String title;
   final int? orderId;
+  final int? subscriptionId;
   final Function(bool success)? onPaymentComplete;
 
   const PaymentWebViewScreen({
@@ -15,6 +16,7 @@ class PaymentWebViewScreen extends StatefulWidget {
     required this.paymentUrl,
     this.title = 'Paiement sécurisé',
     this.orderId,
+    this.subscriptionId,
     this.onPaymentComplete,
   });
 
@@ -109,7 +111,12 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
         lowerUrl.contains('paid=true') ||
         lowerUrl.contains('status=success') ||
         lowerUrl.contains('status=completed') ||
-        lowerUrl.contains('status=paid');
+        lowerUrl.contains('status=paid') ||
+        lowerUrl.contains('paymentcomplete') ||
+        lowerUrl.contains('payment_complete') ||
+        lowerUrl.contains('thank') ||
+        lowerUrl.contains('confirmed') ||
+        lowerUrl.contains('receipt');
   }
 
   bool _isPaymentFailureUrl(String url) {
@@ -117,9 +124,10 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
     return lowerUrl.contains('failed') ||
         lowerUrl.contains('failure') ||
         lowerUrl.contains('cancel') ||
-        lowerUrl.contains('error') ||
+        lowerUrl.contains('declined') ||
         lowerUrl.contains('status=failed') ||
-        lowerUrl.contains('status=cancelled');
+        lowerUrl.contains('status=cancelled') ||
+        lowerUrl.contains('status=declined');
   }
 
   void _handlePaymentSuccess() {
@@ -294,49 +302,51 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Bouton "J'ai payé"
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context, true);
-                    },
-                    icon: const Icon(Icons.check_circle, color: Colors.white),
-                    label: const Text(
-                      'J\'ai effectué le paiement',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                // Les deux boutons sur la même ligne
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context, true);
+                        },
+                        icon:
+                            const Icon(Icons.check_circle, color: Colors.white),
+                        label: const Text(
+                          'Paiement effectué',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0a543d),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
                       ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0a543d),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(context, false);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.grey[700],
+                          side: BorderSide(color: Colors.grey[400]!),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Annuler'),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Bouton Annuler
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(context, false);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.grey[700],
-                      side: BorderSide(color: Colors.grey[400]!),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('Annuler'),
-                  ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 // Indicateur de sécurité
@@ -350,6 +360,22 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Indicateur de sécurité
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.paid_rounded, color: Color(0xFF0a543d), size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Terminé le processus de paiement dans le navigateur\navant cliquer sur "Paiement effectué"',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 11,
                       ),
                     ),
                   ],

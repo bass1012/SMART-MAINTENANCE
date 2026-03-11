@@ -19,6 +19,12 @@ const Product = sequelize.define('Product', {
     type: DataTypes.FLOAT,
     allowNull: false
   },
+  base_price: {
+    type: DataTypes.FLOAT,
+    allowNull: false,
+    defaultValue: 0,
+    comment: 'Prix de base de l équipement sans offre'
+  },
   quantite_stock: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -41,6 +47,12 @@ const Product = sequelize.define('Product', {
     type: DataTypes.BOOLEAN,
     allowNull: false,
     defaultValue: true
+  },
+  offer_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    defaultValue: null,
+    comment: 'ID de l offre de maintenance associée à ce produit'
   },
   images: {
     type: DataTypes.JSON,

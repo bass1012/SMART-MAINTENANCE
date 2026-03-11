@@ -38,7 +38,17 @@ Quote.init({
   payment_status: { type: DataTypes.STRING, defaultValue: 'pending', field: 'payment_status' },
   paid_at: { type: DataTypes.DATE, allowNull: true, field: 'paid_at' },
   payment_method: { type: DataTypes.STRING, allowNull: true, field: 'payment_method' },
-  payment_transaction_id: { type: DataTypes.STRING, allowNull: true, field: 'payment_transaction_id' }
+  payment_transaction_id: { type: DataTypes.STRING, allowNull: true, field: 'payment_transaction_id' },
+  // Paiement en deux étapes (50% à l'acceptation, 50% à la fin)
+  payment_type: { type: DataTypes.STRING, defaultValue: 'split', field: 'payment_type' }, // 'full' ou 'split'
+  first_payment_amount: { type: DataTypes.FLOAT, allowNull: true, field: 'first_payment_amount' },
+  first_payment_status: { type: DataTypes.STRING, defaultValue: 'pending', field: 'first_payment_status' }, // 'pending', 'paid'
+  first_payment_date: { type: DataTypes.DATE, allowNull: true, field: 'first_payment_date' },
+  first_payment_transaction_id: { type: DataTypes.STRING, allowNull: true, field: 'first_payment_transaction_id' },
+  second_payment_amount: { type: DataTypes.FLOAT, allowNull: true, field: 'second_payment_amount' },
+  second_payment_status: { type: DataTypes.STRING, defaultValue: 'pending', field: 'second_payment_status' }, // 'pending', 'paid'
+  second_payment_date: { type: DataTypes.DATE, allowNull: true, field: 'second_payment_date' },
+  second_payment_transaction_id: { type: DataTypes.STRING, allowNull: true, field: 'second_payment_transaction_id' }
 }, {
   sequelize,
   modelName: 'Quote',

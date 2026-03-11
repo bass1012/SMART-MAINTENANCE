@@ -95,24 +95,37 @@ class ApiService {
     return _request('POST', 'api/auth/register', body: data);
   }
 
-  // Vérifier le code de vérification email
-  Future<http.Response> verifyEmailCode(String email, String code) async {
+  // Vérifier le code de vérification (email ou SMS)
+  Future<http.Response> verifyEmailCode(
+      String emailOrPhone, String code) async {
+    // Déterminer si c'est un email ou un téléphone
+    final isEmail = emailOrPhone.contains('@');
+    final body = isEmail
+        ? {'email': emailOrPhone, 'code': code}
+        : {'phone': emailOrPhone, 'code': code};
+
     return _request(
       'POST',
       'api/auth/verify-email-code',
-      body: {'email': email, 'code': code},
+      body: body,
     );
   }
 
   // Renvoyer le code de vérification
   Future<http.Response> resendVerificationCode(
-    String email, {
+    String emailOrPhone, {
     String verificationMethod = 'auto',
   }) async {
+    // Déterminer si c'est un email ou un téléphone
+    final isEmail = emailOrPhone.contains('@');
+    final body = isEmail
+        ? {'email': emailOrPhone, 'method': verificationMethod}
+        : {'phone': emailOrPhone, 'method': verificationMethod};
+
     return _request(
       'POST',
       'api/auth/resend-verification-code',
-      body: {'email': email, 'method': verificationMethod},
+      body: body,
     );
   }
 

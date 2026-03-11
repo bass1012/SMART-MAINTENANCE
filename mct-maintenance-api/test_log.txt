@@ -1,0 +1,43 @@
+🔧 TechnicianRoutes chargé - VERSION AVEC LOGS DEBUG
+DEBUG complaintController keys: [
+  'getComplaints',
+  'getComplaintById',
+  'createComplaint',
+  'updateComplaint',
+  'deleteComplaint',
+  'updateComplaintStatus'
+]
+🔧 Configuration FineoPay:
+  - Environment: sandbox
+  - Base URL: https://dev.fineopay.com/api/v1/business/dev
+  - Business Code: smart_maintenance_by_mct
+  - API Key: fpay_5feda0bf5d62257...
+✅ Service de notifications initialisé
+✅ Socket.IO initialisé
+💬 Service de chat initialisé
+📚 Swagger UI disponible sur: http://localhost:3000/api-docs
+📄 Swagger JSON disponible sur: http://localhost:3000/api-docs.json
+📁 Dossier uploads disponible sur /uploads
+✅ Routes mounted: /api/users available
+✅ Database connection established successfully.
+✅ Database synchronized successfully.
+✅ Firebase Admin SDK initialisé avec succès
+   Project ID: smart-maintenance-fbd60
+🔥 Firebase Cloud Messaging initialisé
+⏰ [Cron] Initialisation des tâches planifiées...
+✅ [Cron] 5 tâche(s) planifiée(s):
+   - cleanup-expired-codes: Toutes les heures
+   - daily-stats: Tous les jours à 9h
+   - contract-expiration-reminder: Tous les jours à 9h30
+   - diagnostic-payment-reminder: Tous les jours à 10h et 18h
+   - subscription-expiry-reminder: Tous les jours à 9h
+🚀 MCT Maintenance API server running on port 3000
+📊 Environment: development
+🔗 Health check: http://localhost:3000/health
+🔌 Socket.IO ready for real-time notifications
+
+🧹 [Cron] Nettoyage initial au démarrage...
+🧹 [Cleanup] Démarrage du nettoyage des codes expirés...
+🕐 [Cleanup] Date limite: 2026-02-25T21:54:46.121Z
+✨ [Cleanup] Aucun code expiré à nettoyer
+[0mGET /api/health [32m200[0m 15.112 ms - 305[0m

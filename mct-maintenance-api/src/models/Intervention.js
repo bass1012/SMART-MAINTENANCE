@@ -20,7 +20,7 @@ const Intervention = sequelize.define('Intervention', {
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM('pending', 'assigned', 'accepted', 'on_the_way', 'arrived', 'in_progress', 'completed', 'cancelled'),
+    type: DataTypes.ENUM('pending', 'assigned', 'accepted', 'on_the_way', 'arrived', 'in_progress', 'completed', 'cancelled', 'scheduled', 'rejected', 'diagnostic_submitted', 'execution_confirmed'),
     allowNull: false,
     defaultValue: 'pending'
   },
@@ -68,6 +68,15 @@ const Intervention = sequelize.define('Intervention', {
   contract_id: {
     type: DataTypes.INTEGER,
     allowNull: true
+  },
+  subscription_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'subscriptions',
+      key: 'id'
+    },
+    comment: 'ID de la souscription/contrat pour les visites planifiées'
   },
   equipment_count: {
     type: DataTypes.INTEGER,
@@ -154,6 +163,23 @@ const Intervention = sequelize.define('Intervention', {
     type: DataTypes.DATE,
     allowNull: true,
     comment: 'Date du paiement des frais de diagnostic'
+  },
+  // Confirmation client du rapport
+  customer_confirmed: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+    defaultValue: false,
+    comment: 'true si le client a confirmé que l\'intervention est terminée'
+  },
+  customer_confirmed_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Date de confirmation par le client'
+  },
+  customer_rejection_reason: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Raison du rejet si le client conteste la fin de l\'intervention'
   },
   // Évaluation client
   rating: {

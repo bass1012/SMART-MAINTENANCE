@@ -64,6 +64,8 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         interventionType.contains('dépannage') ||
         interventionType.contains('reparation') ||
         interventionType.contains('réparation') ||
+        interventionType.contains('repair') ||
+        interventionType.contains('installation') ||
         interventionType.contains('urgence');
 
     // Exécution (après acceptation du devis) - workflow simplifié
@@ -237,17 +239,27 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
 
   Future<void> _goToReport() async {
     // Déterminer le type d'intervention
-    final interventionType = _intervention['intervention_type'] ?? '';
+    final interventionType =
+        (_intervention['intervention_type'] ?? '').toString().toLowerCase();
+
+    // Les types qui nécessitent un rapport de diagnostic (avec devis après)
+    final requiresDiagnosticReport = interventionType == 'diagnostic' ||
+        interventionType == 'repair' ||
+        interventionType == 'reparation' ||
+        interventionType == 'réparation' ||
+        interventionType == 'installation' ||
+        interventionType == 'depannage' ||
+        interventionType == 'dépannage';
 
     Widget reportScreen;
-    if (interventionType == 'diagnostic') {
-      // Utiliser le nouveau écran de diagnostic
+    if (requiresDiagnosticReport) {
+      // Utiliser l'écran de diagnostic (rapport + devis après)
       reportScreen = DiagnosticReportScreen(
         interventionId: _intervention['id'],
         intervention: _intervention,
       );
     } else {
-      // Utiliser l'ancien écran pour maintenance et autres types
+      // Utiliser l'écran d'entretien pour maintenance et autres types
       reportScreen = CreateReportScreen(
         intervention: _intervention,
       );
@@ -534,10 +546,20 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
 
   Future<void> _viewReport() async {
     // Vérifier le type d'intervention pour utiliser le bon écran
-    final interventionType = _intervention['intervention_type'] ?? '';
+    final interventionType =
+        (_intervention['intervention_type'] ?? '').toString().toLowerCase();
 
-    if (interventionType == 'diagnostic') {
-      // Pour les diagnostics, utiliser ViewDiagnosticReportScreen
+    // Les types qui utilisent l'écran de rapport de diagnostic
+    final usesDiagnosticReport = interventionType == 'diagnostic' ||
+        interventionType == 'repair' ||
+        interventionType == 'reparation' ||
+        interventionType == 'réparation' ||
+        interventionType == 'installation' ||
+        interventionType == 'depannage' ||
+        interventionType == 'dépannage';
+
+    if (usesDiagnosticReport) {
+      // Pour les diagnostics, réparations, installations, utiliser ViewDiagnosticReportScreen
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -547,7 +569,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         ),
       );
     } else {
-      // Pour les interventions standard, utiliser ViewReportScreen
+      // Pour les interventions d'entretien, utiliser ViewReportScreen
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -1016,6 +1038,32 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                       .trim()
                   : (_intervention['customer']?.toString() ?? 'Non spécifié'),
             ),
+            if (_intervention['customer_phone'] != null &&
+                _intervention['customer_phone'].toString().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.phone, size: 20, color: Colors.grey[600]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _intervention['customer_phone'],
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.call, color: Color(0xFF0a543d)),
+                    onPressed: () async {
+                      final Uri phoneUri = Uri(
+                          scheme: 'tel', path: _intervention['customer_phone']);
+                      if (await canLaunchUrl(phoneUri)) {
+                        await launchUrl(phoneUri);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             _buildInfoRow(
               Icons.location_on,

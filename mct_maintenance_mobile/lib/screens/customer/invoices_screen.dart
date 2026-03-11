@@ -162,7 +162,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         dueDate: DateTime.now().add(const Duration(days: 15)),
         amount: 850.00,
         status: 'pending',
-        description: 'Réparation pompe à chaleur',
+        description: 'Dépannage pompe à chaleur',
       ),
       Invoice(
         id: '3',

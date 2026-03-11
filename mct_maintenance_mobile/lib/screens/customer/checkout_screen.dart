@@ -285,9 +285,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               );
 
               if (mounted) {
-                cart.clear();
                 if (paymentResult == true) {
-                  // Paiement réussi
+                  // Paiement réussi - vider le panier
+                  cart.clear();
                   print('✅ Paiement réussi via WebView');
                   Navigator.of(context).pushReplacement(
                     MaterialPageRoute(
@@ -298,9 +298,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                   );
                 } else {
-                  // Paiement annulé ou échoué - retourner à l'accueil
-                  print('❌ Paiement annulé ou échoué');
-                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  // Paiement annulé ou échoué - garder le panier intact
+                  print('❌ Paiement annulé ou échoué - panier conservé');
+                  SnackBarHelper.showInfo(
+                    context,
+                    'Paiement annulé. Votre panier est conservé.',
+                  );
+                  Navigator.of(context).pop();
                 }
               }
             } catch (e) {
@@ -344,369 +348,395 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         title: const Text('Paiement'),
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Résumé de la commande
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Résumé de la commande',
-                        style: GoogleFonts.nunitoSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background_tech_2.png'),
+            fit: BoxFit.cover,
+            opacity: 0.4,
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Résumé de la commande
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Résumé de la commande',
+                          style: GoogleFonts.nunitoSans(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const Divider(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Articles (${cart.itemCount})',
-                            style: GoogleFonts.nunitoSans(fontSize: 14),
-                          ),
-                          Text(
-                            '${cart.totalAmount.toStringAsFixed(0)} FCFA',
-                            style: GoogleFonts.nunitoSans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Livraison',
-                            style: GoogleFonts.nunitoSans(fontSize: 14),
-                          ),
-                          Text(
-                            'Gratuite',
-                            style: GoogleFonts.nunitoSans(
-                              fontSize: 14,
-                              color: Colors.green,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      // Afficher la réduction si un code promo est appliqué
-                      if (_appliedPromo != null) ...[
-                        const SizedBox(height: 8),
+                        const Divider(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Text(
-                                  'Réduction ',
-                                  style: GoogleFonts.nunitoSans(fontSize: 14),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: Colors.green.shade300,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    _appliedPromo!['code'],
-                                    style: GoogleFonts.nunitoSans(
-                                      fontSize: 11,
-                                      color: Colors.green.shade700,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              'Articles (${cart.itemCount})',
+                              style: GoogleFonts.nunitoSans(fontSize: 14),
                             ),
                             Text(
-                              '-${_discount.toStringAsFixed(0)} FCFA',
+                              '${cart.totalAmount.toStringAsFixed(0)} FCFA',
                               style: GoogleFonts.nunitoSans(
                                 fontSize: 14,
-                                color: Colors.red,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
                         ),
-                      ],
-
-                      const Divider(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total',
-                            style: GoogleFonts.nunitoSans(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Livraison',
+                              style: GoogleFonts.nunitoSans(fontSize: 14),
                             ),
-                          ),
-                          Text(
-                            '${(cart.totalAmount - _discount).toStringAsFixed(0)} FCFA',
-                            style: GoogleFonts.nunitoSans(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF0a543d),
+                            Text(
+                              'Gratuite',
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 14,
+                                color: Colors.green,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
+                          ],
+                        ),
 
-              // Code Promo
-              Text(
-                'Code Promo',
-                style: GoogleFonts.nunitoSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              if (_appliedPromo == null)
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _promoCodeController,
-                        decoration: InputDecoration(
-                          labelText: 'Entrez votre code promo',
-                          prefixIcon: const Icon(Icons.local_offer),
-                          border: const OutlineInputBorder(),
-                          hintText: 'Ex: PROMO2025',
-                          suffixIcon: _isValidatingPromo
-                              ? Padding(
-                                  padding: EdgeInsets.all(12.0),
-                                  child: SizedBox(
-                                    width: 40,
-                                    height: 20,
-                                    child: ButtonLoadingIndicator(
-                                        color: Color(0xFF0a543d), size: 6.0),
-                                  ),
-                                )
-                              : null,
-                        ),
-                        textCapitalization: TextCapitalization.characters,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _isValidatingPromo ? null : _validatePromoCode,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 16,
-                        ),
-                      ),
-                      child: const Text('Appliquer'),
-                    ),
-                  ],
-                )
-              else
-                Card(
-                  color: Colors.green.shade50,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          color: Colors.green.shade700,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        // Afficher la réduction si un code promo est appliqué
+                        if (_appliedPromo != null) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'Code promo appliqué : ${_appliedPromo!['code']}',
-                                style: GoogleFonts.nunitoSans(
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.green.shade900,
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    'Réduction ',
+                                    style: GoogleFonts.nunitoSans(fontSize: 14),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: Colors.green.shade300,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _appliedPromo!['code'],
+                                      style: GoogleFonts.nunitoSans(
+                                        fontSize: 11,
+                                        color: Colors.green.shade700,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               Text(
-                                _appliedPromo!['name'] ?? '',
+                                '-${_discount.toStringAsFixed(0)} FCFA',
                                 style: GoogleFonts.nunitoSans(
-                                  fontSize: 12,
-                                  color: Colors.green.shade700,
+                                  fontSize: 14,
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: _removePromoCode,
-                          color: Colors.red,
-                          tooltip: 'Retirer',
+                        ],
+
+                        const Divider(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Total',
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '${(cart.totalAmount - _discount).toStringAsFixed(0)} FCFA',
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0a543d),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // Informations de livraison
-              Text(
-                'Informations de livraison',
-                style: GoogleFonts.nunitoSans(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                // Code Promo
+                Text(
+                  'Code Promo',
+                  style: GoogleFonts.nunitoSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Téléphone',
-                  prefixIcon: Icon(Icons.phone),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Veuillez entrer votre numéro de téléphone';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _addressController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: 'Adresse de livraison',
-                  prefixIcon: const Icon(Icons.location_on),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _isLoadingLocation
-                      ? Padding(
-                          padding: EdgeInsets.all(12.0),
-                          child: SizedBox(
-                            width: 40,
-                            height: 20,
-                            child: ButtonLoadingIndicator(
-                              color: Color(0xFF0a543d),
-                              size: 6.0,
+                const SizedBox(height: 16),
+
+                if (_appliedPromo == null)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _promoCodeController,
+                          decoration: InputDecoration(
+                            labelText: 'Entrez votre code promo',
+                            prefixIcon: const Icon(Icons.local_offer),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: Color(0xFFF5F5F5),
+                            hintText: 'Ex: PROMO2025',
+                            suffixIcon: _isValidatingPromo
+                                ? Padding(
+                                    padding: EdgeInsets.all(12.0),
+                                    child: SizedBox(
+                                      width: 40,
+                                      height: 20,
+                                      child: ButtonLoadingIndicator(
+                                          color: Color(0xFF0a543d), size: 6.0),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          textCapitalization: TextCapitalization.characters,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed:
+                            _isValidatingPromo ? null : _validatePromoCode,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                        ),
+                        child: const Text('Appliquer'),
+                      ),
+                    ],
+                  )
+                else
+                  Card(
+                    color: Colors.green.shade50,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.green.shade700,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Code promo appliqué : ${_appliedPromo!['code']}',
+                                  style: GoogleFonts.nunitoSans(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.green.shade900,
+                                  ),
+                                ),
+                                Text(
+                                  _appliedPromo!['name'] ?? '',
+                                  style: GoogleFonts.nunitoSans(
+                                    fontSize: 12,
+                                    color: Colors.green.shade700,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        )
-                      : IconButton(
-                          icon: const Icon(Icons.my_location),
-                          onPressed: _getCurrentLocation,
-                          tooltip: 'Ma position actuelle',
-                          color: const Color(0xFF0a543d),
-                        ),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Veuillez entrer votre adresse';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Appuyez sur l\'icône 📍 pour utiliser votre position actuelle',
-                style: GoogleFonts.nunitoSans(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _notesController,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optionnel)',
-                  prefixIcon: Icon(Icons.note),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Information FineoPay
-              _buildFineoPayInfo(),
-              const SizedBox(height: 16),
-
-              // Note de sécurité
-              _buildSecurityNote(),
-              const SizedBox(height: 32),
-
-              // Bouton de paiement FineoPay
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _isProcessing
-                      ? null
-                      : () => _processPayment(isCash: false),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: _isProcessing
-                      ? const SizedBox.shrink()
-                      : const Icon(Icons.credit_card),
-                  label: _isProcessing
-                      ? ButtonLoadingIndicator(color: Colors.white, size: 6.0)
-                      : Text(
-                          'Payer ${(cart.totalAmount - _discount).toStringAsFixed(0)} FCFA',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: _removePromoCode,
+                            color: Colors.red,
+                            tooltip: 'Retirer',
                           ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Bouton paiement en espèces
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: OutlinedButton.icon(
-                  onPressed: _isProcessing
-                      ? null
-                      : () => _processPayment(isCash: true),
-                  icon: const Icon(Icons.money),
-                  label: const Text(
-                    'Payer en espèces à la livraison',
-                    style: TextStyle(fontSize: 16),
+                        ],
+                      ),
+                    ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF0a543d),
-                    side: const BorderSide(
-                      color: Color(0xFF0a543d),
-                      width: 2,
+                const SizedBox(height: 24),
+
+                // Informations de livraison
+                Text(
+                  'Informations de livraison',
+                  style: GoogleFonts.nunitoSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Téléphone',
+                    prefixIcon: const Icon(Icons.phone),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F5F5),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Veuillez entrer votre numéro de téléphone';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _addressController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Adresse de livraison',
+                    prefixIcon: const Icon(Icons.location_on),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F5F5),
+                    suffixIcon: _isLoadingLocation
+                        ? Padding(
+                            padding: EdgeInsets.all(12.0),
+                            child: SizedBox(
+                              width: 40,
+                              height: 20,
+                              child: ButtonLoadingIndicator(
+                                color: Color(0xFF0a543d),
+                                size: 6.0,
+                              ),
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.my_location),
+                            onPressed: _getCurrentLocation,
+                            tooltip: 'Ma position actuelle',
+                            color: const Color(0xFF0a543d),
+                          ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Veuillez entrer votre adresse';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Appuyez sur l\'icône 📍 pour utiliser votre position actuelle',
+                  style: GoogleFonts.nunitoSans(
+                    fontSize: 12,
+                    color: Colors.black87,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _notesController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: 'Notes (optionnel)',
+                    prefixIcon: const Icon(Icons.note),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F5F5),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Information FineoPay
+                _buildFineoPayInfo(),
+                const SizedBox(height: 16),
+
+                // Note de sécurité
+                _buildSecurityNote(),
+                const SizedBox(height: 32),
+
+                // Bouton de paiement FineoPay
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _isProcessing
+                        ? null
+                        : () => _processPayment(isCash: false),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: _isProcessing
+                        ? const SizedBox.shrink()
+                        : const Icon(Icons.credit_card),
+                    label: _isProcessing
+                        ? ButtonLoadingIndicator(color: Colors.white, size: 6.0)
+                        : Text(
+                            'Payer ${(cart.totalAmount - _discount).toStringAsFixed(0)} FCFA',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Bouton paiement en espèces
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _isProcessing
+                        ? null
+                        : () => _processPayment(isCash: true),
+                    icon: const Icon(Icons.money),
+                    label: const Text(
+                      'Payer en espèces à la livraison',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0a543d),
+                      side: const BorderSide(
+                        color: Color(0xFF0a543d),
+                        width: 2,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -729,11 +759,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   size: 28,
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  'Paiement sécurisé avec FineoPay',
-                  style: GoogleFonts.nunitoSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Text(
+                    'Paiement sécurisé avec FineoPay',
+                    style: GoogleFonts.nunitoSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -752,15 +784,48 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               children: [
                 const SizedBox(width: 4),
                 Image.asset('assets/images/orange_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
                 Image.asset('assets/images/mtn_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
                 Image.asset('assets/images/moov_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
-                Image.asset('assets/images/wave.png', height: 40, width: 40),
+                Image.asset('assets/images/wave.png',
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Logos Cartes Bancaires
+            Row(
+              children: [
+                const SizedBox(width: 4),
+                Image.asset('assets/images/logo_visa.png',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/MasterCard_Logo.png',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/logo_cb.jpg',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
               ],
             ),
             const SizedBox(height: 8),

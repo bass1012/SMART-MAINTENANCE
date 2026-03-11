@@ -44,7 +44,7 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'ID du paiement chez le provider'
     },
     status: {
-      type: DataTypes.ENUM('pending', 'processing', 'succeeded', 'failed', 'refunded', 'cancelled'),
+      type: DataTypes.ENUM('pending', 'processing', 'succeeded', 'failed', 'refunded', 'cancelled', 'completed'),
       defaultValue: 'pending',
       comment: 'Statut du paiement'
     },

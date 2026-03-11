@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 import '../../utils/snackbar_helper.dart';
 import 'diagnostic_payment_screen.dart';
+import 'payment_screen.dart';
+import 'contract_payment_screen.dart';
 
 class InterventionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> intervention;
@@ -32,10 +36,8 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     Future.delayed(Duration.zero, () {
       print(
           '🔄 Rafraîchissement initial de l\'intervention #${_intervention['id']}');
-      _refreshIntervention().then((_) {
-        // Après le rafraîchissement, vérifier si on doit afficher le popup d'évaluation
-        _checkAndShowRatingDialog();
-      });
+      _refreshIntervention();
+      // Popup d'évaluation désactivé - l'utilisateur peut évaluer via le bouton
     });
 
     // Rafraîchir automatiquement toutes les 30 secondes si l'intervention n'est pas terminée
@@ -215,9 +217,17 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                         _buildCancelButton(),
                       ],
 
-                      // Section notation du technicien si intervention terminée
-                      if (status == 'completed') const SizedBox(height: 16),
-                      if (status == 'completed') _buildRatingSection(),
+                      // Section confirmation du rapport si rapport soumis et non confirmé
+                      if (status == 'completed' && _hasReportToConfirm()) ...[
+                        const SizedBox(height: 16),
+                        _buildConfirmationSection(),
+                      ],
+
+                      // Section notation du technicien si intervention terminée et confirmée
+                      if (status == 'completed' && _isConfirmedByCustomer())
+                        const SizedBox(height: 16),
+                      if (status == 'completed' && _isConfirmedByCustomer())
+                        _buildRatingSection(),
                     ],
                   ),
                 ),
@@ -244,6 +254,549 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     return !isFree && diagnosticFee > 0 && !diagnosticPaid;
   }
 
+  // Vérifie si le rapport est soumis mais pas encore confirmé par le client
+  bool _hasReportToConfirm() {
+    final reportSubmittedAt = _intervention['report_submitted_at'];
+    final customerConfirmed = _intervention['customer_confirmed'] ?? false;
+    return reportSubmittedAt != null && customerConfirmed != true;
+  }
+
+  // Vérifie si le client a confirmé l'intervention
+  bool _isConfirmedByCustomer() {
+    final reportSubmittedAt = _intervention['report_submitted_at'];
+    final customerConfirmed = _intervention['customer_confirmed'] ?? false;
+    // On peut noter si: pas de rapport (ancien système) OU rapport confirmé
+    return reportSubmittedAt == null || customerConfirmed == true;
+  }
+
+  Widget _buildConfirmationSection() {
+    final reportData = _intervention['report_data'];
+    Map<String, dynamic>? parsedReport;
+    if (reportData != null && reportData is String) {
+      try {
+        parsedReport = Map<String, dynamic>.from(reportData.isNotEmpty
+            ? (reportData.startsWith('{') ? _parseJson(reportData) : {})
+            : {});
+      } catch (e) {
+        parsedReport = null;
+      }
+    } else if (reportData is Map) {
+      parsedReport = Map<String, dynamic>.from(reportData);
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade50, Colors.white],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blue.shade600, Colors.blue.shade400],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.fact_check,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Confirmation du rapport',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.blue.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Le technicien a soumis son rapport',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Veuillez confirmer que l\'intervention a été correctement réalisée, ou contestez si vous avez des remarques.',
+                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                ],
+              ),
+            ),
+            if (parsedReport != null && parsedReport.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildReportSummary(parsedReport),
+            ],
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _showRejectionDialog,
+                    icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                    label: const Text('Contester'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _confirmIntervention,
+                    icon: const Icon(Icons.check_circle, color: Colors.white),
+                    label: const Text('Confirmer'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0a543d),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _parseJson(String jsonString) {
+    try {
+      if (jsonString.isEmpty) return {};
+      final decoded = jsonDecode(jsonString);
+      return Map<String, dynamic>.from(decoded);
+    } catch (e) {
+      return {};
+    }
+  }
+
+  Widget _buildReportSummary(Map<String, dynamic> report) {
+    final workDone = report['travaux_effectues'] ?? report['description'] ?? '';
+    final observations = report['observations'] ?? '';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Résumé du rapport',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          if (workDone.isNotEmpty) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.build, size: 16, color: Colors.grey),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    workDone,
+                    style: const TextStyle(fontSize: 13),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (observations.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.note, size: 16, color: Colors.grey),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    observations,
+                    style: const TextStyle(fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmIntervention() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer l\'intervention'),
+        content: const Text(
+          'Confirmez-vous que le technicien a correctement réalisé l\'intervention ?\n\n'
+          'Vous pourrez ensuite évaluer le service.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0a543d),
+            ),
+            child:
+                const Text('Confirmer', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        final response = await _apiService.confirmInterventionCompletion(
+          _intervention['id'],
+          true,
+        );
+
+        print('🔍 Réponse confirmation: $response');
+        print('🔍 response[data]: ${response['data']}');
+        print('🔍 payment_required: ${response['data']?['payment_required']}');
+        print('🔍 payment_info: ${response['data']?['payment_info']}');
+        print(
+            '🔍 contract_payment_info: ${response['data']?['contract_payment_info']}');
+
+        // Vérifier si un second paiement de CONTRAT est requis (50% restant - dernière visite)
+        if (response['data'] != null &&
+            response['data']['payment_required'] == true &&
+            response['data']['contract_payment_info'] != null) {
+          final contractPaymentInfo = response['data']['contract_payment_info'];
+          print('💰 Second paiement CONTRAT requis: $contractPaymentInfo');
+          if (mounted) {
+            // Afficher une boîte de dialogue pour le paiement final du contrat
+            final shouldPay = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                icon: const Icon(Icons.payment_rounded,
+                    color: Color(0xFF0a543d), size: 48),
+                title: const Text('Paiement final du contrat'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Toutes les visites de maintenance ont été effectuées. Veuillez procéder au paiement final du contrat.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0a543d).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            '${(contractPaymentInfo['amount'] as num).toStringAsFixed(0)} FCFA',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0a543d),
+                            ),
+                          ),
+                          const Text(
+                            'Solde final (50%)',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Plus tard'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0a543d),
+                    ),
+                    child: const Text('Payer maintenant',
+                        style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            );
+
+            if (shouldPay == true && mounted) {
+              // Rediriger vers l'écran de paiement de contrat
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ContractPaymentScreen(
+                    subscriptionId: contractPaymentInfo['subscription_id'],
+                    reference: contractPaymentInfo['reference'] ?? 'N/A',
+                    amount: (contractPaymentInfo['total'] as num).toDouble(),
+                    contractType: 'Contrat de maintenance',
+                    equipment: contractPaymentInfo['equipment_description'] ??
+                        'Maintenance annuelle',
+                    model: contractPaymentInfo['equipment_model'],
+                    paymentPhase: 2, // Second paiement
+                    firstPaymentStatus: 'paid',
+                    secondPaymentStatus: 'pending',
+                  ),
+                ),
+              ).then((_) => _refreshIntervention());
+              return; // On sort ici car on a redirigé vers le paiement
+            }
+          }
+        }
+
+        // Vérifier si un second paiement de DEVIS est requis (50% restant)
+        if (response['data'] != null &&
+            response['data']['payment_required'] == true) {
+          final paymentInfo = response['data']['payment_info'];
+          print('💰 Second paiement requis: $paymentInfo');
+          if (paymentInfo != null && mounted) {
+            // Afficher une boîte de dialogue pour le paiement du solde
+            final shouldPay = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                icon: const Icon(Icons.payment,
+                    color: Color(0xFF0a543d), size: 48),
+                title: const Text('Paiement du solde'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'L\'intervention est confirmée. Veuillez procéder au paiement du solde restant.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0a543d).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            '${(paymentInfo['amount'] as num).toStringAsFixed(0)} FCFA',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0a543d),
+                            ),
+                          ),
+                          const Text(
+                            '50% restant',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Plus tard'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0a543d),
+                    ),
+                    child: const Text('Payer maintenant',
+                        style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            );
+
+            if (shouldPay == true && mounted) {
+              // Rediriger vers l'écran de paiement
+              final orderId = paymentInfo['order_id'];
+              if (orderId == null) {
+                SnackBarHelper.showError(
+                    context, 'Erreur: Commande non trouvée');
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PaymentScreen(
+                    invoiceId: orderId.toString(),
+                    invoiceNumber: paymentInfo['quote_reference'] ?? 'N/A',
+                    amount: (paymentInfo['amount'] as num).toDouble(),
+                    paymentStep: 2,
+                  ),
+                ),
+              ).then((_) => _refreshIntervention());
+              return; // On sort ici car on a redirigé vers le paiement
+            }
+          }
+        }
+
+        if (mounted) {
+          SnackBarHelper.showSuccess(
+            context,
+            'Merci pour votre confirmation !',
+          );
+          await _refreshIntervention();
+        }
+      } catch (e) {
+        if (mounted) {
+          SnackBarHelper.showError(
+            context,
+            'Erreur: ${e.toString()}',
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _showRejectionDialog() async {
+    final reasonController = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Contester l\'intervention'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Veuillez expliquer pourquoi vous contestez la fin de cette intervention :',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText:
+                    'Ex: Le problème n\'est pas résolu, le technicien n\'est pas venu...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (reasonController.text.trim().isNotEmpty) {
+                Navigator.pop(context, reasonController.text.trim());
+              } else {
+                SnackBarHelper.showWarning(
+                  context,
+                  'Veuillez indiquer la raison',
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Envoyer', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() => _isLoading = true);
+      try {
+        await _apiService.confirmInterventionCompletion(
+          _intervention['id'],
+          false,
+          rejectionReason: result,
+        );
+        if (mounted) {
+          SnackBarHelper.showInfo(
+            context,
+            'Votre contestation a été enregistrée. Un administrateur vous contactera.',
+          );
+          await _refreshIntervention();
+        }
+      } catch (e) {
+        if (mounted) {
+          SnackBarHelper.showError(
+            context,
+            'Erreur: ${e.toString()}',
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
   Widget _buildPaymentSection() {
     final diagnosticFee =
         double.tryParse(_intervention['diagnostic_fee']?.toString() ?? '0') ??
@@ -253,7 +806,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     String paymentLabel;
     switch (interventionType) {
       case 'repair':
-        paymentLabel = 'Paiement réparation';
+        paymentLabel = 'Paiement dépannage';
         break;
       case 'installation':
         paymentLabel = 'Paiement installation';
@@ -783,17 +1336,39 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        technician['email'] ?? '',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
+                      if (technician['phone'] != null &&
+                          technician['phone'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.phone,
+                                size: 16, color: Colors.grey.shade600),
+                            const SizedBox(width: 4),
+                            Text(
+                              technician['phone'],
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
+                if (technician['phone'] != null &&
+                    technician['phone'].toString().isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.call, color: Color(0xFF0a543d)),
+                    onPressed: () async {
+                      final Uri phoneUri =
+                          Uri(scheme: 'tel', path: technician['phone']);
+                      if (await canLaunchUrl(phoneUri)) {
+                        await launchUrl(phoneUri);
+                      }
+                    },
+                  ),
               ],
             ),
           ],
@@ -878,18 +1453,6 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                       color: Colors.orange,
                     ),
                   ),
-                  if (offer['duration'] != null) ...[
-                    const SizedBox(width: 16),
-                    const Icon(Icons.schedule, size: 18, color: Colors.blue),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${offer['duration']} mois',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ],
@@ -1179,7 +1742,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       case 'maintenance':
         return 'Maintenance';
       case 'repair':
-        return 'Réparation';
+        return 'Dépannage';
       case 'installation':
         return 'Installation';
       default:

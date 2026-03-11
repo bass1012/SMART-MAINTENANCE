@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const { body, query, param } = require('express-validator');
 const promotionController = require('../controllers/promotion/promotionController');
 
@@ -126,7 +126,7 @@ router.get('/:id', authenticate, promotionController.getPromotionById);
  */
 router.post('/', 
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   [
     body('title').notEmpty().withMessage('Le titre est requis'),
     body('description').notEmpty().withMessage('La description est requise'),
@@ -180,7 +180,7 @@ router.post('/',
  */
 router.put('/:id', 
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   promotionController.updatePromotion
 );
 
@@ -204,7 +204,7 @@ router.put('/:id',
  */
 router.delete('/:id', 
   authenticate,
-  authorize('admin'),
+  adminOnly,
   promotionController.deletePromotion
 );
 
@@ -228,7 +228,7 @@ router.delete('/:id',
  */
 router.post('/:id/activate', 
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   promotionController.activatePromotion
 );
 
@@ -252,7 +252,7 @@ router.post('/:id/activate',
  */
 router.post('/:id/deactivate', 
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   promotionController.deactivatePromotion
 );
 

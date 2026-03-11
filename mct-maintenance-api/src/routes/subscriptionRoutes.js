@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 
-// GET /api/subscriptions - Récupérer toutes les souscriptions (admin)
-router.get('/', authenticate, authorize('admin'), async (req, res) => {
+// GET /api/subscriptions - Récupérer toutes les souscriptions (admin/manager)
+router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { Subscription, MaintenanceOffer, User } = require('../models');
     
@@ -42,7 +42,7 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // GET /api/subscriptions/:id - Récupérer une souscription par ID (admin)
-router.get('/:id', authenticate, authorize('admin'), async (req, res) => {
+router.get('/:id', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { Subscription, MaintenanceOffer, User } = require('../models');
     const { id } = req.params;
@@ -85,8 +85,126 @@ router.get('/:id', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
+// POST /api/subscriptions - Créer une souscription à la demande (admin)
+router.post('/', authenticate, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { Subscription, CustomerProfile, Equipment } = require('../models');
+    const { customer_id, equipment_id, equipment_count = 1, contract_type = 'on_demand', status = 'active' } = req.body;
+    
+    console.log('📝 POST /api/subscriptions - Admin creating subscription');
+    console.log('Body:', req.body);
+    
+    // Vérifier que le client existe
+    const customer = await CustomerProfile.findByPk(customer_id);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Client non trouvé'
+      });
+    }
+    
+    // Vérifier que l'équipement existe (optionnel)
+    if (equipment_id) {
+      const equipment = await Equipment.findByPk(equipment_id);
+      if (!equipment) {
+        return res.status(404).json({
+          success: false,
+          message: 'Équipement non trouvé'
+        });
+      }
+    }
+    
+    // Calculer dates
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setFullYear(endDate.getFullYear() + 1);
+    
+    // Créer la souscription
+    const subscription = await Subscription.create({
+      customer_id,
+      equipment_id,
+      equipment_count,
+      equipment_used: 0,
+      contract_type,
+      status,
+      payment_status: 'paid', // Admin créé = payé
+      start_date: startDate,
+      end_date: endDate,
+      visits_total: 1,
+      visits_completed: 0,
+      visit_interval_months: 12,
+    });
+    
+    console.log(`✅ Subscription ${subscription.id} created by admin (type: ${contract_type})`);
+    
+    res.status(201).json({
+      success: true,
+      message: `Contrat ${contract_type === 'on_demand' ? 'à la demande' : 'programmé'} créé avec succès`,
+      data: subscription
+    });
+  } catch (error) {
+    console.error('❌ Error creating subscription:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la création de la souscription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// PATCH /api/subscriptions/:id - Modifier une souscription (admin)
+router.patch('/:id', authenticate, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { Subscription } = require('../models');
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    console.log(`📝 PATCH /api/subscriptions/${id} - Admin updating subscription`);
+    console.log('Update data:', updateData);
+    
+    const subscription = await Subscription.findByPk(id);
+    
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Souscription non trouvée'
+      });
+    }
+    
+    // Champs autorisés à modifier
+    const allowedFields = [
+      'equipment_description', 'equipment_model', 'equipment_count',
+      'visits_total', 'visit_interval_months', 'status', 'price'
+    ];
+    
+    const filteredData = {};
+    for (const field of allowedFields) {
+      if (updateData[field] !== undefined) {
+        filteredData[field] = updateData[field];
+      }
+    }
+    
+    await subscription.update(filteredData);
+    
+    console.log(`✅ Subscription ${id} updated`);
+    
+    res.json({
+      success: true,
+      message: 'Souscription modifiée avec succès',
+      data: subscription
+    });
+  } catch (error) {
+    console.error('❌ Error updating subscription:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la modification de la souscription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // PATCH /api/subscriptions/:id/cancel - Annuler une souscription (admin)
-router.patch('/:id/cancel', authenticate, authorize('admin'), async (req, res) => {
+router.patch('/:id/cancel', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { Subscription } = require('../models');
     const { id } = req.params;
@@ -129,7 +247,7 @@ router.patch('/:id/cancel', authenticate, authorize('admin'), async (req, res) =
 });
 
 // PATCH /api/subscriptions/:id/payment-status - Mettre à jour le statut de paiement (admin)
-router.patch('/:id/payment-status', authenticate, authorize('admin'), async (req, res) => {
+router.patch('/:id/payment-status', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { Subscription } = require('../models');
     const { id } = req.params;
@@ -210,8 +328,53 @@ router.patch('/:id/payment-status', authenticate, authorize('admin'), async (req
   }
 });
 
-// DELETE /api/subscriptions/:id - Supprimer une souscription (admin)
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+// PUT /api/subscriptions/:id - Mettre à jour une souscription (admin)
+router.put('/:id', authenticate, authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const { Subscription } = require('../models');
+    const { id } = req.params;
+    const { status, payment_status, visits_total, visit_interval_months, end_date } = req.body;
+    
+    console.log(`✏️ PUT /api/subscriptions/${id} - Admin`);
+    
+    const subscription = await Subscription.findByPk(id);
+    
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'Souscription non trouvée'
+      });
+    }
+    
+    // Préparer les champs à mettre à jour
+    const updateData = {};
+    if (status !== undefined) updateData.status = status;
+    if (payment_status !== undefined) updateData.payment_status = payment_status;
+    if (visits_total !== undefined) updateData.visits_total = visits_total;
+    if (visit_interval_months !== undefined) updateData.visit_interval_months = visit_interval_months;
+    if (end_date !== undefined) updateData.end_date = end_date;
+    
+    await subscription.update(updateData);
+    
+    console.log(`✅ Subscription ${id} updated:`, updateData);
+    
+    res.json({
+      success: true,
+      message: 'Souscription mise à jour avec succès',
+      data: subscription
+    });
+  } catch (error) {
+    console.error('❌ Error updating subscription:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la mise à jour de la souscription',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// DELETE /api/subscriptions/:id - Supprimer une souscription (admin seulement)
+router.delete('/:id', authenticate, adminOnly, async (req, res) => {
   try {
     const { Subscription } = require('../models');
     const { id } = req.params;
@@ -227,13 +390,17 @@ router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
       });
     }
     
-    // Vérifier que la souscription peut être supprimée (annulée ou échec de paiement)
+    // Vérifier que la souscription peut être supprimée
+    // Empêcher uniquement la suppression des souscriptions actives et payées
     if (subscription.status === 'active' && subscription.payment_status === 'paid') {
       return res.status(400).json({
         success: false,
         message: 'Impossible de supprimer une souscription active et payée. Annulez-la d\'abord.'
       });
     }
+    
+    // Permettre suppression pour: pending_payment, cancelled, expired, pending payment_status
+    console.log(`📋 Subscription status: ${subscription.status}, payment_status: ${subscription.payment_status}`);
     
     await subscription.destroy();
     
@@ -254,7 +421,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
 });
 
 // POST /api/subscriptions/:id/renew - Renouveler une souscription (admin)
-router.post('/:id/renew', authenticate, authorize('admin'), async (req, res) => {
+router.post('/:id/renew', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { Subscription, MaintenanceOffer } = require('../models');
     const { id } = req.params;

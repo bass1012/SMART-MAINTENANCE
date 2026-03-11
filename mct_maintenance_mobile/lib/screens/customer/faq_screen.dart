@@ -17,12 +17,12 @@ class _FAQScreenState extends State<FAQScreen> {
     {
       'question': 'Comment créer une demande d\'intervention ?',
       'answer':
-          'Depuis l\'onglet "Interventions", appuyez sur le bouton "+" en bas à droite. Sélectionnez le type d\'intervention (Entretien, Réparation, Installation ou Diagnostic), décrivez votre problème et soumettez votre demande. Un technicien vous sera assigné rapidement.',
+          'Depuis l\'onglet "Interventions", appuyez sur le bouton "+" en bas à droite. Sélectionnez le type d\'intervention (Entretien, Dépannage, Installation ou Diagnostic), décrivez votre problème et soumettez votre demande. Un technicien vous sera assigné rapidement.',
     },
     {
       'question': 'Quels sont les types d\'interventions disponibles ?',
       'answer':
-          '• Entretien : maintenance préventive de vos équipements\n• Réparation : en cas de panne ou dysfonctionnement\n• Installation : pour installer de nouveaux équipements\n• Diagnostic : pour identifier un problème technique (frais de diagnostic payable en ligne)',
+          '• Entretien : maintenance préventive de vos équipements\n• Dépannage : en cas de panne ou dysfonctionnement\n• Installation : pour installer de nouveaux équipements\n• Diagnostic : pour identifier un problème technique (frais de diagnostic payable en ligne)',
     },
     {
       'question': 'Comment suivre l\'état de mes interventions ?',
@@ -65,7 +65,7 @@ class _FAQScreenState extends State<FAQScreen> {
     {
       'question': 'Qu\'est-ce qu\'une offre de maintenance ?',
       'answer':
-          'Les offres de maintenance sont des forfaits mensuels ou annuels qui incluent des visites d\'entretien régulières, des réductions sur les réparations et un support prioritaire. Consultez-les dans "Offres Maintenance".',
+          'Les offres de maintenance sont des forfaits mensuels ou annuels qui incluent des visites d\'entretien régulières, des réductions sur les dépannages et un support prioritaire. Consultez-les dans "Offres Maintenance".',
     },
     {
       'question': 'Comment souscrire à une offre de maintenance ?',
@@ -120,7 +120,7 @@ class _FAQScreenState extends State<FAQScreen> {
     {
       'question': 'Que faire en cas d\'urgence ?',
       'answer':
-          'Pour les urgences, créez une intervention de type "Réparation" avec une description claire du problème. Notre équipe est notifiée immédiatement et vous contactera dans les plus brefs délais.',
+          'Pour les urgences, créez une intervention de type "Dépannage" avec une description claire du problème. Notre équipe est notifiée immédiatement et vous contactera dans les plus brefs délais.',
     },
     // Rapports
     {
@@ -134,189 +134,192 @@ class _FAQScreenState extends State<FAQScreen> {
   Widget build(BuildContext context) {
     return SupportFabWrapper(
       child: Scaffold(
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: const Color(0xFF0a543d),
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0a543d),
-                  Color(0xFF0d6b4d),
-                ],
-              ),
-            ),
-          ),
-          title: Text(
-            'FAQ',
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              fontSize: 20,
-            ),
-          ),
-        ),
         body: Container(
           decoration: const BoxDecoration(
             image: DecorationImage(
-              image: AssetImage('assets/images/call_center.png'),
+              image: AssetImage('assets/images/background_tech_2.png'),
               fit: BoxFit.cover,
               opacity: 0.4,
             ),
           ),
-          child: Column(
-            children: [
-              // En-tête avec description
-              Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF0a543d),
-                      Color(0xFF0d6b4d),
-                      Color(0xFF0f7d59),
-                    ],
-                  ),
+          child: CustomScrollView(
+            slivers: [
+              // SliverAppBar qui se réduit lors du scroll
+              SliverAppBar(
+                expandedHeight: 170,
+                floating: false,
+                pinned: true,
+                elevation: 0,
+                backgroundColor: const Color(0xFF0a543d),
+                shape: const RoundedRectangleBorder(
                   borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(32),
-                    bottomRight: Radius.circular(32),
+                    bottomLeft: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.3),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Row(
+                title: Text(
+                  'FAQ',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                    color: Colors.white,
+                  ),
+                ),
+                flexibleSpace: FlexibleSpaceBar(
+                  collapseMode: CollapseMode.parallax,
+                  background: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF0a543d),
+                          Color(0xFF0d6b4d),
+                          Color(0xFF0f7d59),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(24),
+                        bottomRight: Radius.circular(24),
+                      ),
+                    ),
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 60, 24, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.help_outline,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Questions Fréquentes',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
+                                color: Colors.white.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1.5,
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Trouvez rapidement des réponses à vos questions',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Liste des questions
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _faqs.length,
-                  itemBuilder: (context, index) {
-                    final faq = _faqs[index];
-                    final isExpanded = _expandedIndex == index;
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () {
-                          setState(() {
-                            _expandedIndex = isExpanded ? null : index;
-                          });
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                              child: Row(
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF0a543d)
-                                          .withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: Colors.white.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
-                                    child: Icon(
-                                      isExpanded ? Icons.remove : Icons.add,
-                                      color: const Color(0xFF0a543d),
-                                      size: 20,
+                                    child: const Icon(
+                                      Icons.help_outline,
+                                      color: Colors.white,
+                                      size: 24,
                                     ),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      faq['question']!,
+                                      'Questions Fréquentes',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 15,
+                                        fontSize: 16,
                                         fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
+                                        color: Colors.white,
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
-                              if (isExpanded) ...[
-                                const SizedBox(height: 12),
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 44),
-                                  child: Text(
-                                    faq['answer']!,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14,
-                                      color: Colors.grey[700],
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Trouvez rapidement des réponses à vos questions',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  ),
+                ),
+              ),
+
+              // Liste des questions en SliverList
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final faq = _faqs[index];
+                      final isExpanded = _expandedIndex == index;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            setState(() {
+                              _expandedIndex = isExpanded ? null : index;
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0a543d)
+                                            .withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        isExpanded ? Icons.remove : Icons.add,
+                                        color: const Color(0xFF0a543d),
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        faq['question']!,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (isExpanded) ...[
+                                  const SizedBox(height: 12),
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 44),
+                                    child: Text(
+                                      faq['answer']!,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        color: Colors.grey[700],
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    childCount: _faqs.length,
+                  ),
                 ),
               ),
             ],

@@ -16,6 +16,12 @@ class QuoteContract {
   final String? paymentStatus; // 'pending', 'deferred', 'paid'
   final bool executeNow; // Exécution immédiate
   final List<QuoteItem> items; // Liste des articles
+  // Split payment (50/50)
+  final String? paymentType; // 'full' ou 'split'
+  final double? firstPaymentAmount; // 50% du total
+  final String? firstPaymentStatus; // 'pending', 'paid'
+  final double? secondPaymentAmount; // 50% restant
+  final String? secondPaymentStatus; // 'pending', 'paid'
 
   QuoteContract({
     required this.id,
@@ -33,6 +39,11 @@ class QuoteContract {
     this.paymentStatus,
     this.executeNow = false,
     this.items = const [],
+    this.paymentType,
+    this.firstPaymentAmount,
+    this.firstPaymentStatus,
+    this.secondPaymentAmount,
+    this.secondPaymentStatus,
   });
 
   factory QuoteContract.fromJson(Map<String, dynamic> json) {
@@ -68,6 +79,16 @@ class QuoteContract {
       paymentStatus: json['payment_status'],
       executeNow: json['execute_now'] == true || json['execute_now'] == 1,
       items: itemsList,
+      // Split payment
+      paymentType: json['payment_type'],
+      firstPaymentAmount: json['first_payment_amount'] != null
+          ? (json['first_payment_amount'] as num).toDouble()
+          : null,
+      firstPaymentStatus: json['first_payment_status'],
+      secondPaymentAmount: json['second_payment_amount'] != null
+          ? (json['second_payment_amount'] as num).toDouble()
+          : null,
+      secondPaymentStatus: json['second_payment_status'],
     );
   }
 

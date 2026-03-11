@@ -1,4 +1,4 @@
-const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage, MaintenanceOffer, RepairService, InstallationService, Subscription, DiagnosticReport, Quote } = require('../../models');
+const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage, MaintenanceOffer, RepairService, InstallationService, Subscription, DiagnosticReport, Quote, SystemConfig, Order } = require('../../models');
 const { Op, sequelize } = require('sequelize');
 const { sequelize: db } = require('../../config/database');
 const { 
@@ -24,15 +24,25 @@ const {
 } = require('../../services/emailHelper');
 const upload = require('../../config/multer');
 const schedulingService = require('../../services/schedulingService');
+const contractSchedulingService = require('../../services/contractSchedulingService');
 
 // Intervention Controller - Implementation complète
 const getAllInterventions = async (req, res) => {
   try {
-    const { status, priority, customer_id, technician_id, page = 1, limit = 10 } = req.query;
+    const { status, priority, customer_id, technician_id, has_rating, page = 1, limit = 10 } = req.query;
     
     const where = {};
     if (status) where.status = status;
     if (priority) where.priority = priority;
+    
+    // Filtre pour has_rating (évaluations)
+    if (has_rating === 'true') {
+      where.rating = { [Op.not]: null };
+      console.log('🔍 Filtre: has_rating=true (rating != null)');
+    } else if (has_rating === 'false') {
+      where.rating = null;
+      console.log('🔍 Filtre: has_rating=false (rating = null)');
+    }
     
     // Si customer_id est fourni, il peut être un User.id, donc le convertir en CustomerProfile.id
     if (customer_id) {
@@ -76,7 +86,7 @@ const getAllInterventions = async (req, res) => {
         {
           model: User,
           as: 'technician',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
+          attributes: ['id', 'first_name', 'last_name', 'email', 'phone'],
           required: false
         },
         {
@@ -189,7 +199,7 @@ const getInterventionById = async (req, res) => {
             attributes: ['id', 'email', 'phone']
           }]
         },
-        { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email'], required: false },
+        { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false },
         {
           model: MaintenanceOffer,
           as: 'maintenance_offer',
@@ -283,20 +293,21 @@ const createIntervention = [
 
       // 🔄 IMPORTANT: Convertir User.id en CustomerProfile.id si nécessaire
       // L'app mobile peut envoyer User.id, mais la table interventions attend CustomerProfile.id
-      let actualCustomerId = interventionData.customer_id;
+      const originalCustomerId = parseInt(interventionData.customer_id); // Sauvegarder l'ID original AVANT conversion
+      let actualCustomerId = originalCustomerId;
       
       // Vérifier si le customer_id fourni est un User.id ou CustomerProfile.id
       const customerProfile = await CustomerProfile.findOne({
-        where: { user_id: interventionData.customer_id }
+        where: { user_id: originalCustomerId }
       });
       
       if (customerProfile) {
         // C'était un User.id, on utilise le CustomerProfile.id
         actualCustomerId = customerProfile.id;
-        console.log(`🔄 Conversion User.id ${interventionData.customer_id} → CustomerProfile.id ${actualCustomerId}`);
+        console.log(`🔄 Conversion User.id ${originalCustomerId} → CustomerProfile.id ${actualCustomerId}`);
       } else {
         // Vérifier si c'est déjà un CustomerProfile.id valide
-        const profileExists = await CustomerProfile.findByPk(interventionData.customer_id);
+        const profileExists = await CustomerProfile.findByPk(originalCustomerId);
         if (!profileExists) {
           await transaction.rollback();
           return res.status(400).json({
@@ -313,6 +324,8 @@ const createIntervention = [
       // 💰 Coût du diagnostic : OBLIGATOIRE pour les diagnostics, réparations et installations
       // Pour l'entretien : gratuit si le client a une souscription active, sinon payant
       const interventionType = interventionData.intervention_type?.toLowerCase() || '';
+      console.log(`📋 Type d'intervention reçu: "${interventionData.intervention_type}" -> normalized: "${interventionType}"`);
+      
       const requiresDiagnosticFee = interventionType === 'diagnostic' || 
                                      interventionType === 'repair' || 
                                      interventionType === 'réparation' ||
@@ -321,50 +334,168 @@ const createIntervention = [
                                      interventionType === 'dépannage' ||
                                      interventionType === 'depannage';
       
+      console.log(`📋 requiresDiagnosticFee: ${requiresDiagnosticFee}`);
+      
       let diagnosticFee = 0;
       let isFreeDiagnosis = true;
+      let equipmentCoveredBySubscription = 0;
+      let equipmentToPay = 0;
       
       // Vérifier si c'est un entretien sans souscription active
       const isMaintenanceType = interventionType === 'entretien' || interventionType === 'maintenance';
+      console.log(`📋 isMaintenanceType: ${isMaintenanceType}`);
+      
       let hasActiveSubscription = false;
+      let activeSubscription = null; // Variable pour stocker la souscription à marquer comme utilisée
       
       if (isMaintenanceType && interventionData.maintenance_offer_id) {
         // Vérifier si le client a une souscription active pour cette offre
-        const activeSubscription = await Subscription.findOne({
+        // Note: Les souscriptions sont créées avec User.id, pas CustomerProfile.id
+        // On utilise originalCustomerId (User.id sauvegardé plus haut) et actualCustomerId (CustomerProfile.id)
+        const maintenanceOfferId = parseInt(interventionData.maintenance_offer_id);
+        
+        console.log(`🔍 Vérification souscription: User.id=${originalCustomerId}, CustomerProfile.id=${actualCustomerId}, Offre=${maintenanceOfferId}`);
+        
+        activeSubscription = await Subscription.findOne({
           where: {
-            customer_id: actualCustomerId,
-            maintenance_offer_id: interventionData.maintenance_offer_id,
+            [Op.or]: [
+              { customer_id: actualCustomerId },     // CustomerProfile.id
+              { customer_id: originalCustomerId }    // User.id original
+            ],
+            maintenance_offer_id: maintenanceOfferId,
             status: 'active',
             payment_status: 'paid'
           }
         });
-        hasActiveSubscription = !!activeSubscription;
-        console.log(`🔍 Souscription active pour offre #${interventionData.maintenance_offer_id}: ${hasActiveSubscription ? 'OUI' : 'NON'}`);
+        
+        // Vérifier qu'il reste des équipements disponibles et calculer le coût partiel
+        if (activeSubscription) {
+          const equipmentCount = activeSubscription.equipment_count || 1;
+          const equipmentUsed = activeSubscription.equipment_used || 0;
+          const equipmentRemaining = equipmentCount - equipmentUsed;
+          const requestedEquipment = parseInt(interventionData.equipment_count) || 1;
+          
+          if (equipmentRemaining > 0) {
+            // Calculer combien d'équipements sont couverts par la souscription
+            equipmentCoveredBySubscription = Math.min(requestedEquipment, equipmentRemaining);
+            equipmentToPay = Math.max(0, requestedEquipment - equipmentRemaining);
+            
+            hasActiveSubscription = true;
+            console.log(`🔍 Souscription active #${activeSubscription.id} - Quota: ${equipmentUsed}/${equipmentCount} utilisés, ${equipmentRemaining} restant(s)`);
+            console.log(`   📊 Demandé: ${requestedEquipment}, Couvert: ${equipmentCoveredBySubscription}, À payer: ${equipmentToPay}`);
+          } else {
+            // Plus de quota disponible, la souscription ne peut pas être utilisée
+            hasActiveSubscription = false;
+            activeSubscription = null;
+            equipmentToPay = requestedEquipment;
+            console.log(`⚠️ Souscription trouvée mais quota épuisé (${equipmentUsed}/${equipmentCount})`);
+          }
+        } else {
+          hasActiveSubscription = false;
+          equipmentToPay = parseInt(interventionData.equipment_count) || 1;
+          console.log(`🔍 Aucune souscription active pour offre #${maintenanceOfferId}`);
+        }
       }
       
       if (requiresDiagnosticFee) {
-        // Utiliser le prix du service si disponible, sinon frais par défaut
-        if (interventionType === 'repair' && interventionData.repair_service_id) {
-          const repairService = await RepairService.findByPk(interventionData.repair_service_id);
-          diagnosticFee = repairService ? parseFloat(repairService.price) : 13.00;
-        } else if (interventionType === 'installation' && interventionData.installation_service_id) {
-          const installationService = await InstallationService.findByPk(interventionData.installation_service_id);
-          diagnosticFee = installationService ? parseFloat(installationService.price) : 0;
-        } else {
-          diagnosticFee = 13.00; // Frais de diagnostic par défaut
-        }
-        isFreeDiagnosis = false;
-        console.log('💵 Frais de service : ' + diagnosticFee + ' (type: ' + interventionType + ')');
-      } else if (isMaintenanceType && !hasActiveSubscription && interventionData.maintenance_offer_id) {
-        // Entretien sans souscription active : utiliser le prix de l'offre
-        const maintenanceOffer = await MaintenanceOffer.findByPk(interventionData.maintenance_offer_id);
-        if (maintenanceOffer) {
-          diagnosticFee = parseFloat(maintenanceOffer.price);
+        // Récupérer les frais de diagnostic depuis la configuration
+        const configuredDiagnosticFee = await SystemConfig.getValue('diagnostic_default_fee', 4000);
+        
+        // Pour les réparations et installations: pas de coût direct
+        // Le technicien effectue d'abord un diagnostic, puis envoie un devis
+        if (interventionType === 'repair' || interventionType === 'réparation' || interventionType === 'reparation') {
+          // Réparation: diagnostic obligatoire, devis après
+          diagnosticFee = configuredDiagnosticFee;
           isFreeDiagnosis = false;
-          console.log('💵 Entretien sans souscription - Prix offre: ' + diagnosticFee + ' FCFA');
+          console.log('💵 Frais de diagnostic réparation: ' + diagnosticFee + ' FCFA (devis après diagnostic)');
+        } else if (interventionType === 'installation') {
+          // Installation: diagnostic/visite technique payant, devis après
+          diagnosticFee = configuredDiagnosticFee;
+          isFreeDiagnosis = false;
+          console.log('💵 Frais de diagnostic installation: ' + diagnosticFee + ' FCFA (devis après diagnostic)');
+        } else {
+          // Autres types (diagnostic, dépannage): frais de diagnostic standard
+          diagnosticFee = configuredDiagnosticFee;
+          isFreeDiagnosis = false;
+          console.log('💵 Frais de diagnostic : ' + diagnosticFee + ' FCFA');
+        }
+      } else if (isMaintenanceType && interventionData.maintenance_offer_id) {
+        const maintenanceOffer = await MaintenanceOffer.findByPk(interventionData.maintenance_offer_id);
+        const unitPrice = maintenanceOffer ? parseFloat(maintenanceOffer.price) : 0;
+        const requestedEquipment = parseInt(interventionData.equipment_count) || 1;
+        
+        if (!hasActiveSubscription) {
+          // Pas de souscription active : payer pour tous les équipements
+          diagnosticFee = unitPrice * requestedEquipment;
+          isFreeDiagnosis = false;
+          console.log(`💵 Entretien sans souscription - Prix: ${diagnosticFee} FCFA (${requestedEquipment} × ${unitPrice} FCFA)`);
+        } else if (equipmentToPay > 0) {
+          // Souscription active mais ne couvre pas tous les équipements
+          diagnosticFee = unitPrice * equipmentToPay;
+          isFreeDiagnosis = false;
+          console.log(`💵 Entretien partiellement couvert - ${equipmentCoveredBySubscription} gratuit(s), ${equipmentToPay} à payer: ${diagnosticFee} FCFA`);
+        } else {
+          // Entretien AVEC souscription active et quota suffisant : GRATUIT
+          diagnosticFee = 0;
+          isFreeDiagnosis = true;
+          console.log('✅ Entretien GRATUIT - Souscription active avec quota suffisant');
         }
       } else {
         console.log('✓ Pas de frais de diagnostic (type: ' + interventionType + ')');
+      }
+
+      // ✅ Si un technicien est assigné dès la création, vérifier sa disponibilité
+      if (interventionData.technician_id) {
+        console.log('🔍 [CREATE] Vérification disponibilité pour technicien:', interventionData.technician_id);
+        console.log('🔍 [CREATE] scheduled_date:', interventionData.scheduled_date);
+        
+        // Combiner date et heure si scheduled_time est fourni séparément
+        let scheduledDateTime = interventionData.scheduled_date;
+        if (interventionData.scheduled_time) {
+          const dateStr = typeof interventionData.scheduled_date === 'string' 
+            ? interventionData.scheduled_date.split('T')[0] 
+            : new Date(interventionData.scheduled_date).toISOString().split('T')[0];
+          scheduledDateTime = new Date(`${dateStr}T${interventionData.scheduled_time}:00`);
+        }
+        
+        console.log('🔍 [CREATE] scheduledDateTime final:', scheduledDateTime);
+        
+        const timeSlotCheck = await schedulingService.checkTimeSlotAvailability(
+          interventionData.technician_id,
+          scheduledDateTime,
+          null // L'heure est déjà intégrée dans scheduledDateTime
+        );
+
+        console.log('🔍 [CREATE] Résultat timeSlotCheck:', JSON.stringify(timeSlotCheck));
+
+        if (!timeSlotCheck.available) {
+          console.log('❌ [CREATE] Créneau non disponible - REJET');
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message: timeSlotCheck.message,
+            data: {
+              conflict: timeSlotCheck.conflict,
+              min_interval_minutes: schedulingService.MIN_INTERVENTION_INTERVAL_MINUTES
+            }
+          });
+        } else {
+          console.log('✅ [CREATE] Créneau disponible - OK');
+        }
+      }
+
+      // ✅ Combiner scheduled_date et scheduled_time si les deux sont fournis
+      console.log('📅 scheduled_date reçu:', interventionData.scheduled_date);
+      console.log('🕐 scheduled_time reçu:', interventionData.scheduled_time);
+      
+      if (interventionData.scheduled_time && interventionData.scheduled_date) {
+        const dateStr = typeof interventionData.scheduled_date === 'string' 
+          ? interventionData.scheduled_date.split('T')[0] 
+          : new Date(interventionData.scheduled_date).toISOString().split('T')[0];
+        const combinedDateStr = `${dateStr}T${interventionData.scheduled_time}:00Z`;
+        interventionData.scheduled_date = new Date(combinedDateStr);
+        console.log('📅 Date combinée:', combinedDateStr, '→', interventionData.scheduled_date);
+        delete interventionData.scheduled_time; // Supprimer car le champ n'existe pas en DB
       }
 
       // Créer l'intervention avec les frais de diagnostic
@@ -399,6 +530,33 @@ const createIntervention = [
         console.log(`✅ ${req.files.length} image(s) client enregistrée(s) en base`);
       }
 
+      // Mettre à jour le quota d'équipements de la souscription
+      if (activeSubscription) {
+        // Utiliser le nombre d'équipements de l'intervention (ou equipment_count_used si spécifié)
+        const requestedCount = parseInt(interventionData.equipment_count_used) || parseInt(interventionData.equipment_count) || 1;
+        const equipmentCountUsed = Math.min(
+          Math.max(1, requestedCount),
+          (activeSubscription.equipment_count - activeSubscription.equipment_used) // Ne pas dépasser le quota restant
+        );
+        
+        const newEquipmentUsed = (activeSubscription.equipment_used || 0) + equipmentCountUsed;
+        const isFullyUsed = newEquipmentUsed >= activeSubscription.equipment_count;
+        
+        await activeSubscription.update({
+          equipment_used: newEquipmentUsed,
+          status: isFullyUsed ? 'used' : 'active',
+          intervention_id: intervention.id,
+          used_at: isFullyUsed ? new Date() : activeSubscription.used_at
+        }, { transaction });
+        
+        console.log(`✅ Souscription #${activeSubscription.id}: ${equipmentCountUsed} équipement(s) utilisé(s) - Total: ${newEquipmentUsed}/${activeSubscription.equipment_count}`);
+        if (isFullyUsed) {
+          console.log(`   📋 Souscription entièrement consommée, marquée comme 'used'`);
+        } else {
+          console.log(`   📋 Quota restant: ${activeSubscription.equipment_count - newEquipmentUsed} équipement(s)`);
+        }
+      }
+
       await transaction.commit();
       committed = true;
       console.log('✅ Transaction validée');
@@ -425,7 +583,7 @@ const createIntervention = [
           { 
             model: User, 
             as: 'technician', 
-            attributes: ['id', 'first_name', 'last_name', 'email'], 
+            attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], 
             required: false 
           }
         ],
@@ -505,8 +663,14 @@ const createIntervention = [
       res.status(201).json({
         success: true,
         message: 'Intervention créée avec succès',
-        data: createdIntervention
+        data: {
+          ...createdIntervention.toJSON(),
+          diagnostic_fee: diagnosticFee,
+          is_free_diagnosis: isFreeDiagnosis
+        }
       });
+      
+      console.log(`📤 Réponse envoyée: diagnostic_fee=${diagnosticFee}, is_free_diagnosis=${isFreeDiagnosis}`);
 
     } catch (error) {
       try {
@@ -540,7 +704,16 @@ const updateIntervention = async (req, res) => {
       });
     }
 
+    // Vérifier si le statut passe à 'cancelled' pour récupérer le quota
+    const oldStatus = intervention.status;
+    const newStatus = updateData.status;
+    
     await intervention.update(updateData);
+    
+    // Récupérer le quota si l'intervention est annulée
+    if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
+      await refundSubscriptionQuota(intervention);
+    }
 
     // Récupérer l'intervention mise à jour avec les relations
     const updatedIntervention = await Intervention.findByPk(id, {
@@ -557,7 +730,7 @@ const updateIntervention = async (req, res) => {
             }
           ]
         },
-        { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email'], required: false }
+        { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], required: false }
       ]
     });
 
@@ -700,6 +873,24 @@ const assignIntervention = async (req, res) => {
       });
     }
 
+    // ✅ Vérifier la disponibilité du créneau horaire (1h30 minimum entre interventions)
+    const timeSlotCheck = await schedulingService.checkTimeSlotAvailability(
+      technician_id,
+      intervention.scheduled_date,
+      null // scheduled_date contient déjà l'heure
+    );
+
+    if (!timeSlotCheck.available) {
+      return res.status(400).json({
+        success: false,
+        message: timeSlotCheck.message,
+        data: {
+          conflict: timeSlotCheck.conflict,
+          min_interval_minutes: schedulingService.MIN_INTERVENTION_INTERVAL_MINUTES
+        }
+      });
+    }
+
     // Vérifier la limite d'interventions par jour
     const MAX_DAILY_INTERVENTIONS = process.env.MAX_DAILY_INTERVENTIONS || 6;
     const interventionDate = intervention.scheduled_date 
@@ -713,7 +904,7 @@ const assignIntervention = async (req, res) => {
           [Op.gte]: new Date(interventionDate),
           [Op.lt]: new Date(new Date(interventionDate).getTime() + 24 * 60 * 60 * 1000)
         },
-        status: { [Op.notIn]: ['cancelled', 'rejected'] }
+        status: { [Op.notIn]: ['cancelled', 'completed'] }
       }
     });
 
@@ -750,7 +941,7 @@ const assignIntervention = async (req, res) => {
             }
           ]
         },
-        { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email'] }
+        { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] }
       ]
     });
 
@@ -1092,6 +1283,16 @@ const completeIntervention = async (req, res, next) => {
       console.error('⚠️ Erreur envoi email terminaison:', emailError.message);
     }
     
+    // 📅 Planification automatique de la prochaine visite (contrat programmé)
+    try {
+      const nextVisit = await contractSchedulingService.scheduleNextVisit(intervention.id);
+      if (nextVisit) {
+        console.log(`✅ Prochaine visite programmée: ${nextVisit.scheduled_date}`);
+      }
+    } catch (schedulingError) {
+      console.error('⚠️ Erreur planification prochaine visite:', schedulingError.message);
+    }
+    
     res.status(200).json({
       success: true,
       message: 'Intervention terminée avec succès',
@@ -1111,14 +1312,27 @@ const submitReport = async (req, res, next) => {
     let {
       work_description,
       materials_used,
+      spare_parts,
       duration,
       observations,
       photos,
-      // Mesures techniques
+      // Section Équipement (format legacy - champs individuels)
+      equipment_state,
+      equipment_type,
+      equipment_brand,
+      // Mesures techniques (format legacy)
       pression,
-      temperature,
+      puissance,
       intensite,
       tension,
+      // Section Équipements (nouveau format - tableau)
+      equipments,
+      // Section Détail Intervention
+      technician_name,
+      intervention_date,
+      start_time,
+      end_time,
+      intervention_nature,
     } = req.body;
 
     console.log(`📝 Soumission rapport pour intervention ${id}`);
@@ -1152,8 +1366,10 @@ const submitReport = async (req, res, next) => {
       });
     }
 
-    // Validation des données
-    if (!work_description || work_description.trim().length === 0) {
+    // Validation des données - accepter work_description OU intervention_nature
+    const hasDescription = (work_description && work_description.trim().length > 0) || 
+                          (intervention_nature && intervention_nature.trim().length > 0);
+    if (!hasDescription) {
       return res.status(400).json({
         success: false,
         message: 'La description du travail effectué est obligatoire'
@@ -1181,21 +1397,45 @@ const submitReport = async (req, res, next) => {
     }
 
     // Préparer les données du rapport
+    const sparePartsList = spare_parts ? 
+      (typeof spare_parts === 'string' ? JSON.parse(spare_parts) : spare_parts) : 
+      (Array.isArray(materials_used) ? materials_used : []);
+    
+    // Parser equipments si c'est un string JSON (nouveau format multi-équipements)
+    let equipmentsList = [];
+    if (equipments) {
+      equipmentsList = typeof equipments === 'string' ? JSON.parse(equipments) : equipments;
+      console.log(`📦 ${equipmentsList.length} équipement(s) dans le rapport`);
+    }
+    
     const reportData = {
       intervention_id: id,
       technician_id: technicianId,
-      work_description: work_description.trim(),
-      materials_used: Array.isArray(materials_used) ? materials_used : [],
+      work_description: work_description ? work_description.trim() : (intervention_nature || ''),
+      materials_used: sparePartsList,
+      spare_parts: sparePartsList,
       duration: duration || 0,
       observations: observations ? observations.trim() : null,
       photos_count: uploadedFiles.length,
       status: 'submitted',
       submitted_at: new Date(),
-      // Mesures techniques
-      pression: pression || '',
-      temperature: temperature || '',
-      intensite: intensite || '',
-      tension: tension || '',
+      // Section Équipements (nouveau format - tableau)
+      equipments: equipmentsList,
+      // Section Équipement (format legacy pour rétrocompatibilité)
+      equipment_state: equipmentsList.length > 0 ? equipmentsList[0].state : (equipment_state || ''),
+      equipment_type: equipmentsList.length > 0 ? equipmentsList[0].type : (equipment_type || ''),
+      equipment_brand: equipmentsList.length > 0 ? equipmentsList[0].brand : (equipment_brand || ''),
+      // Mesures techniques (format legacy - premier équipement)
+      pression: equipmentsList.length > 0 ? equipmentsList[0].pression : (pression || ''),
+      puissance: equipmentsList.length > 0 ? equipmentsList[0].puissance : (puissance || ''),
+      intensite: equipmentsList.length > 0 ? equipmentsList[0].intensite : (intensite || ''),
+      tension: equipmentsList.length > 0 ? equipmentsList[0].tension : (tension || ''),
+      // Section Détail Intervention
+      technician_name: technician_name || '',
+      intervention_date: intervention_date || '',
+      start_time: start_time || '',
+      end_time: end_time || '',
+      intervention_nature: intervention_nature || work_description || '',
     };
 
     // TODO: Sauvegarder le rapport dans une table dédiée
@@ -1222,7 +1462,7 @@ const submitReport = async (req, res, next) => {
               attributes: ['id', 'email']
             }]
           },
-          { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email'] }
+          { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] }
         ]
       });
 
@@ -1230,23 +1470,45 @@ const submitReport = async (req, res, next) => {
         ? `${interventionWithRelations.technician.first_name} ${interventionWithRelations.technician.last_name}`
         : 'Technicien';
 
-      // 1. Notifier le client
-      if (interventionWithRelations.customer_id) {
-        console.log(`📧 Notification client ${interventionWithRelations.customer_id} pour rapport intervention ${id}`);
+      // 1. Notifier le client - Rapport disponible
+      // Utiliser l'ID du User (pas du CustomerProfile) car c'est le User qui a le fcm_token
+      const customerUserId = interventionWithRelations.customer?.user?.id;
+      if (customerUserId) {
+        console.log(`📧 Notification client User#${customerUserId} (CustomerProfile#${interventionWithRelations.customer_id}) pour rapport intervention ${id}`);
         await notificationService.create({
-          userId: interventionWithRelations.customer_id,
+          userId: customerUserId,
           type: 'report_submitted',
           title: 'Rapport d\'intervention disponible',
           message: `Le rapport de votre intervention "${interventionWithRelations.title}" a été soumis par ${technicianName}`,
           data: {
-            interventionId: id,
+            interventionId: String(id),
             interventionTitle: interventionWithRelations.title,
             technicianName: technicianName
           },
           priority: 'high',
           actionUrl: `/rapports-interventions`
         });
-        console.log('✅ Client notifié');
+        console.log('✅ Client notifié (rapport)');
+
+        // 2. Notification push de demande de confirmation (avec son)
+        console.log(`🔔 Envoi notification push confirmation au client User#${customerUserId}`);
+        await notificationService.create({
+          userId: customerUserId,
+          type: 'report_confirmation_required',
+          title: '✅ Confirmez la fin de l\'intervention',
+          message: `${technicianName} a terminé l'intervention "${interventionWithRelations.title}". Veuillez confirmer que le travail a été correctement effectué.`,
+          data: {
+            interventionId: String(id),
+            interventionTitle: interventionWithRelations.title,
+            technicianName: technicianName,
+            requiresConfirmation: 'true'
+          },
+          priority: 'critical', // Priorité critique pour le son
+          actionUrl: `/interventions/${id}`
+        });
+        console.log('✅ Client notifié (demande confirmation)');
+      } else {
+        console.log(`⚠️ Impossible de notifier le client: User non trouvé pour CustomerProfile#${interventionWithRelations.customer_id}`);
       }
 
       // 2. Notifier tous les admins
@@ -1339,7 +1601,7 @@ const listReports = async (req, res) => {
         { 
           model: User, 
           as: 'technician', 
-          attributes: ['id', 'first_name', 'last_name', 'email'] 
+          attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] 
         },
         {
           model: Equipment,
@@ -1433,6 +1695,53 @@ const listReports = async (req, res) => {
   }
 };
 
+// Récupérer le quota de souscription lors de l'annulation d'une intervention
+const refundSubscriptionQuota = async (intervention) => {
+  try {
+    // Vérifier si c'est une intervention de type maintenance avec une offre
+    const interventionType = intervention.intervention_type?.toLowerCase() || '';
+    const isMaintenanceType = interventionType === 'entretien' || interventionType === 'maintenance';
+    
+    if (!isMaintenanceType || !intervention.maintenance_offer_id) {
+      console.log('ℹ️ Pas de récupération de quota: intervention non-maintenance ou sans offre');
+      return;
+    }
+    
+    // Chercher la souscription qui a été utilisée pour cette intervention
+    const subscription = await Subscription.findOne({
+      where: {
+        intervention_id: intervention.id
+      }
+    });
+    
+    if (!subscription) {
+      console.log(`ℹ️ Aucune souscription liée à l'intervention #${intervention.id}`);
+      return;
+    }
+    
+    // Calculer le nombre d'équipements à récupérer
+    const equipmentCountUsed = intervention.equipment_count || 1;
+    const newEquipmentUsed = Math.max(0, (subscription.equipment_used || 0) - equipmentCountUsed);
+    
+    // Réactiver la souscription si elle était marquée comme 'used'
+    const newStatus = newEquipmentUsed < subscription.equipment_count ? 'active' : subscription.status;
+    
+    await subscription.update({
+      equipment_used: newEquipmentUsed,
+      status: newStatus,
+      intervention_id: newEquipmentUsed === 0 ? null : subscription.intervention_id,
+      used_at: newStatus === 'active' ? null : subscription.used_at
+    });
+    
+    console.log(`✅ Quota récupéré pour souscription #${subscription.id}: ${equipmentCountUsed} équipement(s) recrédité(s)`);
+    console.log(`   📊 Nouveau quota utilisé: ${newEquipmentUsed}/${subscription.equipment_count}, Statut: ${newStatus}`);
+    
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération du quota:', error.message);
+    // Ne pas bloquer l'annulation si la récupération échoue
+  }
+};
+
 // Mettre à jour uniquement le statut d'une intervention
 const updateInterventionStatus = async (req, res) => {
   try {
@@ -1455,7 +1764,7 @@ const updateInterventionStatus = async (req, res) => {
         {
           model: User,
           as: 'technician',
-          attributes: ['id', 'email', 'first_name', 'last_name']
+          attributes: ['id', 'email', 'first_name', 'last_name', 'phone']
         }
       ]
     });
@@ -1500,6 +1809,8 @@ const updateInterventionStatus = async (req, res) => {
           break;
 
         case 'cancelled':
+          // Récupérer le quota de souscription si applicable
+          await refundSubscriptionQuota(intervention);
           // Notifier client, technicien et admins
           await notifyInterventionCancelled(intervention, customerUser, technician, 'admin');
           console.log(`📱 Notifications envoyées: intervention #${id} annulée`);
@@ -1626,7 +1937,7 @@ const rateIntervention = async (req, res) => {
           {
             model: User,
             as: 'technician',
-            attributes: ['id', 'first_name', 'last_name', 'email']
+            attributes: ['id', 'first_name', 'last_name', 'email', 'phone']
           }
         ]
       });
@@ -1759,7 +2070,7 @@ const getUnratedInterventions = async (req, res) => {
         {
           model: User,
           as: 'technician',
-          attributes: ['id', 'first_name', 'last_name']
+          attributes: ['id', 'first_name', 'last_name', 'phone']
         }
       ],
       order: [['completed_at', 'DESC']],
@@ -1844,6 +2155,326 @@ const getPendingDiagnosticPayments = async (req, res) => {
   }
 };
 
+// ==================== CONFIRMATION CLIENT ====================
+
+/**
+ * Confirmer ou rejeter la fin d'une intervention par le client
+ * Le client reçoit le rapport et doit confirmer que le travail est bien terminé
+ */
+const confirmInterventionCompletion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { confirmed, rejection_reason } = req.body;
+    const userId = req.user.id;
+
+    console.log(`🔔 Confirmation client pour intervention #${id} - confirmed: ${confirmed}`);
+
+    // Récupérer l'intervention
+    const intervention = await Intervention.findByPk(id, {
+      include: [
+        { 
+          model: CustomerProfile, 
+          as: 'customer',
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'first_name', 'last_name']
+          }]
+        },
+        { 
+          model: User, 
+          as: 'technician', 
+          attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] 
+        }
+      ]
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        success: false,
+        message: 'Intervention non trouvée'
+      });
+    }
+
+    // Vérifier que l'utilisateur est bien le client de cette intervention
+    if (intervention.customer?.user?.id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Vous n\'êtes pas autorisé à confirmer cette intervention'
+      });
+    }
+
+    // Vérifier que l'intervention est terminée et a un rapport
+    if (intervention.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'L\'intervention doit être terminée pour être confirmée'
+      });
+    }
+
+    if (!intervention.report_submitted_at) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le rapport d\'intervention n\'a pas encore été soumis'
+      });
+    }
+
+    // Vérifier si déjà confirmée
+    if (intervention.customer_confirmed === true) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cette intervention a déjà été confirmée'
+      });
+    }
+
+    // Mettre à jour l'intervention
+    const updateData = {
+      customer_confirmed: confirmed,
+      customer_confirmed_at: new Date()
+    };
+
+    if (!confirmed && rejection_reason) {
+      updateData.customer_rejection_reason = rejection_reason;
+    }
+
+    await intervention.update(updateData);
+
+    // Notifier le technicien
+    if (intervention.technician_id) {
+      const customerName = intervention.customer?.user 
+        ? `${intervention.customer.user.first_name} ${intervention.customer.user.last_name}`
+        : 'Le client';
+
+      const interventionIdNum = parseInt(id, 10);
+
+      if (confirmed) {
+        await notificationService.create({
+          userId: intervention.technician_id,
+          type: 'intervention_confirmed',
+          title: 'Intervention confirmée',
+          message: `${customerName} a confirmé que l'intervention "${intervention.title}" est bien terminée`,
+          data: {
+            interventionId: interventionIdNum,
+            intervention_id: interventionIdNum,
+            interventionTitle: intervention.title,
+            customerId: intervention.customer_id
+          },
+          priority: 'medium',
+          actionUrl: `/interventions?id=${interventionIdNum}`
+        });
+
+        // Notifier les admins de la confirmation
+        const admins = await User.findAll({
+          where: { role: 'admin', status: 'active' },
+          attributes: ['id']
+        });
+
+        for (const admin of admins) {
+          await notificationService.create({
+            userId: admin.id,
+            type: 'intervention_confirmed',
+            title: 'Intervention confirmée par le client',
+            message: `${customerName} a confirmé que l'intervention "${intervention.title}" est terminée`,
+            data: {
+              interventionId: interventionIdNum,
+              intervention_id: interventionIdNum,
+              interventionTitle: intervention.title,
+              customerId: intervention.customer_id,
+              technicianId: intervention.technician_id
+            },
+            priority: 'low',
+            actionUrl: `/interventions?id=${interventionIdNum}`
+          });
+        }
+      } else {
+        await notificationService.create({
+          userId: intervention.technician_id,
+          type: 'intervention_rejected',
+          title: 'Intervention contestée',
+          message: `${customerName} a contesté la fin de l'intervention "${intervention.title}"${rejection_reason ? ': ' + rejection_reason : ''}`,
+          data: {
+            interventionId: interventionIdNum,
+            intervention_id: interventionIdNum,
+            interventionTitle: intervention.title,
+            customerId: intervention.customer_id,
+            rejectionReason: rejection_reason
+          },
+          priority: 'high',
+          actionUrl: `/interventions?id=${interventionIdNum}`
+        });
+
+        // Notifier aussi les admins en cas de litige
+        const admins = await User.findAll({
+          where: { role: 'admin', status: 'active' },
+          attributes: ['id']
+        });
+
+        for (const admin of admins) {
+          await notificationService.create({
+            userId: admin.id,
+            type: 'intervention_dispute',
+            title: 'Litige intervention',
+            message: `${customerName} conteste la fin de l'intervention "${intervention.title}"`,
+            data: {
+              interventionId: interventionIdNum,
+              intervention_id: interventionIdNum,
+              interventionTitle: intervention.title,
+              customerId: intervention.customer_id,
+              technicianId: intervention.technician_id,
+              rejectionReason: rejection_reason
+            },
+            priority: 'high',
+            actionUrl: `/interventions?id=${interventionIdNum}`
+          });
+        }
+      }
+    }
+
+    console.log(`✅ Intervention #${id} ${confirmed ? 'confirmée' : 'contestée'} par le client`);
+
+    // 💰 Si confirmée, vérifier si un devis associé nécessite le second paiement (50%)
+    if (confirmed) {
+      try {
+        // Chercher un devis associé à cette intervention avec paiement en deux étapes
+        const quote = await Quote.findOne({
+          where: { 
+            intervention_id: id,
+            payment_type: 'split',
+            first_payment_status: 'paid',
+            second_payment_status: 'pending'
+          }
+        });
+
+        if (quote) {
+          const secondPaymentAmount = quote.second_payment_amount || (quote.total - (quote.first_payment_amount || 0));
+          console.log(`💰 Second paiement requis pour intervention #${id}: ${secondPaymentAmount} FCFA`);
+
+          // Notifier le client qu'il doit payer le solde
+          if (intervention.customer?.user?.id) {
+            await notificationService.create({
+              userId: intervention.customer.user.id,
+              type: 'payment_required',
+              title: '💳 Paiement du solde requis',
+              message: `L'intervention "${intervention.title}" est terminée. Veuillez procéder au paiement du solde de ${secondPaymentAmount.toLocaleString('fr-FR')} FCFA (50% restant).`,
+              data: {
+                interventionId: parseInt(id, 10),
+                intervention_id: parseInt(id, 10),
+                quote_id: quote.id,
+                payment_step: 2,
+                amount: secondPaymentAmount,
+                total: quote.total
+              },
+              priority: 'critical',
+              actionUrl: `/paiement/${quote.id}?step=2`
+            });
+            console.log(`✅ Client notifié pour le second paiement (${secondPaymentAmount} FCFA)`);
+          }
+        }
+      } catch (paymentError) {
+        console.error('⚠️ Erreur vérification second paiement:', paymentError.message);
+        // Ne pas bloquer la confirmation si le check paiement échoue
+      }
+    }
+
+    // Préparer la réponse avec les infos de paiement si nécessaire
+    let responseData = {
+      intervention_id: id,
+      customer_confirmed: confirmed,
+      customer_confirmed_at: updateData.customer_confirmed_at
+    };
+
+    // Si confirmée, vérifier et ajouter les infos de second paiement
+    if (confirmed) {
+      try {
+        const quoteForPayment = await Quote.findOne({
+          where: { 
+            intervention_id: id,
+            payment_type: 'split',
+            first_payment_status: 'paid',
+            second_payment_status: 'pending'
+          }
+        });
+
+        if (quoteForPayment) {
+          // Récupérer l'ordre associé au devis
+          const orderForPayment = await Order.findOne({
+            where: { quoteId: quoteForPayment.id }
+          });
+          
+          const secondPaymentAmount = quoteForPayment.second_payment_amount || (quoteForPayment.total - (quoteForPayment.first_payment_amount || 0));
+          responseData.payment_required = true;
+          responseData.payment_info = {
+            type: 'quote',
+            quote_id: quoteForPayment.id,
+            quote_reference: quoteForPayment.reference,
+            order_id: orderForPayment ? orderForPayment.id : null,
+            amount: secondPaymentAmount,
+            payment_step: 2,
+            total: quoteForPayment.total,
+            description: 'Paiement du solde (50% restant)'
+          };
+          console.log(`💰 Réponse inclut les infos de second paiement devis: ${secondPaymentAmount} FCFA (order_id: ${orderForPayment?.id || 'N/A'})`);
+        }
+      } catch (paymentCheckError) {
+        console.error('⚠️ Erreur récupération infos paiement devis pour réponse:', paymentCheckError.message);
+      }
+
+      // 💰 Vérifier aussi si l'intervention est liée à un contrat avec second paiement requis
+      try {
+        // L'intervention peut avoir un subscription_id direct ou être dans une subscription
+        const subscriptionForPayment = await Subscription.findOne({
+          where: { 
+            id: intervention.subscription_id,
+            status: 'awaiting_second_payment',
+            second_payment_status: 'pending'
+          }
+        });
+
+        if (subscriptionForPayment) {
+          const secondPaymentAmount = subscriptionForPayment.second_payment_amount || 
+            Math.round(parseFloat(subscriptionForPayment.price || 0) / 2);
+          
+          // Générer une référence si elle n'existe pas (format: CTR-YYYYMM-ID)
+          const createdDate = new Date(subscriptionForPayment.created_at);
+          const generatedReference = `CTR-${createdDate.getFullYear()}${String(createdDate.getMonth() + 1).padStart(2, '0')}-${subscriptionForPayment.id}`;
+          
+          responseData.payment_required = true;
+          responseData.contract_payment_info = {
+            type: 'contract',
+            subscription_id: subscriptionForPayment.id,
+            reference: generatedReference,
+            amount: secondPaymentAmount,
+            payment_phase: 2,
+            total: parseFloat(subscriptionForPayment.price || 0),
+            description: 'Paiement final du contrat (50%)',
+            equipment_description: subscriptionForPayment.equipment_description || 'Climatiseur',
+            equipment_model: subscriptionForPayment.equipment_model || null
+          };
+          console.log(`💰 Second paiement contrat requis: ${secondPaymentAmount} FCFA (subscription_id: ${subscriptionForPayment.id})`);
+        }
+      } catch (contractPaymentError) {
+        console.error('⚠️ Erreur récupération infos paiement contrat:', contractPaymentError.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: confirmed 
+        ? 'Merci d\'avoir confirmé la fin de l\'intervention' 
+        : 'Votre contestation a été enregistrée. Un administrateur vous contactera.',
+      data: responseData
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur confirmInterventionCompletion:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la confirmation',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getAllInterventions,
   getInterventionById,
@@ -1864,7 +2495,8 @@ module.exports = {
   getPendingDiagnosticPayments,
   suggestTechnicians,
   autoAssignIntervention,
-  sendPaymentLink
+  sendPaymentLink,
+  confirmInterventionCompletion
 };
 
 // ==================== PLANIFICATION AUTOMATIQUE ====================

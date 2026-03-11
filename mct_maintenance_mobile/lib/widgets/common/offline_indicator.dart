@@ -92,8 +92,11 @@ class OfflineIndicator extends StatelessWidget {
                   // Bouton sync manuel si en ligne et pas en cours
                   if (syncProvider.isOnline &&
                       !syncProvider.isSyncing &&
-                      syncProvider.pendingItems > 0)
+                      syncProvider.pendingItems > 0) ...[
                     _buildSyncButton(context, syncProvider),
+                    const SizedBox(width: 8),
+                    _buildClearButton(context, syncProvider),
+                  ],
                 ],
               ),
             ),
@@ -137,6 +140,72 @@ class OfflineIndicator extends StatelessWidget {
               SizedBox(width: 4),
               Text(
                 'Sync',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bouton pour vider la queue de synchronisation bloquée
+  Widget _buildClearButton(BuildContext context, SyncProvider syncProvider) {
+    return Material(
+      color: Colors.white.withOpacity(0.2),
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: () async {
+          // Demander confirmation
+          final confirm = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Effacer la queue'),
+              content: const Text(
+                'Voulez-vous effacer tous les éléments en attente de synchronisation ?\n\n'
+                'Cette action ne peut pas être annulée.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Annuler'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text('Effacer'),
+                ),
+              ],
+            ),
+          );
+
+          if (confirm == true) {
+            await syncProvider.clearSyncQueue();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Queue de synchronisation vidée'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        },
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.delete_outline, color: Colors.white, size: 16),
+              SizedBox(width: 4),
+              Text(
+                'Effacer',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 12,

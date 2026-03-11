@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const { body, query, param, validationResult } = require('express-validator');
 const interventionController = require('../controllers/intervention/interventionController');
 const upload = require('../config/multer');
@@ -365,6 +365,59 @@ router.post('/:id/rate',
   interventionController.rateIntervention
 );
 
+// ==================== CONFIRMATION CLIENT ====================
+
+/**
+ * @swagger
+ * /api/interventions/{id}/confirm-completion:
+ *   post:
+ *     summary: Confirmer ou contester la fin d'une intervention
+ *     description: Le client confirme que le technicien a bien terminé l'intervention après réception du rapport
+ *     tags: [Interventions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de l'intervention
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - confirmed
+ *             properties:
+ *               confirmed:
+ *                 type: boolean
+ *                 description: true pour confirmer, false pour contester
+ *               rejection_reason:
+ *                 type: string
+ *                 description: Raison du rejet (requis si confirmed=false)
+ *     responses:
+ *       200:
+ *         description: Confirmation enregistrée
+ *       400:
+ *         description: Intervention non terminée ou rapport non soumis
+ *       403:
+ *         description: Non autorisé
+ */
+router.post('/:id/confirm-completion', 
+  authenticate, 
+  authorize('customer'), 
+  [
+    param('id').isInt().withMessage('ID intervention invalide'),
+    body('confirmed').isBoolean().withMessage('Le champ confirmed est requis'),
+    body('rejection_reason').optional().isString().trim()
+  ],
+  validate,
+  interventionController.confirmInterventionCompletion
+);
+
 // ==================== PLANIFICATION AUTOMATIQUE ====================
 
 /**
@@ -442,7 +495,7 @@ router.post('/:id/rate',
  */
 router.post('/:id/suggest-technicians',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   [
     param('id').isInt().withMessage('ID intervention invalide'),
     body('max_results').optional().isInt({ min: 1, max: 20 }),
@@ -496,7 +549,7 @@ router.post('/:id/suggest-technicians',
  */
 router.post('/:id/auto-assign',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   [
     param('id').isInt().withMessage('ID intervention invalide')
   ],
@@ -524,12 +577,47 @@ router.post('/:id/auto-assign',
  */
 router.post('/:id/send-payment-link',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   [
     param('id').isInt().withMessage('ID intervention invalide')
   ],
   validate,
   interventionController.sendPaymentLink
+);
+
+/**
+ * @swagger
+ * /api/interventions/config/diagnostic-fee:
+ *   get:
+ *     summary: Récupérer les frais de diagnostic configurés
+ *     tags: [Interventions]
+ *     responses:
+ *       200:
+ *         description: Frais de diagnostic
+ */
+router.get('/config/diagnostic-fee',
+  authenticate,
+  async (req, res) => {
+    try {
+      const { SystemConfig } = require('../models');
+      const defaultFee = await SystemConfig.getValue('diagnostic_default_fee', 4000);
+      const feesByLocation = await SystemConfig.getValue('diagnostic_fees_by_location', {});
+      
+      res.json({
+        success: true,
+        data: {
+          default_fee: defaultFee,
+          fees_by_location: feesByLocation
+        }
+      });
+    } catch (error) {
+      console.error('❌ Erreur récupération frais diagnostic:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la récupération des frais de diagnostic'
+      });
+    }
+  }
 );
 
 

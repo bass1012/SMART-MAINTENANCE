@@ -28,6 +28,7 @@ const ChatMessage = require('./ChatMessage');
 const PasswordResetCode = require('./PasswordResetCode');
 const Split = require('./Split');
 const PaymentLog = require('./PaymentLog');
+const Promotion = require('./Promotion');
 
 // Association CustomerProfile -> User
 const fs = require('fs');
@@ -199,5 +200,6 @@ module.exports = {
   Payment,
   ChatMessage,
   EmailVerificationCode,
-  Split
+  Split,
+  Promotion
 };

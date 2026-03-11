@@ -21,7 +21,11 @@ Order.init({
   fineopayCheckoutId: { type: DataTypes.STRING, allowNull: true }, // ID du checkout link FineoPay
   fineopayReference: { type: DataTypes.STRING, allowNull: true },  // Référence transaction FineoPay
   paymentDate: { type: DataTypes.DATE, allowNull: true },          // Date du paiement
-  paymentProcessing: { type: DataTypes.BOOLEAN, defaultValue: false } // Flag anti-doublon
+  paymentProcessing: { type: DataTypes.BOOLEAN, defaultValue: false }, // Flag anti-doublon
+  // 🆕 Champs split payment
+  paymentType: { type: DataTypes.STRING, defaultValue: 'full' }, // 'full' ou 'split'
+  paymentStep: { type: DataTypes.INTEGER, defaultValue: 1 },      // 1 = premier paiement, 2 = second
+  syncRef: { type: DataTypes.STRING, allowNull: true }            // Référence de synchronisation FineoPay
 }, {
   sequelize,
   modelName: 'Order',

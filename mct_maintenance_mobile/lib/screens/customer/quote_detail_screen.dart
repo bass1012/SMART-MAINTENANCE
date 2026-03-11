@@ -248,12 +248,21 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _apiService.acceptQuote(
+      // Récupérer la réponse avec les infos de paiement
+      final acceptResponse = await _apiService.acceptQuote(
         _quote.id,
         scheduledDate: scheduledDate,
         executeNow: executeNow,
         secondContact: secondContact,
       );
+
+      // Extraire le montant du premier paiement (50%)
+      double? firstPaymentAmount;
+      if (acceptResponse['first_payment'] != null) {
+        firstPaymentAmount =
+            (acceptResponse['first_payment']['amount'] as num?)?.toDouble();
+      }
+      print('💰 Premier paiement (50%): $firstPaymentAmount FCFA');
 
       if (mounted) {
         // Si c'est une intervention planifiée pour plus tard
@@ -362,6 +371,39 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
           if (recentOrder.isNotEmpty && recentOrder['id'] != null) {
             print(
                 '✅ Navigation vers paiement pour commande ${recentOrder['id']}');
+
+            // Utiliser le montant 50% de la réponse API
+            double amountToPay;
+            int paymentStep = 1;
+
+            if (firstPaymentAmount != null && firstPaymentAmount > 0) {
+              amountToPay = firstPaymentAmount;
+              paymentStep = 1;
+              print(
+                  '💰 Paiement split (API): ${amountToPay.toStringAsFixed(0)} FCFA (50% - étape 1)');
+            } else if (_quote.paymentType == 'split' &&
+                _quote.firstPaymentAmount != null) {
+              amountToPay = _quote.firstPaymentAmount!;
+              paymentStep = 1;
+              print(
+                  '💰 Paiement split (quote): ${amountToPay.toStringAsFixed(0)} FCFA (50% - étape 1)');
+            } else {
+              // Fallback: utiliser le montant de la commande directement
+              // Note: totalAmount de la commande est DÉJÀ le montant 50% pour split payment
+              final orderAmount = recentOrder['totalAmount'];
+              if (orderAmount != null && orderAmount > 0) {
+                amountToPay = (orderAmount as num).toDouble();
+                print(
+                    '💰 Paiement (order totalAmount): ${amountToPay.toStringAsFixed(0)} FCFA');
+              } else {
+                // Si pas de totalAmount, calculer 50% du total du devis
+                amountToPay = (_quote.amount / 2).ceilToDouble();
+                print(
+                    '💰 Paiement (quote 50%): ${amountToPay.toStringAsFixed(0)} FCFA');
+              }
+              paymentStep = 1;
+            }
+
             // Naviguer directement vers l'écran de paiement
             Navigator.pushReplacement(
               context,
@@ -369,7 +411,8 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                 builder: (context) => PaymentScreen(
                   invoiceId: recentOrder['id'].toString(),
                   invoiceNumber: recentOrder['reference'] ?? 'N/A',
-                  amount: (recentOrder['totalAmount'] ?? 0).toDouble(),
+                  amount: amountToPay,
+                  paymentStep: paymentStep,
                 ),
               ),
             );
@@ -482,6 +525,27 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
       );
 
       if (order.isNotEmpty && order['id'] != null) {
+        // Déterminer le montant et l'étape de paiement (50%)
+        double paymentAmount;
+        int paymentStep = 1;
+
+        if (_quote.paymentType == 'split' &&
+            _quote.firstPaymentAmount != null) {
+          if (_quote.firstPaymentStatus == 'paid') {
+            // Premier paiement déjà fait, payer le second
+            paymentAmount =
+                _quote.secondPaymentAmount ?? _quote.firstPaymentAmount!;
+            paymentStep = 2;
+          } else {
+            // Premier paiement à effectuer (50%)
+            paymentAmount = _quote.firstPaymentAmount!;
+            paymentStep = 1;
+          }
+        } else {
+          // Paiement intégral (ancien système)
+          paymentAmount = (order['totalAmount'] ?? _quote.amount).toDouble();
+        }
+
         // Naviguer vers l'écran de paiement
         if (mounted) {
           setState(() => _isLoading = false);
@@ -491,7 +555,8 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
               builder: (context) => PaymentScreen(
                 invoiceId: order['id'].toString(),
                 invoiceNumber: order['reference'] ?? 'N/A',
-                amount: (order['totalAmount'] ?? _quote.amount).toDouble(),
+                amount: paymentAmount,
+                paymentStep: paymentStep,
               ),
             ),
           ).then((_) {
@@ -565,14 +630,15 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Badge de statut en haut à droite
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  _quote.reference,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
+                                const Text(
+                                  'Devis',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
                                   ),
                                 ),
                                 Container(
@@ -590,16 +656,27 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                     style: TextStyle(
                                       color: statusColor,
                                       fontWeight: FontWeight.bold,
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 8),
+                            // Référence sur sa propre ligne
+                            SelectableText(
+                              _quote.reference,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0a543d),
+                              ),
+                            ),
                             const SizedBox(height: 12),
                             Text(
                               _quote.title,
                               style: const TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -662,36 +739,6 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // Description
-                    if (_quote.description.isNotEmpty)
-                      Card(
-                        elevation: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Description',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                _quote.description,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                     const SizedBox(height: 16),
 
                     // Articles/Produits
@@ -801,35 +848,163 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                       ),
                     if (_quote.items.isNotEmpty) const SizedBox(height: 16),
 
-                    // Montant
+                    // Montant avec split payment
                     Card(
                       elevation: 2,
                       color: Colors.blue.shade50,
                       child: Padding(
                         padding: const EdgeInsets.all(16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Montant Total',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Montant Total',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  '${_quote.amount.toStringAsFixed(0)} FCFA',
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '${_quote.amount.toStringAsFixed(0)} FCFA',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue,
+                            // Affichage du paiement en 2 fois (50%)
+                            if (_quote.paymentType == 'split' &&
+                                _quote.firstPaymentAmount != null) ...[
+                              const SizedBox(height: 12),
+                              const Divider(),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Paiement en 2 fois (50%)',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 8),
+                              _buildPaymentRow(
+                                '1er paiement (à l\'acceptation)',
+                                _quote.firstPaymentAmount!,
+                                _quote.firstPaymentStatus ?? 'pending',
+                              ),
+                              const SizedBox(height: 4),
+                              _buildPaymentRow(
+                                '2ème paiement (après travaux)',
+                                _quote.secondPaymentAmount ??
+                                    _quote.firstPaymentAmount!,
+                                _quote.secondPaymentStatus ?? 'pending',
+                              ),
+                            ],
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 24),
+
+                    // Explication du paiement en 2 fois pour les devis en attente
+                    if ((_quote.status == 'pending' ||
+                            _quote.status == 'sent') &&
+                        _quote.paymentType == 'split' &&
+                        _quote.firstPaymentAmount != null)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: Colors.amber.shade400, width: 1.5),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Colors.amber.shade700,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Text(
+                                    'Modalités de paiement',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            RichText(
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                  height: 1.5,
+                                ),
+                                children: [
+                                  const TextSpan(
+                                    text: 'En acceptant ce devis, vous payez ',
+                                  ),
+                                  TextSpan(
+                                    text:
+                                        '${_quote.firstPaymentAmount!.toStringAsFixed(0)} FCFA',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0a543d),
+                                    ),
+                                  ),
+                                  const TextSpan(
+                                    text: ' soit ',
+                                  ),
+                                  const TextSpan(
+                                    text: '50% du montant total',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const TextSpan(
+                                    text: '.\n\nLes ',
+                                  ),
+                                  TextSpan(
+                                    text:
+                                        '${(_quote.secondPaymentAmount ?? _quote.firstPaymentAmount!).toStringAsFixed(0)} FCFA',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0a543d),
+                                    ),
+                                  ),
+                                  const TextSpan(
+                                    text: ' restants seront à payer ',
+                                  ),
+                                  const TextSpan(
+                                    text: 'après la fin des travaux',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const TextSpan(
+                                    text: '.',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
                     // Boutons d'action
                     if (_quote.status == 'pending' || _quote.status == 'sent')
@@ -841,9 +1016,12 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                             child: ElevatedButton.icon(
                               onPressed: _isLoading ? null : _acceptQuote,
                               icon: const Icon(Icons.check_circle),
-                              label: const Text(
-                                'Accepter le devis',
-                                style: TextStyle(fontSize: 16),
+                              label: Text(
+                                _quote.paymentType == 'split' &&
+                                        _quote.firstPaymentAmount != null
+                                    ? 'Accepter et payer ${_quote.firstPaymentAmount!.toStringAsFixed(0)} FCFA (50%)'
+                                    : 'Accepter le devis',
+                                style: const TextStyle(fontSize: 15),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
@@ -960,9 +1138,14 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                               child: ElevatedButton.icon(
                                 onPressed: _isLoading ? null : _payNow,
                                 icon: const Icon(Icons.payment),
-                                label: const Text(
-                                  'Payer maintenant',
-                                  style: TextStyle(fontSize: 16),
+                                label: Text(
+                                  _quote.paymentType == 'split' &&
+                                          _quote.firstPaymentAmount != null
+                                      ? (_quote.firstPaymentStatus == 'paid'
+                                          ? 'Payer ${_quote.secondPaymentAmount?.toStringAsFixed(0) ?? _quote.firstPaymentAmount!.toStringAsFixed(0)} FCFA (50%)'
+                                          : 'Payer ${_quote.firstPaymentAmount!.toStringAsFixed(0)} FCFA (50%)')
+                                      : 'Payer maintenant',
+                                  style: const TextStyle(fontSize: 16),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF0a543d),
@@ -1032,6 +1215,58 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                 ),
               ),
       ),
+    );
+  }
+
+  Widget _buildPaymentRow(String label, double amount, String status) {
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+
+    switch (status) {
+      case 'paid':
+        statusColor = Colors.green;
+        statusText = 'Payé';
+        statusIcon = Icons.check_circle;
+        break;
+      case 'pending':
+      default:
+        statusColor = Colors.orange;
+        statusText = 'En attente';
+        statusIcon = Icons.hourglass_empty;
+        break;
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ),
+        Text(
+          '${amount.toStringAsFixed(0)} FCFA',
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Icon(statusIcon, size: 16, color: statusColor),
+        const SizedBox(width: 4),
+        Text(
+          statusText,
+          style: TextStyle(
+            fontSize: 12,
+            color: statusColor,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 

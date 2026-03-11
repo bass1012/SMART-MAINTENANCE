@@ -76,7 +76,7 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
 
     // Mesures techniques
     final pression = reportData['pression'] ?? '';
-    final temperature = reportData['temperature'] ?? '';
+    final puissance = reportData['puissance'] ?? '';
     final intensite = reportData['intensite'] ?? '';
     final tension = reportData['tension'] ?? '';
 
@@ -93,14 +93,14 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     // Mesures techniques texte
     String measuresText = '';
     if (pression.toString().isNotEmpty ||
-        temperature.toString().isNotEmpty ||
+        puissance.toString().isNotEmpty ||
         intensite.toString().isNotEmpty ||
         tension.toString().isNotEmpty) {
       measuresText = '\n📊 Mesures techniques:\n';
       if (pression.toString().isNotEmpty)
         measuresText += '  • Pression: $pression bar\n';
-      if (temperature.toString().isNotEmpty)
-        measuresText += '  • Température: $temperature °C\n';
+      if (puissance.toString().isNotEmpty)
+        measuresText += '  • Puissance: $puissance CV\n';
       if (intensite.toString().isNotEmpty)
         measuresText += '  • Intensité: $intensite A\n';
       if (tension.toString().isNotEmpty)
@@ -108,7 +108,7 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     }
 
     final String shareText = '''
-🔧 RAPPORT D'INTERVENTION - MCT MAINTENANCE
+🔧 RAPPORT D'INTERVENTION - SMART MAINTENANCE
 
 Intervention #${intervention['id']}
 ${intervention['title'] ?? 'Sans titre'}
@@ -122,7 +122,7 @@ $measuresText
 ${observations.isNotEmpty ? '💡 Observations:\n$observations\n' : ''}
 $materialsText
 ---
-MCT Maintenance - Service de qualité
+Smart Maintenance - Service de qualité
     '''
         .trim();
 
@@ -134,7 +134,7 @@ MCT Maintenance - Service de qualité
     Share.share(
       shareText,
       subject:
-          'Rapport d\'intervention #${intervention['id']} - MCT Maintenance',
+          'Rapport d\'intervention #${intervention['id']} - Smart Maintenance',
       sharePositionOrigin: sharePositionOrigin,
     );
   }
@@ -154,21 +154,54 @@ MCT Maintenance - Service de qualité
 
   @override
   Widget build(BuildContext context) {
-    final materials = widget.reportData['materials_used'] as List? ?? [];
-    final duration = widget.reportData['duration'] ?? 0;
-    final observations = widget.reportData['observations'] ?? '';
-    final workDescription = widget.reportData['work_description'] ?? '';
-    final photos = widget.reportData['photos'] as List? ?? [];
+    final reportData = widget.reportData;
+    final dateFormat = DateFormat('dd/MM/yyyy', 'fr_FR');
 
-    // Mesures techniques
-    final pression = widget.reportData['pression'] ?? '';
-    final temperature = widget.reportData['temperature'] ?? '';
-    final intensite = widget.reportData['intensite'] ?? '';
-    final tension = widget.reportData['tension'] ?? '';
+    // === SECTION ÉQUIPEMENTS (nouveau format) ===
+    final List<dynamic> equipments = reportData['equipments'] as List? ?? [];
+
+    // === SECTION ÉQUIPEMENT (format legacy pour rétrocompatibilité) ===
+    final equipmentState = reportData['equipment_state']?.toString() ?? '';
+    final equipmentType = reportData['equipment_type']?.toString() ?? '';
+    final equipmentBrand = reportData['equipment_brand']?.toString() ?? '';
+    final pression = reportData['pression']?.toString() ?? '';
+    final puissance = reportData['puissance']?.toString() ?? '';
+    final intensite = reportData['intensite']?.toString() ?? '';
+    final tension = reportData['tension']?.toString() ?? '';
+
+    final hasEquipmentInfo = equipments.isNotEmpty ||
+        equipmentState.isNotEmpty ||
+        equipmentType.isNotEmpty ||
+        equipmentBrand.isNotEmpty;
     final hasTechnicalMeasures = pression.isNotEmpty ||
-        temperature.isNotEmpty ||
+        puissance.isNotEmpty ||
         intensite.isNotEmpty ||
         tension.isNotEmpty;
+
+    // === SECTION DÉTAIL INTERVENTION ===
+    final technicianName = reportData['technician_name']?.toString() ?? '';
+    final interventionDateStr = reportData['intervention_date']?.toString();
+    DateTime? interventionDate;
+    if (interventionDateStr != null && interventionDateStr.isNotEmpty) {
+      try {
+        interventionDate = DateTime.parse(interventionDateStr);
+      } catch (_) {}
+    }
+    final startTime = reportData['start_time']?.toString() ?? '';
+    final endTime = reportData['end_time']?.toString() ?? '';
+    final duration = reportData['duration'] ?? 0;
+    final interventionNature = reportData['intervention_nature']?.toString() ??
+        reportData['work_description']?.toString() ??
+        '';
+    final observations = reportData['observations']?.toString() ?? '';
+
+    // === SECTION PIÈCES DE RECHANGE ===
+    final spareParts = reportData['spare_parts'] as List? ??
+        reportData['materials_used'] as List? ??
+        [];
+
+    // Photos
+    final photos = reportData['photos'] as List? ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -220,135 +253,187 @@ MCT Maintenance - Service de qualité
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildInfoRow('Titre', widget.intervention['title']),
-                        _buildInfoRow('Client', _getCustomerName()),
                         _buildInfoRow(
-                            'Adresse', widget.intervention['address'] ?? 'N/A'),
+                            Icons.title, 'Titre', widget.intervention['title']),
+                        _buildInfoRow(
+                            Icons.person, 'Client', _getCustomerName()),
+                        _buildInfoRow(Icons.location_on, 'Adresse',
+                            widget.intervention['address'] ?? 'N/A'),
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
 
-                  // Travail effectué
+                  // === SECTION ÉQUIPEMENTS ===
+                  if (hasEquipmentInfo || hasTechnicalMeasures) ...[
+                    _buildSection(
+                      'Équipements (${equipments.isNotEmpty ? equipments.length : 1})',
+                      Icons.build,
+                      equipments.isNotEmpty
+                          ? Column(
+                              children: [
+                                for (int i = 0; i < equipments.length; i++) ...[
+                                  _buildEquipmentCard(equipments[i], i + 1),
+                                  if (i < equipments.length - 1)
+                                    const SizedBox(height: 12),
+                                ],
+                              ],
+                            )
+                          : Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blue.shade200),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (equipmentState.isNotEmpty) ...[
+                                    _buildInfoRow(Icons.settings,
+                                        'État équipement', equipmentState),
+                                    const SizedBox(height: 8),
+                                  ],
+                                  if (equipmentType.isNotEmpty) ...[
+                                    _buildInfoRow(
+                                        Icons.category, 'Type', equipmentType),
+                                    const SizedBox(height: 8),
+                                  ],
+                                  if (equipmentBrand.isNotEmpty) ...[
+                                    _buildInfoRow(Icons.branding_watermark,
+                                        'Marque', equipmentBrand),
+                                    const SizedBox(height: 8),
+                                  ],
+                                  if (hasTechnicalMeasures) ...[
+                                    const Divider(),
+                                    const Text(
+                                      'Mesures Techniques',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 16,
+                                      runSpacing: 12,
+                                      children: [
+                                        if (pression.isNotEmpty)
+                                          _buildMeasureItem(
+                                            Icons.compress,
+                                            'Pression',
+                                            '$pression bar',
+                                          ),
+                                        if (puissance.isNotEmpty)
+                                          _buildMeasureItem(
+                                            Icons.power,
+                                            'Puissance',
+                                            '$puissance CV',
+                                          ),
+                                        if (intensite.isNotEmpty)
+                                          _buildMeasureItem(
+                                            Icons.electrical_services,
+                                            'Intensité',
+                                            '$intensite A',
+                                          ),
+                                        if (tension.isNotEmpty)
+                                          _buildMeasureItem(
+                                            Icons.bolt,
+                                            'Tension',
+                                            '$tension V',
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // === SECTION DÉTAIL DE L'INTERVENTION ===
                   _buildSection(
-                    'Travail Effectué',
-                    Icons.construction,
+                    'Détail de l\'Intervention',
+                    Icons.assignment,
                     Container(
-                      width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: Colors.green.shade50,
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
                       ),
-                      child: Text(
-                        workDescription,
-                        style: const TextStyle(fontSize: 15),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (technicianName.isNotEmpty) ...[
+                            _buildInfoRow(
+                                Icons.person, 'Technicien', technicianName),
+                            const SizedBox(height: 8),
+                          ],
+                          if (interventionDate != null) ...[
+                            _buildInfoRow(
+                                Icons.calendar_today,
+                                'Date intervention',
+                                dateFormat.format(interventionDate)),
+                            const SizedBox(height: 8),
+                          ],
+                          if (startTime.isNotEmpty || endTime.isNotEmpty) ...[
+                            _buildInfoRow(
+                              Icons.access_time,
+                              'Horaires',
+                              '${startTime.isNotEmpty ? startTime : "--"} - ${endTime.isNotEmpty ? endTime : "--"}',
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          if (duration > 0) ...[
+                            _buildInfoRow(
+                                Icons.timer, 'Durée', '$duration minutes'),
+                            const SizedBox(height: 8),
+                          ],
+                          if (interventionNature.isNotEmpty) ...[
+                            const Divider(),
+                            const Text(
+                              'Nature de l\'intervention',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              interventionNature,
+                              style: const TextStyle(fontSize: 15),
+                            ),
+                          ],
+                          if (observations.isNotEmpty) ...[
+                            const Divider(),
+                            const Text(
+                              'Observations / Recommandations',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              observations,
+                              style: const TextStyle(fontSize: 15),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 24),
 
-                  // Durée
-                  if (duration > 0) ...[
+                  // === SECTION PIÈCES DE RECHANGE ===
+                  if (spareParts.isNotEmpty) ...[
                     _buildSection(
-                      'Durée de l\'Intervention',
-                      Icons.access_time,
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.schedule, color: Colors.blue.shade700),
-                            const SizedBox(width: 8),
-                            Text(
-                              '$duration minutes',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.blue.shade900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Mesures techniques
-                  if (hasTechnicalMeasures) ...[
-                    _buildSection(
-                      'Mesures Techniques',
-                      Icons.speed,
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                if (pression.isNotEmpty)
-                                  Expanded(
-                                    child: _buildMeasureItem(
-                                      Icons.compress,
-                                      'Pression',
-                                      '$pression bar',
-                                    ),
-                                  ),
-                                if (temperature.isNotEmpty)
-                                  Expanded(
-                                    child: _buildMeasureItem(
-                                      Icons.thermostat,
-                                      'Température',
-                                      '$temperature °C',
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            if (intensite.isNotEmpty || tension.isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  if (intensite.isNotEmpty)
-                                    Expanded(
-                                      child: _buildMeasureItem(
-                                        Icons.electrical_services,
-                                        'Intensité',
-                                        '$intensite A',
-                                      ),
-                                    ),
-                                  if (tension.isNotEmpty)
-                                    Expanded(
-                                      child: _buildMeasureItem(
-                                        Icons.bolt,
-                                        'Tension',
-                                        '$tension V',
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Matériaux
-                  if (materials.isNotEmpty) ...[
-                    _buildSection(
-                      'Matériaux Utilisés',
+                      'Pièces de Rechange',
                       Icons.inventory_2,
                       Column(
-                        children: materials.map((material) {
+                        children: spareParts.map((part) {
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(12),
@@ -363,14 +448,13 @@ MCT Maintenance - Service de qualité
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    material['name'] ?? material.toString(),
+                                    part['name'] ?? part.toString(),
                                     style: const TextStyle(fontSize: 15),
                                   ),
                                 ),
-                                if (material is Map &&
-                                    material['quantity'] != null)
+                                if (part is Map && part['quantity'] != null)
                                   Text(
-                                    'x${material['quantity']} ${material['unit'] ?? ''}',
+                                    'x${part['quantity']} ${part['unit'] ?? ''}',
                                     style: TextStyle(
                                       color: Colors.grey.shade700,
                                       fontWeight: FontWeight.w500,
@@ -409,27 +493,6 @@ MCT Maintenance - Service de qualité
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Observations
-                  if (observations.isNotEmpty) ...[
-                    _buildSection(
-                      'Observations / Recommandations',
-                      Icons.comment,
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          observations,
-                          style: const TextStyle(fontSize: 15),
                         ),
                       ),
                     ),
@@ -550,14 +613,16 @@ MCT Maintenance - Service de qualité
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Icon(icon, color: const Color(0xFF0a543d), size: 18),
+          const SizedBox(width: 8),
           SizedBox(
-            width: 80,
+            width: 100,
             child: Text(
               '$label:',
               style: TextStyle(
@@ -577,8 +642,112 @@ MCT Maintenance - Service de qualité
     );
   }
 
+  // Widget pour afficher une carte d'équipement dans le récapitulatif
+  Widget _buildEquipmentCard(dynamic equipment, int index) {
+    final state = equipment['state']?.toString() ?? '';
+    final type = equipment['type']?.toString() ?? '';
+    final brand = equipment['brand']?.toString() ?? '';
+    final pression = equipment['pression']?.toString() ?? '';
+    final puissance = equipment['puissance']?.toString() ?? '';
+    final intensite = equipment['intensite']?.toString() ?? '';
+    final tension = equipment['tension']?.toString() ?? '';
+
+    final hasMeasures = pression.isNotEmpty ||
+        puissance.isNotEmpty ||
+        intensite.isNotEmpty ||
+        tension.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // En-tête avec numéro
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0a543d),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  brand.isNotEmpty ? '$brand - $type' : 'Équipement $index',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (state.isNotEmpty) ...[
+            _buildInfoRow(Icons.settings, 'État', state),
+            const SizedBox(height: 8),
+          ],
+          if (type.isNotEmpty) ...[
+            _buildInfoRow(Icons.category, 'Type', type),
+            const SizedBox(height: 8),
+          ],
+          if (brand.isNotEmpty) ...[
+            _buildInfoRow(Icons.branding_watermark, 'Marque', brand),
+            const SizedBox(height: 8),
+          ],
+          if (hasMeasures) ...[
+            const Divider(),
+            const Text(
+              'Mesures Techniques',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                if (pression.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.compress, 'Pression', '$pression bar'),
+                if (puissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$puissance CV'),
+                if (intensite.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.electrical_services, 'Intensité', '$intensite A'),
+                if (tension.isNotEmpty)
+                  _buildMeasureItem(Icons.bolt, 'Tension', '$tension V'),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildMeasureItem(IconData icon, String label, String value) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: Colors.orange.shade700, size: 20),
         const SizedBox(width: 8),

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const { body, query, param } = require('express-validator');
 const quoteController = require('../controllers/quote/quoteController');
 const quoteWorkflowController = require('../controllers/quoteWorkflowController');
@@ -39,7 +39,7 @@ router.get('/', authenticate, quoteController.getAllQuotes);
  */
 router.post('/from-report', 
   authenticate, 
-  authorize('admin'), 
+  authorize('admin', 'manager'), 
   quoteWorkflowController.createQuoteFromReport
 );
 
@@ -198,7 +198,7 @@ router.put('/:id',
  */
 router.delete('/:id', 
   authenticate,
-  authorize('admin'),
+  adminOnly,
   quoteController.deleteQuote
 );
 
@@ -284,7 +284,7 @@ router.post('/:id/reject',
  */
 router.post('/:id/convert-to-order', 
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'manager'),
   quoteController.convertQuoteToOrder
 );
 

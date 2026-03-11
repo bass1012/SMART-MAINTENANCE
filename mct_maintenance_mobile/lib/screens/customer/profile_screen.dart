@@ -267,13 +267,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isSaving = true);
 
     try {
-      // Préparer les données à envoyer
-      final Map<String, dynamic> updateData = {
-        'first_name': _firstNameController.text.trim(),
-        'last_name': _lastNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'phone': _phoneController.text.trim(),
-      };
+      // Préparer les données à envoyer (seulement les champs non vides)
+      final Map<String, dynamic> updateData = {};
+
+      // Ajouter les champs seulement s'ils ont une valeur
+      final firstName = _firstNameController.text.trim();
+      if (firstName.isNotEmpty) {
+        updateData['first_name'] = firstName;
+      }
+
+      final lastName = _lastNameController.text.trim();
+      if (lastName.isNotEmpty) {
+        updateData['last_name'] = lastName;
+      }
+
+      final email = _emailController.text.trim();
+      if (email.isNotEmpty) {
+        updateData['email'] = email;
+      }
+
+      final phone = _phoneController.text.trim();
+      if (phone.isNotEmpty) {
+        updateData['phone'] = phone;
+      }
 
       // Ajouter latitude/longitude si présentes
       final latitude = double.tryParse(_latitudeController.text.trim());

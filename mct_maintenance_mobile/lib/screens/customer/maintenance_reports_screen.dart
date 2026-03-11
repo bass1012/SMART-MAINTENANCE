@@ -271,13 +271,133 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
   }
 
   bool _hasTechnicalMeasures(MaintenanceReport report) {
+    // Vérifier le nouveau format multi-équipements
+    if (report.equipments != null && report.equipments!.isNotEmpty) {
+      return report.equipments!.any((e) => e.hasTechnicalMeasures);
+    }
+    // Format legacy
     return (report.pression != null && report.pression!.isNotEmpty) ||
-        (report.temperature != null && report.temperature!.isNotEmpty) ||
+        (report.puissance != null && report.puissance!.isNotEmpty) ||
         (report.intensite != null && report.intensite!.isNotEmpty) ||
         (report.tension != null && report.tension!.isNotEmpty);
   }
 
   Widget _buildTechnicalMeasuresSection(MaintenanceReport report) {
+    // Utiliser le nouveau format multi-équipements si disponible
+    if (report.equipments != null && report.equipments!.isNotEmpty) {
+      return Column(
+        children: report.equipments!.asMap().entries.map((entry) {
+          final index = entry.key;
+          final equipment = entry.value;
+          if (!equipment.hasTechnicalMeasures &&
+              (equipment.state == null || equipment.state!.isEmpty) &&
+              (equipment.type == null || equipment.type!.isEmpty) &&
+              (equipment.brand == null || equipment.brand!.isEmpty)) {
+            return const SizedBox.shrink();
+          }
+          return _buildEquipmentCard(equipment, index + 1);
+        }).toList(),
+      );
+    }
+
+    // Format legacy
+    return _buildLegacyTechnicalMeasures(report);
+  }
+
+  Widget _buildEquipmentCard(ReportEquipment equipment, int index) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // En-tête avec numéro
+          Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0a543d),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  equipment.brand != null && equipment.brand!.isNotEmpty
+                      ? '${equipment.brand} - ${equipment.type ?? ""}'
+                      : 'Équipement $index',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (equipment.state != null && equipment.state!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'État: ${equipment.state}',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ],
+          // Mesures techniques
+          if (equipment.hasTechnicalMeasures) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  if (equipment.pression != null &&
+                      equipment.pression!.isNotEmpty)
+                    _buildMeasureChip(Icons.compress, 'Pression',
+                        '${equipment.pression} bar'),
+                  if (equipment.puissance != null &&
+                      equipment.puissance!.isNotEmpty)
+                    _buildMeasureChip(
+                        Icons.power, 'Puissance', '${equipment.puissance} CV'),
+                  if (equipment.intensite != null &&
+                      equipment.intensite!.isNotEmpty)
+                    _buildMeasureChip(Icons.electrical_services, 'Intensité',
+                        '${equipment.intensite} A'),
+                  if (equipment.tension != null &&
+                      equipment.tension!.isNotEmpty)
+                    _buildMeasureChip(
+                        Icons.bolt, 'Tension', '${equipment.tension} V'),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegacyTechnicalMeasures(MaintenanceReport report) {
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(12),
@@ -310,9 +430,9 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
               if (report.pression != null && report.pression!.isNotEmpty)
                 _buildMeasureChip(
                     Icons.compress, 'Pression', '${report.pression} bar'),
-              if (report.temperature != null && report.temperature!.isNotEmpty)
+              if (report.puissance != null && report.puissance!.isNotEmpty)
                 _buildMeasureChip(
-                    Icons.thermostat, 'Temp.', '${report.temperature} °C'),
+                    Icons.power, 'Puissance', '${report.puissance} kW'),
               if (report.intensite != null && report.intensite!.isNotEmpty)
                 _buildMeasureChip(Icons.electrical_services, 'Intensité',
                     '${report.intensite} A'),

@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
-import '../../services/payment_service.dart';
 import '../../widgets/common/loading_indicator.dart';
+import 'payment_webview_screen.dart';
+import 'new_intervention_screen.dart';
 
 class SubscriptionPaymentScreen extends StatefulWidget {
   final int subscriptionId;
   final String subscriptionName;
   final double amount;
+  final int? offerId;
 
   const SubscriptionPaymentScreen({
     super.key,
     required this.subscriptionId,
     required this.subscriptionName,
     required this.amount,
+    this.offerId,
   });
 
   @override
@@ -23,7 +25,6 @@ class SubscriptionPaymentScreen extends StatefulWidget {
 
 class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
   final ApiService _apiService = ApiService();
-  late final PaymentService _paymentService;
   bool _isProcessing = false;
   bool _isPolling = false;
   int _pollCount = 0;
@@ -32,7 +33,6 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
   @override
   void initState() {
     super.initState();
-    _paymentService = PaymentService(_apiService);
   }
 
   void _startPaymentPolling() {
@@ -165,6 +165,38 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
     }
   }
 
+  /// Vérifier le statut du paiement après le WebView
+  Future<void> _checkPaymentStatus() async {
+    if (!mounted) return;
+
+    // Attendre un court délai pour laisser le webhook FineoPay se traiter
+    await Future.delayed(const Duration(seconds: 2));
+
+    try {
+      final response = await _apiService.get(
+        '/fineopay/verify-subscription-payment/${widget.subscriptionId}',
+      );
+
+      final paymentStatus = response['data']?['payment_status'];
+      print('📊 Vérification statut paiement: $paymentStatus');
+
+      if (paymentStatus == 'paid') {
+        _showPaymentSuccess();
+      } else {
+        // Paiement pas encore confirmé - démarrer le polling
+        if (mounted) {
+          _startPaymentPolling();
+        }
+      }
+    } catch (e) {
+      print('❌ Erreur vérification paiement: $e');
+      // En cas d'erreur, démarrer le polling quand même
+      if (mounted) {
+        _startPaymentPolling();
+      }
+    }
+  }
+
   void _showPaymentSuccess() {
     if (!mounted) return;
 
@@ -175,17 +207,34 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
         icon: const Icon(Icons.check_circle, color: Colors.green, size: 64),
         title: const Text('Paiement confirmé !'),
         content: Text(
-          'Votre souscription "${widget.subscriptionName}" a été activée avec succès !',
+          'Votre souscription "${widget.subscriptionName}" a été activée avec succès !\n\n'
+          'Vous pouvez maintenant créer votre première demande de maintenance.',
           textAlign: TextAlign.center,
         ),
         actions: [
-          ElevatedButton(
+          TextButton(
             onPressed: () {
               Navigator.pop(context);
               Navigator.pop(this.context, true);
             },
+            child: const Text('Plus tard'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Fermer l'écran de paiement et rediriger vers la création d'intervention
+              Navigator.pushReplacement(
+                this.context,
+                MaterialPageRoute(
+                  builder: (context) => NewInterventionScreen(
+                    preSelectedType: 'Maintenance',
+                    preSelectedOfferId: widget.offerId,
+                  ),
+                ),
+              );
+            },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Super !'),
+            child: const Text('Créer une maintenance'),
           ),
         ],
       ),
@@ -235,58 +284,67 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
             const Color.from(alpha: 1, red: 0.933, green: 0.741, blue: 0.106),
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Résumé de la souscription
-            _buildSubscriptionSummary(),
-            const SizedBox(height: 24),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background_tech_2.png'),
+            fit: BoxFit.cover,
+            opacity: 0.4,
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Résumé de la souscription
+              _buildSubscriptionSummary(),
+              const SizedBox(height: 24),
 
-            // Information sur FineoPay
-            _buildFineoPayInfo(),
-            const SizedBox(height: 32),
+              // Information sur FineoPay
+              _buildFineoPayInfo(),
+              const SizedBox(height: 32),
 
-            // Bouton de paiement
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _processPayment,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              // Bouton de paiement
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isProcessing ? null : _processPayment,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
+                  icon: _isProcessing
+                      ? const SizedBox.shrink()
+                      : const Icon(Icons.credit_card),
+                  label: _isProcessing
+                      ? SizedBox(
+                          height: 20,
+                          child: ButtonLoadingIndicator(
+                            color: Colors.white,
+                            size: 6.0,
+                          ),
+                        )
+                      : Text(
+                          'Payer ${_formatCurrency(widget.amount)}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
-                icon: _isProcessing
-                    ? const SizedBox.shrink()
-                    : const Icon(Icons.credit_card),
-                label: _isProcessing
-                    ? SizedBox(
-                        height: 20,
-                        child: ButtonLoadingIndicator(
-                          color: Colors.white,
-                          size: 6.0,
-                        ),
-                      )
-                    : Text(
-                        'Payer ${_formatCurrency(widget.amount)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
               ),
-            ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // Note de sécurité
-            _buildSecurityNote(),
-          ],
+              // Note de sécurité
+              _buildSecurityNote(),
+            ],
+          ),
         ),
       ),
     );
@@ -388,15 +446,48 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
               children: [
                 const SizedBox(width: 4),
                 Image.asset('assets/images/orange_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
                 Image.asset('assets/images/mtn_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
                 Image.asset('assets/images/moov_money.png',
-                    height: 40, width: 40),
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
                 const SizedBox(width: 12),
-                Image.asset('assets/images/wave.png', height: 40, width: 40),
+                Image.asset('assets/images/wave.png',
+                    height: 40,
+                    width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Logos Cartes Bancaires
+            Row(
+              children: [
+                const SizedBox(width: 4),
+                Image.asset('assets/images/logo_visa.png',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/MasterCard_Logo.png',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/logo_cb.jpg',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
               ],
             ),
             const SizedBox(height: 8),
@@ -494,19 +585,30 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
         final checkoutUrl = response['data']?['checkoutUrl'];
 
         if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
-          print('🔗 Ouverture du lien FineoPay: $checkoutUrl');
+          print('🔗 Ouverture du paiement WebView: $checkoutUrl');
 
-          // Ouvrir le lien de paiement dans le navigateur
-          final uri = Uri.parse(checkoutUrl);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          // Ouvrir le paiement dans un WebView intégré
+          final paymentResult = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PaymentWebViewScreen(
+                paymentUrl: checkoutUrl,
+                title: 'Paiement ${widget.subscriptionName}',
+                subscriptionId: widget.subscriptionId,
+              ),
+            ),
+          );
 
-            // Démarrer le polling pour vérifier le statut du paiement
-            if (mounted) {
+          // Gérer le résultat du paiement - toujours vérifier via polling
+          // car le webhook FineoPay peut n'être pas encore traité
+          if (mounted) {
+            if (paymentResult == true) {
+              // WebView a détecté le succès - vérifier directement
+              await _checkPaymentStatus();
+            } else {
+              // Paiement peut-être complété - démarrer le polling pour vérifier
               _startPaymentPolling();
             }
-          } else {
-            throw Exception('Impossible d\'ouvrir le lien de paiement');
           }
         } else {
           // Pas de checkoutUrl, afficher un message de succès simple

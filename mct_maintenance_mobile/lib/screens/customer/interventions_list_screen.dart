@@ -372,7 +372,11 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
     final id = intervention['id'];
     final title = intervention['title'] ?? 'Intervention #$id';
     final type = intervention['intervention_type'] ?? 'diagnostic';
-    final diagnosticFee = (intervention['diagnostic_fee'] ?? 4000).toDouble();
+    // Handle both String and num types for diagnostic_fee
+    final rawFee = intervention['diagnostic_fee'];
+    final diagnosticFee = rawFee is String
+        ? double.tryParse(rawFee) ?? 4000.0
+        : (rawFee as num?)?.toDouble() ?? 4000.0;
     final createdAt = intervention['created_at'] != null
         ? DateTime.parse(intervention['created_at'])
         : DateTime.now();
@@ -402,7 +406,7 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    type == 'repair' ? 'Réparation' : 'Diagnostic',
+                    type == 'repair' ? 'Dépannage' : 'Diagnostic',
                     style: TextStyle(
                       color: Colors.orange.shade800,
                       fontWeight: FontWeight.w600,
@@ -1216,7 +1220,7 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          'Réparation: ${intervention['repair_service']['title']} - ${intervention['repair_service']['model']}',
+                          'Dépannage: ${intervention['repair_service']['title']} - ${intervention['repair_service']['model']}',
                           style: const TextStyle(
                             color: Colors.orange,
                             fontSize: 13,

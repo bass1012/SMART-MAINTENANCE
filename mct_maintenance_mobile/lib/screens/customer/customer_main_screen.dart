@@ -15,7 +15,9 @@ import '../../utils/snackbar_helper.dart';
 import 'package:mct_maintenance_mobile/screens/customer/invoices_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/support_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/faq_screen.dart';
+import 'package:mct_maintenance_mobile/screens/customer/cgu_cgv_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/history_screen.dart';
+import 'package:mct_maintenance_mobile/screens/customer/warranty_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/profile_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/settings_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/notifications_screen.dart';
@@ -491,8 +493,23 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                               // Première ligne de cartes
                               _buildFeatureCard(
                                 context,
+                                icon: Icons.engineering_outlined,
+                                title: 'Nos Offres',
+                                color: const Color(0xFF0a543d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const MaintenanceOffersScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildFeatureCard(
+                                context,
                                 icon: Icons.engineering,
-                                title: 'Interventions',
+                                title: 'Planifier une Intervention',
                                 color: const Color(0xFF0a543d),
                                 onTap: () {
                                   Navigator.push(
@@ -519,21 +536,7 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                                   );
                                 },
                               ),
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.engineering_outlined,
-                                title: 'Nos Services',
-                                color: const Color(0xFF0a543d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const MaintenanceOffersScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
+
                               _buildFeatureCard(
                                 context,
                                 icon: Icons.shopping_cart_outlined,
@@ -595,6 +598,21 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                                         initialTabIndex:
                                             0, // Ouvrir sur le premier onglet (Interventions)
                                       ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildFeatureCard(
+                                context,
+                                icon: Icons.verified_user,
+                                title: 'Garantie',
+                                color: const Color(0xFF0d6b4d),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const WarrantyScreen(),
                                     ),
                                   );
                                 },
@@ -662,18 +680,6 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                                     value: '${_stats!.totalOrders}',
                                     subtitle: 'Total',
                                     color: Colors.orange,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    context,
-                                    icon: Icons.attach_money,
-                                    title: 'Dépenses',
-                                    value:
-                                        '${_stats!.totalSpent.toStringAsFixed(0)}',
-                                    subtitle: 'FCFA',
-                                    color: Colors.purple,
                                   ),
                                 ),
                               ],
@@ -762,6 +768,27 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                                     );
                                   },
                                 ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  child: Divider(
+                                    height: 1,
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                                _buildQuickAction(
+                                  icon: Icons.description_outlined,
+                                  title: 'Conditions Générales d\'Utilisation et de Vente',
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const CGUCGVScreen(),
+                                      ),
+                                    );
+                                  },
+                                ),
                                 // Bouton test suggestions pour admins uniquement
                                 if (_user?.role == 'admin') ...[
                                   Padding(
@@ -807,14 +834,23 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
   Widget _buildScrollingBanner() {
     // Vérifier l'heure actuelle
     final now = DateTime.now();
+    final currentHour = now.hour;
+    final currentMinute = now.minute;
 
-    // Définir les heures de début et de fin
-    final startTime = DateTime(now.year, now.month, now.day, 18, 30);
-    final endTime = DateTime(now.year, now.month, now.day, 08, 00);
+    // Afficher la bannière en dehors des heures de service (8h-18h en semaine)
+    // Donc afficher si: avant 8h OU après 17h30 OU weekend
+    final isWeekend =
+        now.weekday == DateTime.saturday || now.weekday == DateTime.sunday;
+    final isBeforeOpening = currentHour < 8;
+    final isAfterClosing =
+        currentHour > 18 || (currentHour == 18 && currentMinute >= 30);
 
-    // Afficher la bannière seulement entre 11h16 et 11h30
-    if (now.isBefore(startTime) || now.isAfter(endTime)) {
-      return const SizedBox.shrink(); // Ne rien afficher
+    // Afficher la bannière seulement en dehors des heures de service
+    final shouldShowBanner = isWeekend || isBeforeOpening || isAfterClosing;
+
+    if (!shouldShowBanner) {
+      return const SizedBox
+          .shrink(); // Ne rien afficher pendant les heures de service
     }
 
     return Container(
@@ -891,12 +927,13 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
           onTap: onTap,
           borderRadius: BorderRadius.circular(24),
           child: Container(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(18),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -915,9 +952,9 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                       ),
                     ],
                   ),
-                  child: Icon(icon, size: 36, color: Colors.white),
+                  child: Icon(icon, size: 32, color: Colors.white),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 Text(
                   title,
                   textAlign: TextAlign.center,

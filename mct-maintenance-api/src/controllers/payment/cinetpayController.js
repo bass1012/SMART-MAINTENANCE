@@ -513,13 +513,16 @@ const handleDiagnosticNotification = async (req, res) => {
 
 /**
  * Initialiser un paiement CinetPay pour un devis (après acceptation)
+ * Paiement en deux étapes: 
+ *   - payment_step=1 : 50% à l'acceptation du devis
+ *   - payment_step=2 : 50% restant à la fin de l'intervention
  */
 const initializeQuotePayment = async (req, res) => {
   try {
-    const { quoteId } = req.body;
+    const { quoteId, payment_step = 1 } = req.body; // payment_step: 1 ou 2
     const userId = req.user.id;
 
-    console.log(`💳 Initialisation paiement devis CinetPay - Quote ${quoteId}, User ${userId}`);
+    console.log(`💳 Initialisation paiement devis CinetPay - Quote ${quoteId}, Step ${payment_step}, User ${userId}`);
 
     // Récupérer le profil client
     const customerProfile = await CustomerProfile.findOne({
@@ -570,19 +573,56 @@ const initializeQuotePayment = async (req, res) => {
       });
     }
 
-    // Vérifier que le devis n'est pas déjà payé
+    // Déterminer le montant selon l'étape de paiement
+    let paymentAmount;
+    let paymentDescription;
+
+    if (payment_step === 1) {
+      // Premier paiement (50%)
+      if (quote.first_payment_status === 'paid') {
+        return res.status(400).json({
+          success: false,
+          message: 'Le premier paiement (50%) a déjà été effectué'
+        });
+      }
+      paymentAmount = quote.first_payment_amount || Math.ceil(quote.total / 2);
+      paymentDescription = `Acompte 50% - Devis ${quote.reference}`;
+    } else if (payment_step === 2) {
+      // Second paiement (50% restant)
+      if (quote.first_payment_status !== 'paid') {
+        return res.status(400).json({
+          success: false,
+          message: 'Le premier paiement (50%) doit être effectué avant le second'
+        });
+      }
+      if (quote.second_payment_status === 'paid') {
+        return res.status(400).json({
+          success: false,
+          message: 'Le second paiement (50%) a déjà été effectué'
+        });
+      }
+      paymentAmount = quote.second_payment_amount || (quote.total - (quote.first_payment_amount || Math.ceil(quote.total / 2)));
+      paymentDescription = `Solde 50% - Devis ${quote.reference} (Fin d'intervention)`;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Étape de paiement invalide (1 ou 2 attendu)'
+      });
+    }
+
+    // Vérifier que le devis n'est pas entièrement payé
     if (quote.payment_status === 'paid') {
       return res.status(400).json({
         success: false,
-        message: 'Ce devis a déjà été payé'
+        message: 'Ce devis a déjà été intégralement payé'
       });
     }
 
     // Arrondir le montant au multiple de 5 le plus proche (requis par CinetPay)
-    const roundedAmount = Math.round(quote.total / 5) * 5;
+    const roundedAmount = Math.round(paymentAmount / 5) * 5;
 
     // Générer un ID de transaction unique
-    const transactionId = `QTE-${quoteId}-${Date.now()}`;
+    const transactionId = `QTE-${quoteId}-S${payment_step}-${Date.now()}`;
 
     // Préparer les données pour CinetPay
     const cinetpayData = {
@@ -591,7 +631,7 @@ const initializeQuotePayment = async (req, res) => {
       transaction_id: transactionId,
       amount: roundedAmount,
       currency: 'XOF', // Franc CFA
-      description: `Paiement devis ${quote.reference} - Intervention #${quote.intervention_id}`,
+      description: paymentDescription,
       customer_name: customerProfile.first_name + ' ' + customerProfile.last_name,
       customer_surname: customerProfile.last_name,
       customer_email: customerProfile.user?.email || 'client@example.com',
@@ -608,14 +648,16 @@ const initializeQuotePayment = async (req, res) => {
         quote_id: quoteId,
         intervention_id: quote.intervention_id,
         customer_id: customerProfile.id,
-        user_id: userId
+        user_id: userId,
+        payment_step: payment_step
       })
     };
 
     console.log('📤 Envoi requête CinetPay pour devis:', {
       transaction_id: transactionId,
       amount: roundedAmount,
-      quote_reference: quote.reference
+      quote_reference: quote.reference,
+      payment_step: payment_step
     });
 
     // Appeler l'API CinetPay
@@ -628,17 +670,20 @@ const initializeQuotePayment = async (req, res) => {
     console.log('📥 Réponse CinetPay:', response.data);
 
     if (response.data.code === '201' && response.data.data?.payment_url) {
-      // Mettre à jour le devis avec l'ID de transaction
-      await quote.update({
-        payment_transaction_id: transactionId,
-        payment_status: 'pending'
-      });
+      // Mettre à jour le devis avec l'ID de transaction selon l'étape
+      const updateData = payment_step === 1
+        ? { first_payment_transaction_id: transactionId, payment_status: 'partial_pending' }
+        : { second_payment_transaction_id: transactionId };
+      
+      await quote.update(updateData);
 
       return res.json({
         success: true,
         payment_url: response.data.data.payment_url,
         transaction_id: transactionId,
-        amount: roundedAmount
+        amount: roundedAmount,
+        payment_step: payment_step,
+        payment_type: payment_step === 1 ? 'Acompte 50%' : 'Solde 50%'
       });
     } else {
       console.error('❌ Erreur CinetPay:', response.data);
@@ -661,6 +706,7 @@ const initializeQuotePayment = async (req, res) => {
 
 /**
  * Gérer la notification de paiement pour un devis (webhook CinetPay)
+ * Paiement en deux étapes: S1 = 50% à l'acceptation, S2 = 50% à la fin
  */
 const handleQuoteNotification = async (req, res) => {
   try {
@@ -678,8 +724,18 @@ const handleQuoteNotification = async (req, res) => {
     console.log('📥 Vérification paiement devis:', verifyResponse.data);
 
     if (verifyResponse.data.code === '00' && verifyResponse.data.data?.status === 'ACCEPTED') {
-      // Extraire l'ID du devis depuis le transaction_id (format: QTE-{quoteId}-{timestamp})
-      const quoteId = transaction_id.split('-')[1];
+      // Extraire l'ID du devis et l'étape de paiement depuis le transaction_id
+      // Format: QTE-{quoteId}-S{step}-{timestamp} (nouveau) ou QTE-{quoteId}-{timestamp} (ancien)
+      const parts = transaction_id.split('-');
+      const quoteId = parts[1];
+      
+      // Détecter l'étape de paiement
+      let paymentStep = 1; // Par défaut, c'est le premier paiement
+      if (parts.length >= 3 && parts[2].startsWith('S')) {
+        paymentStep = parseInt(parts[2].substring(1)) || 1;
+      }
+      
+      console.log(`💰 Paiement devis ${quoteId} - Étape ${paymentStep}`);
       
       const quote = await Quote.findByPk(quoteId, {
         include: [
@@ -699,149 +755,125 @@ const handleQuoteNotification = async (req, res) => {
         ]
       });
 
-      if (quote && quote.payment_status !== 'paid') {
-        // Mettre à jour le devis
-        await quote.update({
-          payment_status: 'paid',
-          paid_at: new Date(),
-          payment_method: verifyResponse.data.data.payment_method || 'CinetPay'
-        });
-
-        // 👨‍🔧 ASSIGNER LE TECHNICIEN DU DIAGNOSTIC À L'INTERVENTION
-        const technicianId = quote.diagnosticReport?.technician_id;
-        
-        if (technicianId) {
-          // Planifier la date d'intervention (2 jours ouvrés après le paiement)
-          const scheduledDate = new Date();
-          scheduledDate.setDate(scheduledDate.getDate() + 2);
-          
-          // Éviter les week-ends : si samedi, passer à lundi
-          if (scheduledDate.getDay() === 6) { // Samedi
-            scheduledDate.setDate(scheduledDate.getDate() + 2);
-          } else if (scheduledDate.getDay() === 0) { // Dimanche
-            scheduledDate.setDate(scheduledDate.getDate() + 1);
-          }
-          
-          // Définir l'heure à 9h du matin
-          scheduledDate.setHours(9, 0, 0, 0);
-
-          // NE PAS modifier le statut de l'intervention de diagnostic (elle reste diagnostic_submitted)
-          // On met seulement à jour la date de paiement du diagnostic
-          await quote.intervention.update({
-            diagnostic_payment_date: new Date(),
-            diagnostic_paid: true
-          });
-
-          console.log(`✅ Paiement enregistré pour l'intervention de diagnostic ${quote.intervention_id}`);
-          console.log(`ℹ️ L'intervention de diagnostic reste en statut: ${quote.intervention.status}`);
-        } else {
-          // Si pas de technicien dans le diagnostic, juste marquer le paiement
-          await quote.intervention.update({
-            payment_date: new Date()
-          });
-          console.log(`⚠️ Pas de technicien trouvé dans le diagnostic pour l'intervention ${quote.intervention_id}`);
-        }
-
-        // Mettre à jour le rapport de diagnostic
-        if (quote.diagnosticReport) {
-          await quote.diagnosticReport.update({
-            status: 'approved'
-          });
-        }
-
-        console.log(`✅ Devis ${quoteId} payé - Intervention de diagnostic terminée, création intervention de suivi...`);
-
-        // Pas de notification pour l'intervention de diagnostic (déjà terminée)
-        // Les notifications seront envoyées pour la nouvelle intervention de suivi
-        
-        // 🆕 CRÉER INTERVENTION STANDARD BASÉE SUR LES RECOMMANDATIONS
-        if (quote.diagnosticReport && quote.diagnosticReport.recommended_solution) {
-          console.log('🔄 Création d\'une intervention standard basée sur les recommandations...');
-          
-          // Calculer la date de l'intervention standard (7 jours après l'intervention de réparation)
-          const followUpDate = new Date(scheduledDate);
-          followUpDate.setDate(followUpDate.getDate() + 7);
-          // S'assurer que c'est un jour ouvrable
-          while (followUpDate.getDay() === 0 || followUpDate.getDay() === 6) {
-            followUpDate.setDate(followUpDate.getDate() + 1);
-          }
-          followUpDate.setHours(10, 0, 0, 0);
-          
-          const standardIntervention = await Intervention.create({
-            title: 'Intervention de suivi - Recommandations du diagnostic',
-            description: `Recommandations du diagnostic:\n${quote.diagnosticReport.recommended_solution}\n\nPièces nécessaires: ${quote.diagnosticReport.parts_needed || 'Aucune'}`,
-            address: quote.intervention.address,
-            customer_id: quote.intervention.customer_id,
-            technician_id: technicianId,
-            intervention_type: 'standard',
-            status: 'assigned',
-            priority: quote.diagnosticReport.urgency_level || 'normal',
-            scheduled_date: followUpDate,
-            equipment_count: quote.intervention.equipment_count || 1
-          });
-          
-          console.log(`✅ Intervention standard créée (ID: ${standardIntervention.id}) - Date: ${followUpDate.toLocaleString('fr-FR')}`);
-          console.log(`✅ Technicien ${technicianId} automatiquement assigné à l'intervention standard ${standardIntervention.id}`);
-          
-          const customerName = `${quote.intervention.customer.first_name} ${quote.intervention.customer.last_name}`;
-          
-          // Notifier le technicien de la nouvelle intervention assignée
-          const followUpDateStr = followUpDate.toLocaleDateString('fr-FR', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          });
-          const followUpTimeStr = followUpDate.toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit'
-          });
-          
-          await notificationService.create({
-            userId: technicianId,
-            type: 'intervention_assigned',
-            title: '🔧 Intervention de suivi assignée',
-            message: `Suite au diagnostic de ${customerName}, une intervention de suivi vous a été assignée pour le ${followUpDateStr} à ${followUpTimeStr}.`,
-            data: { 
-              intervention_id: standardIntervention.id,
-              original_intervention_id: quote.intervention_id,
-              diagnostic_report_id: quote.diagnosticReport.id,
-              customer_name: customerName,
-              scheduled_date: followUpDate.toISOString(),
-              address: quote.intervention.address || 'Non spécifiée'
-            },
-            priority: 'high',
-            actionUrl: `/interventions`
-          });
-          
-          console.log(`✅ Notification envoyée au technicien ${technicianId} pour l'intervention standard ${standardIntervention.id}`);
-          
-          // Notifier l'admin de la nouvelle intervention créée
-          const adminUsers = await User.findAll({ where: { role: 'admin' } });
-          
-          for (const admin of adminUsers) {
-            await notificationService.create({
-              userId: admin.id,
-              type: 'intervention_created',
-              title: '📋 Intervention de suivi créée',
-              message: `Intervention de suivi assignée à ${technicianName} pour ${customerName} le ${followUpDateStr}.`,
-              data: {
-                intervention_id: standardIntervention.id,
-                original_intervention_id: quote.intervention_id,
-                diagnostic_report_id: quote.diagnosticReport.id,
-                technician_id: technicianId,
-                scheduled_date: followUpDate.toISOString()
-              },
-              priority: 'medium',
-              actionUrl: `/interventions`
-            });
-          }
-          
-          console.log(`✅ Notifications envoyées aux admins pour l'intervention standard ${standardIntervention.id}`);
-        }
+      if (!quote) {
+        console.error(`❌ Devis ${quoteId} non trouvé`);
+        return res.status(404).json({ success: false, message: 'Devis non trouvé' });
       }
 
-      return res.json({ success: true, message: 'Paiement devis confirmé' });
+      const paymentMethod = verifyResponse.data.data.payment_method || 'CinetPay';
+      const now = new Date();
+
+      if (paymentStep === 1) {
+        // ========== PREMIER PAIEMENT (50%) ==========
+        if (quote.first_payment_status === 'paid') {
+          console.log(`⚠️ Premier paiement déjà effectué pour le devis ${quoteId}`);
+          return res.json({ success: true, message: 'Premier paiement déjà enregistré' });
+        }
+
+        // Mettre à jour le premier paiement
+        await quote.update({
+          first_payment_status: 'paid',
+          first_payment_date: now,
+          first_payment_transaction_id: transaction_id,
+          payment_method: paymentMethod,
+          payment_status: 'partial' // Partiellement payé (50%)
+        });
+
+        console.log(`✅ Premier paiement (50%) enregistré pour le devis ${quoteId}`);
+
+        // Notifier le client
+        if (quote.intervention?.customer?.user_id) {
+          await notificationService.create({
+            userId: quote.intervention.customer.user_id,
+            type: 'payment_received',
+            title: '💳 Acompte reçu',
+            message: `Votre acompte de ${(quote.first_payment_amount || Math.ceil(quote.total / 2)).toLocaleString('fr-FR')} FCFA a été reçu. L'intervention peut être planifiée.`,
+            data: { 
+              quote_id: quote.id, 
+              intervention_id: quote.intervention_id,
+              amount: quote.first_payment_amount,
+              payment_step: 1
+            },
+            priority: 'high'
+          });
+        }
+
+        // Notifier les admins
+        const adminUsers = await User.findAll({ where: { role: 'admin' } });
+        for (const admin of adminUsers) {
+          await notificationService.create({
+            userId: admin.id,
+            type: 'payment_received',
+            title: '💰 Acompte 50% reçu',
+            message: `Acompte de ${(quote.first_payment_amount || Math.ceil(quote.total / 2)).toLocaleString('fr-FR')} FCFA reçu pour le devis ${quote.reference}. Intervention prête à démarrer.`,
+            data: { quote_id: quote.id, intervention_id: quote.intervention_id, payment_step: 1 },
+            priority: 'high'
+          });
+        }
+
+        // Notifier le technicien que l'intervention peut commencer
+        const technicianId = quote.diagnosticReport?.technician_id || quote.intervention?.assigned_to;
+        if (technicianId) {
+          await notificationService.create({
+            userId: technicianId,
+            type: 'payment_received',
+            title: '✅ Acompte reçu - Intervention autorisée',
+            message: `L'acompte de 50% a été reçu pour l'intervention #${quote.intervention_id}. Vous pouvez procéder.`,
+            data: { quote_id: quote.id, intervention_id: quote.intervention_id },
+            priority: 'high'
+          });
+        }
+
+        return res.json({ success: true, message: 'Premier paiement (50%) enregistré', payment_step: 1 });
+
+      } else if (paymentStep === 2) {
+        // ========== SECOND PAIEMENT (50% restant) ==========
+        if (quote.second_payment_status === 'paid') {
+          console.log(`⚠️ Second paiement déjà effectué pour le devis ${quoteId}`);
+          return res.json({ success: true, message: 'Second paiement déjà enregistré' });
+        }
+
+        // Mettre à jour le second paiement et marquer comme entièrement payé
+        await quote.update({
+          second_payment_status: 'paid',
+          second_payment_date: now,
+          second_payment_transaction_id: transaction_id,
+          payment_status: 'paid', // Entièrement payé (100%)
+          paid_at: now
+        });
+
+        console.log(`✅ Second paiement (50%) enregistré pour le devis ${quoteId} - ENTIÈREMENT PAYÉ`);
+
+        // Notifier le client
+        if (quote.intervention?.customer?.user_id) {
+          await notificationService.create({
+            userId: quote.intervention.customer.user_id,
+            type: 'payment_completed',
+            title: '✅ Paiement complet',
+            message: `Le solde de ${(quote.second_payment_amount || (quote.total - (quote.first_payment_amount || 0))).toLocaleString('fr-FR')} FCFA a été reçu. Votre intervention est maintenant terminée et entièrement payée.`,
+            data: { 
+              quote_id: quote.id, 
+              intervention_id: quote.intervention_id,
+              amount: quote.second_payment_amount,
+              payment_step: 2,
+              total_paid: quote.total
+            },
+            priority: 'high'
+          });
+        }
+
+        // Marquer l'intervention comme terminée et payée
+        if (quote.intervention) {
+          await quote.intervention.update({
+            payment_status: 'paid',
+            payment_date: now
+          });
+        }
+
+        return res.json({ success: true, message: 'Paiement complet (100%) enregistré', payment_step: 2 });
+      }
+
+      return res.json({ success: true, message: 'Paiement devis traité' });
     } else {
       console.log('⚠️ Paiement devis non confirmé:', verifyResponse.data);
       return res.json({ success: false, message: 'Paiement non confirmé' });

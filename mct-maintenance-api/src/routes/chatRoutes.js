@@ -170,7 +170,7 @@ router.get('/conversations', authenticate, async (req, res) => {
       attributes: [
         'sender_id',
         [Sequelize.fn('MAX', Sequelize.col('ChatMessage.created_at')), 'last_message_date'],
-        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN is_read = 0 AND sender_role = "customer" THEN 1 END')), 'unread_count']
+        [Sequelize.fn('COUNT', Sequelize.literal("CASE WHEN is_read = false AND sender_role = 'customer' THEN 1 END")), 'unread_count']
       ],
       include: [
         {

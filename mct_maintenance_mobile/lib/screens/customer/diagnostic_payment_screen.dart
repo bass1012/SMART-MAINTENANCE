@@ -47,62 +47,71 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         backgroundColor: const Color(0xFF0a543d),
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Information sur le diagnostic
-            _buildDiagnosticInfo(),
-            const SizedBox(height: 24),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background_tech_2.png'),
+            fit: BoxFit.cover,
+            opacity: 0.4,
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Information sur le diagnostic
+              _buildDiagnosticInfo(),
+              const SizedBox(height: 24),
 
-            // Information importante
-            _buildImportantNote(),
-            const SizedBox(height: 24),
+              // Information importante
+              _buildImportantNote(),
+              const SizedBox(height: 24),
 
-            // Information sur FineoPay
-            _buildFineoPayInfo(),
-            const SizedBox(height: 32),
+              // Information sur FineoPay
+              _buildFineoPayInfo(),
+              const SizedBox(height: 32),
 
-            // Bouton de paiement
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _processPayment,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              // Bouton de paiement
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isProcessing ? null : _processPayment,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
+                  icon: _isProcessing
+                      ? const SizedBox.shrink()
+                      : const Icon(Icons.credit_card),
+                  label: _isProcessing
+                      ? SizedBox(
+                          height: 20,
+                          child: ButtonLoadingIndicator(
+                            color: Colors.white,
+                            size: 6.0,
+                          ),
+                        )
+                      : Text(
+                          'Payer ${_formatCurrency(widget.diagnosticFee)}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
-                icon: _isProcessing
-                    ? const SizedBox.shrink()
-                    : const Icon(Icons.credit_card),
-                label: _isProcessing
-                    ? SizedBox(
-                        height: 20,
-                        child: ButtonLoadingIndicator(
-                          color: Colors.white,
-                          size: 6.0,
-                        ),
-                      )
-                    : Text(
-                        'Payer ${_formatCurrency(widget.diagnosticFee)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
               ),
-            ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // Note de sécurité
-            _buildSecurityNote(),
-          ],
+              // Note de sécurité
+              _buildSecurityNote(),
+            ],
+          ),
         ),
       ),
     );
@@ -284,6 +293,30 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
                 Image.asset('assets/images/wave.png',
                     height: 40,
                     width: 40,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Logos Cartes Bancaires
+            Row(
+              children: [
+                const SizedBox(width: 4),
+                Image.asset('assets/images/logo_visa.png',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/MasterCard_Logo.png',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => const SizedBox()),
+                const SizedBox(width: 12),
+                Image.asset('assets/images/logo_cb.jpg',
+                    height: 35,
+                    width: 50,
+                    fit: BoxFit.contain,
                     errorBuilder: (c, e, s) => const SizedBox()),
               ],
             ),

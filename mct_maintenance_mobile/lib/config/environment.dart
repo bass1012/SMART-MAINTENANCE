@@ -12,10 +12,10 @@ enum Location { office, home, ngrok }
 // - Location.home : À la maison (WiFi maison)
 // - Location.ngrok : Accès distant via ngrok (4G, autre réseau)
 const Location currentLocation =
-    Location.ngrok; // Changez en Location.ngrok pour accès distant
+    Location.office; // Changez en Location.ngrok pour accès distant
 
-// Configuration par défaut (développement)
-const Environment env = Environment.development;
+// Configuration par défaut (staging = sandbox)
+const Environment env = Environment.staging;
 
 /// Configuration de l'application
 class AppConfig {
@@ -24,7 +24,8 @@ class AppConfig {
   static const Map<Location, String> _locationIPs = {
     Location.office: '192.168.1.139', // IP du bureau
     Location.home: '192.168.1.4', // IP de la maison
-    Location.ngrok: 'https://unlanguid-lauran-nonanimatingly.ngrok-free.dev', // URL ngrok (ex: abc123.ngrok-free.app)
+    Location.ngrok:
+        'https://unlanguid-lauran-nonanimatingly.ngrok-free.dev', // URL ngrok (ex: abc123.ngrok-free.app)
   };
 
   // URL ngrok complète (à mettre à jour après chaque lancement de ngrok)
@@ -44,16 +45,16 @@ class AppConfig {
             currentLocation == Location.ngrok && ngrokUrl.isNotEmpty
                 ? ngrokUrl
                 : 'http://${_locationIPs[currentLocation]}:3000',
-        Environment.staging: 'https://staging.votreserveur.com',
-        Environment.production: 'https://api.votreserveur.com',
+        Environment.staging: 'https://api.sandbox.mct.ci',
+        Environment.production: 'https://api.mct.ci',
       };
 
   // URL spécifique pour Android (l'émulateur Android utilise 10.0.2.2 pour accéder à localhost de la machine hôte)
   static const Map<Environment, String> _androidBaseUrls = {
     Environment.development:
         'http://10.0.2.2:3000', // Pour émulateur Android uniquement
-    Environment.staging: 'https://staging.votreserveur.com',
-    Environment.production: 'https://api.votreserveur.com',
+    Environment.staging: 'https://api.sandbox.mct.ci',
+    Environment.production: 'https://api.mct.ci',
   };
 
   // Configuration des chemins d'API
@@ -123,7 +124,7 @@ class AppSecrets {
       String.fromEnvironment('FIREBASE_API_KEY');
 
   // Autres configurations spécifiques à l'application
-  static const String appName = 'MCT Maintenance';
+  static const String appName = 'Smart Maintenance';
   static const String appVersion = '1.0.0';
 }
 

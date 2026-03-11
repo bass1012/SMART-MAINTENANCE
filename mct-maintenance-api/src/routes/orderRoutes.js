@@ -1,5 +1,5 @@
 const express = require('express');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -120,7 +120,7 @@ router.patch('/:id/payment-status', (req, res, next) => {
   console.log(`   Headers:`, req.headers);
   console.log(`   Body:`, req.body);
   next();
-}, authorize('admin'), async (req, res) => {
+}, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { id } = req.params;
     const { paymentStatus } = req.body;
@@ -455,8 +455,8 @@ router.get('/:id/tracking', (req, res) => {
   });
 });
 
-// Admin order management routes
-router.get('/admin/all', authorize('admin'), (req, res) => {
+// Admin/Manager order management routes
+router.get('/admin/all', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'All orders retrieved successfully',
@@ -464,14 +464,14 @@ router.get('/admin/all', authorize('admin'), (req, res) => {
   });
 });
 
-router.put('/admin/:id/status', authorize('admin'), (req, res) => {
+router.put('/admin/:id/status', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'Order status updated successfully'
   });
 });
 
-router.put('/admin/:id/assign', authorize('admin'), (req, res) => {
+router.put('/admin/:id/assign', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'Order assigned successfully'
@@ -479,7 +479,7 @@ router.put('/admin/:id/assign', authorize('admin'), (req, res) => {
 });
 
 // Order statistics routes
-router.get('/statistics', authorize('admin'), (req, res) => {
+router.get('/statistics', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'Order statistics retrieved successfully',
@@ -494,7 +494,7 @@ router.get('/statistics', authorize('admin'), (req, res) => {
 });
 
 // Order export routes
-router.get('/export', authorize('admin'), (req, res) => {
+router.get('/export', authorize('admin', 'manager'), (req, res) => {
   res.json({
     success: true,
     message: 'Order export data retrieved successfully',

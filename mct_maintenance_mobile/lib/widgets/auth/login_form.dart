@@ -92,16 +92,34 @@ class _LoginFormState extends State<LoginForm> {
               emoji: '✅', duration: const Duration(seconds: 2));
 
           // Initialiser FCM (notifications push)
+          bool fcmSuccess = false;
           try {
             await FCMService().initialize();
             debugPrint('✅ FCM initialisé avec succès après login');
 
             // Toujours rafraîchir le token après login (même si déjà initialisé)
-            await FCMService().refreshToken();
-            debugPrint('✅ Token FCM rafraîchi après login');
+            fcmSuccess = await FCMService().refreshToken();
+            if (fcmSuccess) {
+              debugPrint('✅ Token FCM rafraîchi et envoyé au backend');
+            } else {
+              debugPrint('⚠️  Échec de l\'envoi du token FCM au backend');
+            }
           } catch (e) {
             debugPrint('⚠️  Erreur initialisation FCM: $e');
             // Continuer même si FCM échoue
+          }
+
+          // Afficher un avertissement si les notifications push ne sont pas activées
+          if (!fcmSuccess && mounted) {
+            Future.delayed(const Duration(seconds: 3), () {
+              if (mounted) {
+                SnackBarHelper.showWarning(
+                  context,
+                  'Les notifications push ne sont pas activées',
+                  duration: const Duration(seconds: 4),
+                );
+              }
+            });
           }
 
           // Rediriger en fonction du rôle (supporter anglais et français)

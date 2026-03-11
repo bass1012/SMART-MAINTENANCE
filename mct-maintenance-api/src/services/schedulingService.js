@@ -19,6 +19,8 @@ class SchedulingService {
     // Configuration
     this.MAX_DAILY_INTERVENTIONS = 6;
     this.MAX_DISTANCE_KM = 100; // Distance max acceptable
+    this.MIN_INTERVENTION_INTERVAL_MINUTES = 90; // 1h30 entre interventions
+    this.DEFAULT_INTERVENTION_DURATION_MINUTES = 90; // Durée estimée d'une intervention
   }
 
   /**
@@ -96,7 +98,7 @@ class SchedulingService {
               [Op.gte]: new Date(interventionDate),
               [Op.lt]: new Date(new Date(interventionDate).getTime() + 24 * 60 * 60 * 1000)
             },
-            status: { [Op.notIn]: ['cancelled', 'rejected'] }
+            status: { [Op.notIn]: ['cancelled', 'completed'] }
           }
         });
 
@@ -364,7 +366,7 @@ class SchedulingService {
 
   /**
    * Score 3 : Disponibilité (0-100)
-   * Vérifier conflits horaires dans calendrier
+   * Vérifier conflits horaires dans calendrier avec buffer de 1h30
    */
   async calculateAvailabilityScore(technicianId, interventionDate, interventionTime) {
     try {
@@ -387,22 +389,20 @@ class SchedulingService {
         };
       }
 
-      // Vérifier conflits horaires (simplification : 2h par intervention)
-      const requestedHour = this.parseTimeToHour(interventionTime);
-      let hasConflict = false;
+      // Vérifier conflits horaires avec buffer de 1h30 (90 minutes)
+      const timeSlotCheck = await this.checkTimeSlotAvailability(
+        technicianId,
+        interventionDate,
+        interventionTime
+      );
 
-      for (const int of existingInterventions) {
-        const startHour = this.parseTimeToHour(int.scheduled_time);
-        const endHour = startHour + 2; // Durée estimée 2h
-        
-        if (requestedHour >= startHour && requestedHour < endHour) {
-          hasConflict = true;
-          break;
-        }
-      }
-
-      if (hasConflict) {
-        return { score: 0, next_available: null };
+      if (!timeSlotCheck.available) {
+        console.log(`⚠️ Conflit horaire pour technicien ${technicianId}: ${timeSlotCheck.message}`);
+        return { 
+          score: 0, 
+          next_available: null,
+          conflict: timeSlotCheck.conflict
+        };
       }
 
       // Disponible mais déjà occupé (réduire score selon charge)
@@ -547,6 +547,128 @@ class SchedulingService {
       console.error('❌ Erreur autoAssignIntervention:', error);
       throw error;
     }
+  }
+
+  /**
+   * Vérifier si un technicien est disponible pour un créneau donné
+   * Retourne true si disponible, false si conflit temporel
+   * @param {number} technicianId - ID du technicien
+   * @param {Date|string} scheduledDate - Date de l'intervention
+   * @param {string} scheduledTime - Heure de l'intervention (HH:MM)
+   * @returns {Promise<{available: boolean, conflict: Object|null, message: string}>}
+   */
+  async checkTimeSlotAvailability(technicianId, scheduledDate, scheduledTime) {
+    try {
+      console.log('🔍 [TimeSlot] Vérification créneau pour technicien:', technicianId);
+      console.log('🔍 [TimeSlot] scheduledDate:', scheduledDate);
+      console.log('🔍 [TimeSlot] scheduledTime:', scheduledTime);
+      
+      // scheduled_date dans PostgreSQL est un timestamp avec l'heure intégrée
+      // Construire la date/heure demandée
+      let requestedDateTime;
+      if (scheduledTime) {
+        // Si on a une heure séparée, combiner date + heure
+        requestedDateTime = this.buildDateTime(scheduledDate, scheduledTime);
+      } else {
+        // Sinon, utiliser scheduled_date tel quel (c'est déjà un timestamp complet)
+        requestedDateTime = new Date(scheduledDate);
+      }
+      
+      console.log('🔍 [TimeSlot] requestedDateTime:', requestedDateTime.toISOString());
+      
+      const intervalMinutes = this.MIN_INTERVENTION_INTERVAL_MINUTES;
+      const durationMinutes = this.DEFAULT_INTERVENTION_DURATION_MINUTES;
+      
+      console.log('🔍 [TimeSlot] Intervalle minimum:', intervalMinutes, 'min, Durée:', durationMinutes, 'min');
+
+      // Calculer la fenêtre de temps pour ce jour
+      const dayStart = new Date(requestedDateTime);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      
+      console.log('🔍 [TimeSlot] Recherche interventions entre', dayStart.toISOString(), 'et', dayEnd.toISOString());
+
+      // Récupérer les interventions du technicien pour ce jour
+      const conflictingInterventions = await Intervention.findAll({
+        where: {
+          technician_id: technicianId,
+          scheduled_date: {
+            [Op.gte]: dayStart,
+            [Op.lt]: dayEnd
+          },
+          status: {
+            [Op.in]: ['assigned', 'accepted', 'on_the_way', 'in_progress']
+          }
+        },
+        order: [['scheduled_date', 'ASC']]
+      });
+      
+      console.log('🔍 [TimeSlot] Interventions trouvées:', conflictingInterventions.length);
+
+      // Vérifier chaque intervention existante pour conflit
+      for (const existingInt of conflictingInterventions) {
+        // scheduled_date contient déjà la date et l'heure
+        const existingDateTime = new Date(existingInt.scheduled_date);
+        
+        console.log('🔍 [TimeSlot] Vérification conflit avec intervention #', existingInt.id, 'à', existingDateTime.toISOString());
+        
+        // Conflit si la nouvelle intervention commence avant que la précédente ne soit finie + buffer
+        // OU si la nouvelle intervention finit après que la suivante commence
+        const newEndTime = new Date(requestedDateTime.getTime() + durationMinutes * 60 * 1000);
+
+        // Vérifie si les créneaux se chevauchent avec le buffer de 1h30
+        const conflictStart = new Date(existingDateTime.getTime() - intervalMinutes * 60 * 1000);
+        const conflictEnd = new Date(existingDateTime.getTime() + durationMinutes * 60 * 1000 + intervalMinutes * 60 * 1000);
+        
+        console.log('🔍 [TimeSlot] Fenêtre de conflit:', conflictStart.toISOString(), '-', conflictEnd.toISOString());
+        console.log('🔍 [TimeSlot] Nouvelle intervention:', requestedDateTime.toISOString(), '-', newEndTime.toISOString());
+
+        if (requestedDateTime < conflictEnd && newEndTime > conflictStart) {
+          console.log('❌ [TimeSlot] CONFLIT DÉTECTÉ!');
+          // Formater l'heure pour affichage
+          const timeStr = existingDateTime.toISOString().split('T')[1].substring(0, 5);
+          return {
+            available: false,
+            conflict: {
+              intervention_id: existingInt.id,
+              scheduled_date: existingInt.scheduled_date,
+              scheduled_time: timeStr,
+              status: existingInt.status,
+              conflict_window: {
+                start: conflictStart.toISOString(),
+                end: conflictEnd.toISOString()
+              }
+            },
+            message: `Le technicien a déjà une intervention (#${existingInt.id}) à ${timeStr}. Un délai minimum de ${intervalMinutes} minutes est requis entre les interventions.`
+          };
+        }
+      }
+
+      return {
+        available: true,
+        conflict: null,
+        message: 'Créneau disponible'
+      };
+
+    } catch (error) {
+      console.error('❌ Erreur checkTimeSlotAvailability:', error);
+      // En cas d'erreur, on autorise par défaut pour ne pas bloquer
+      return {
+        available: true,
+        conflict: null,
+        message: 'Vérification impossible, autorisé par défaut'
+      };
+    }
+  }
+
+  /**
+   * Construire un objet Date à partir de date et heure
+   */
+  buildDateTime(date, time) {
+    const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+    const timeStr = time || '09:00';
+    return new Date(`${dateStr}T${timeStr}:00`);
   }
 
   // Utilitaires
