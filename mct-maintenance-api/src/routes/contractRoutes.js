@@ -281,6 +281,15 @@ router.post('/scheduled/renewal-requests/:id/process', authenticate, authorize('
       data = {};
     }
 
+    // Vérifier que customerId est présent
+    if (!data.customerId) {
+      console.error('❌ customerId manquant dans les données de notification:', data);
+      return res.status(400).json({
+        success: false,
+        message: 'Données de notification incomplètes (customerId manquant)'
+      });
+    }
+
     // Notifier le client et renouveler si approuvé
     const notificationService = require('../services/notificationService');
     const { Subscription, Intervention } = require('../models');
@@ -295,13 +304,13 @@ router.post('/scheduled/renewal-requests/:id/process', authenticate, authorize('
         const newEndDate = new Date(newStartDate);
         newEndDate.setFullYear(newEndDate.getFullYear() + 1);
 
-        // Réinitialiser les compteurs et étendre la période
+        // Réinitialiser les compteurs et remettre en attente de paiement
         await subscription.update({
           start_date: newStartDate,
           end_date: newEndDate,
           visits_completed: 0,
-          status: 'active',
-          payment_status: 'pending', // Nouveau paiement requis
+          status: 'pending_payment', // En attente du paiement pour activation
+          payment_status: 'pending',
           first_payment_made: false,
           second_payment_made: false
         });
@@ -314,18 +323,15 @@ router.post('/scheduled/renewal-requests/:id/process', authenticate, authorize('
           }
         });
 
-        // Créer les nouvelles interventions planifiées
-        const contractSchedulingService = require('../services/contractSchedulingService');
-        await contractSchedulingService.scheduleContractVisits(subscription);
-
-        console.log(`✅ Contrat ${subscription.id} renouvelé: ${newStartDate.toISOString()} -> ${newEndDate.toISOString()}`);
+        // Les nouvelles visites seront créées lors de l'activation après paiement
+        console.log(`✅ Contrat ${subscription.id} prêt pour renouvellement: ${newStartDate.toISOString()} -> ${newEndDate.toISOString()}`);
       }
 
       await notificationService.create({
         userId: data.customerId,
         type: 'contract_renewal_approved',
         title: 'Demande de renouvellement approuvée',
-        message: `Votre demande de renouvellement pour le contrat ${data.contractReference} a été approuvée. Votre contrat est renouvelé pour une nouvelle année.`,
+        message: `Votre demande de renouvellement pour le contrat ${data.contractReference} a été approuvée. Veuillez procéder au paiement pour activer votre nouvelle période.`,
         data: { contractId: data.contractId },
         priority: 'high'
       });
