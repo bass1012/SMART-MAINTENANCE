@@ -586,7 +586,9 @@ const handleCallback = async (req, res) => {
                 quote_id: quote.id,
                 quote_reference: quote.reference,
                 intervention_id: intervention.id,
-                scheduled_date: quote.scheduled_date
+                interventionId: intervention.id,
+                scheduled_date: quote.scheduled_date,
+                role: 'technician'
               },
               priority: 'high',
               actionUrl: `/interventions/${intervention.id}`
@@ -621,7 +623,9 @@ const handleCallback = async (req, res) => {
                 quote_id: quote.id,
                 quote_reference: quote.reference,
                 intervention_id: intervention.id,
-                execute_now: true
+                interventionId: intervention.id,
+                execute_now: true,
+                role: 'technician'
               },
               priority: 'high',
               actionUrl: `/interventions/${intervention.id}`
@@ -963,6 +967,18 @@ const handleSubscriptionPayment = async (subscriptionId, reference, amount, sour
     // Premier paiement
     if (subscription.payment_status === 'paid' || subscription.first_payment_status === 'paid') {
       console.log(`ℹ️ Souscription #${subscriptionId} - premier paiement déjà effectué`);
+      
+      // Vérifier si le contrat est activé malgré le paiement
+      if (subscription.status === 'pending_payment') {
+        console.log(`⚠️ Contrat #${subscriptionId} non activé malgré paiement - Activation en cours...`);
+        const contractSchedulingService = require('../../services/contractSchedulingService');
+        try {
+          await contractSchedulingService.activateContractAfterPayment(subscriptionId, reference);
+          console.log(`✅ Contrat #${subscriptionId} activé avec succès via webhook`);
+        } catch (activationError) {
+          console.error(`⚠️ Erreur activation contrat via webhook:`, activationError.message);
+        }
+      }
       return;
     }
 
@@ -1641,7 +1657,9 @@ const verifyPaymentStatus = async (req, res) => {
                       quote_id: quote.id,
                       quote_reference: quote.reference,
                       intervention_id: intervention.id,
-                      scheduled_date: quote.scheduled_date
+                      interventionId: intervention.id,
+                      scheduled_date: quote.scheduled_date,
+                      role: 'technician'
                     },
                     priority: 'high',
                     actionUrl: `/interventions/${intervention.id}`
@@ -1675,7 +1693,9 @@ const verifyPaymentStatus = async (req, res) => {
                       quote_id: quote.id,
                       quote_reference: quote.reference,
                       intervention_id: intervention.id,
-                      execute_now: true
+                      interventionId: intervention.id,
+                      execute_now: true,
+                      role: 'technician'
                     },
                     priority: 'high',
                     actionUrl: `/interventions/${intervention.id}`
@@ -1832,9 +1852,23 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
     const firstPaymentAmount = subscription.first_payment_amount || Math.ceil(price / 2);
     const secondPaymentAmount = subscription.second_payment_amount || Math.floor(price / 2);
 
-    // Si premier paiement déjà fait, retourner le statut
+    // Si premier paiement déjà fait, vérifier si le contrat est activé
     if (subscription.first_payment_status === 'paid') {
       console.log(`✅ Souscription #${subscriptionId} - Premier paiement déjà confirmé`);
+      
+      // Si le contrat n'est pas encore activé malgré le paiement, l'activer maintenant
+      if (subscription.status === 'pending_payment') {
+        console.log(`⚠️ Contrat #${subscriptionId} non activé malgré paiement - Activation en cours...`);
+        const contractSchedulingService = require('../../services/contractSchedulingService');
+        try {
+          await contractSchedulingService.activateContractAfterPayment(subscriptionId, null);
+          await subscription.reload();
+          console.log(`✅ Contrat #${subscriptionId} activé avec succès`);
+        } catch (activationError) {
+          console.error(`⚠️ Erreur activation contrat:`, activationError.message);
+        }
+      }
+      
       return res.status(200).json({
         success: true,
         data: {

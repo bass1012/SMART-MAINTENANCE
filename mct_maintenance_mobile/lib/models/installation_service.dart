@@ -2,8 +2,9 @@ class InstallationService {
   final int id;
   final String title;
   final String model;
-  final double price;
+  final double? price;
   final String? description;
+  final String? availabilityInfo;
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -12,8 +13,9 @@ class InstallationService {
     required this.id,
     required this.title,
     required this.model,
-    required this.price,
+    this.price,
     this.description,
+    this.availabilityInfo,
     required this.isActive,
     required this.createdAt,
     required this.updatedAt,
@@ -24,8 +26,9 @@ class InstallationService {
       id: json['id'],
       title: json['title'],
       model: json['model'],
-      price: double.parse(json['price'].toString()),
+      price: json['price'] != null ? double.tryParse(json['price'].toString()) : null,
       description: json['description'],
+      availabilityInfo: json['availabilityInfo'] ?? json['availability_info'],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
       createdAt: DateTime.parse(json['createdAt'] ?? json['created_at']),
       updatedAt: DateTime.parse(json['updatedAt'] ?? json['updated_at']),
@@ -39,6 +42,7 @@ class InstallationService {
       'model': model,
       'price': price,
       'description': description,
+      'availabilityInfo': availabilityInfo,
       'isActive': isActive,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),

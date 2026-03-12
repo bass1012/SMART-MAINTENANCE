@@ -237,14 +237,16 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
   }
 
   Future<void> _selectDate(BuildContext context) async {
-    // Vérifier si c'est une réparation/dépannage (tous les jours autorisés)
+    // Vérifier si c'est une réparation/dépannage ou installation (tous les jours autorisés)
     final bool isRepair =
         _selectedType == 'repair' || _selectedType == 'Réparation';
+    final bool isInstallation = _selectedType == 'installation';
+    final bool allDaysAllowed = isRepair || isInstallation;
 
-    // Calculer la date initiale (demain ou lundi si demain est dimanche pour non-réparation)
+    // Calculer la date initiale (demain ou lundi si dimanche pour maintenance/diagnostic)
     DateTime initialDate = DateTime.now().add(const Duration(days: 1));
-    // Si la date initiale est un dimanche et ce n'est pas une réparation, avancer au lundi
-    if (!isRepair && initialDate.weekday == DateTime.sunday) {
+    // Si la date initiale est un dimanche et ce n'est pas réparation/installation, avancer au lundi
+    if (!allDaysAllowed && initialDate.weekday == DateTime.sunday) {
       initialDate = initialDate.add(const Duration(days: 1));
     }
 
@@ -259,9 +261,9 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
       confirmText: 'Confirmer',
       fieldLabelText: 'Date',
       selectableDayPredicate: (date) {
-        // Réparation: tous les jours autorisés
-        if (isRepair) return true;
-        // Autres types: Lundi-Samedi uniquement (pas dimanche)
+        // Réparation et Installation: tous les jours autorisés
+        if (allDaysAllowed) return true;
+        // Autres types (maintenance, diagnostic): Lundi-Samedi uniquement
         if (date.weekday == DateTime.sunday) return false;
         return true;
       },
@@ -277,6 +279,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     final DateTime? selectedDate = _preferredDate;
     final bool isRepair =
         _selectedType == 'repair' || _selectedType == 'Réparation';
+    final bool isInstallation = _selectedType == 'installation';
 
     final TimeOfDay? picked = await showTimePicker(
       context: context,
@@ -317,8 +320,15 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
         } else {
           errorMessage = 'Les réparations sont disponibles de 8h00 à 21h00.';
         }
+      } else if (isInstallation) {
+        // Installation: tous les jours et week-ends jusqu'à 17h
+        if (hour >= 8 && (hour < 17 || (hour == 17 && minute == 0))) {
+          isValid = true;
+        } else {
+          errorMessage = 'Les installations sont disponibles de 8h00 à 17h00.';
+        }
       } else {
-        // Maintenance, Diagnostic, Installation
+        // Maintenance, Diagnostic
         if (weekday >= DateTime.monday && weekday <= DateTime.friday) {
           // Lundi-vendredi : 8h00-17h30
           if ((hour >= 8 && hour < 17) || (hour == 17 && minute <= 30)) {
@@ -1446,6 +1456,41 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                             },
                           ),
                   ),
+                  // Afficher la disponibilité du service sélectionné
+                  if (_selectedInstallationServiceId != null) ...[
+                    Builder(builder: (context) {
+                      final selectedService = _installationServices.firstWhere(
+                        (s) => s.id == _selectedInstallationServiceId,
+                        orElse: () => _installationServices.first,
+                      );
+                      if (selectedService.availabilityInfo != null) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8, left: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.access_time,
+                                size: 16,
+                                color: Colors.orange.shade700,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  selectedService.availabilityInfo!,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    color: Colors.orange.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    }),
+                  ],
                   const SizedBox(height: 16),
                 ],
 

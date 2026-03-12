@@ -31,7 +31,7 @@ class _TechnicianInterventionsScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _tabController.addListener(_onTabChanged);
     _loadInterventions();
   }
@@ -111,19 +111,25 @@ class _TechnicianInterventionsScreenState
   }
 
   void _filterInterventions() {
-    String status;
+    List<String> statuses;
     switch (_tabController.index) {
       case 0: // Toutes
         setState(() => _filteredInterventions = _allInterventions);
         return;
-      case 1: // En attente
-        status = 'pending';
+      case 1: // Assignées (en attente d'acceptation)
+        statuses = ['assigned'];
         break;
-      case 2: // En cours
-        status = 'in_progress';
+      case 2: // Acceptées
+        statuses = ['accepted'];
         break;
-      case 3: // Terminées
-        status = 'completed';
+      case 3: // En route (on_the_way + arrived)
+        statuses = ['on_the_way', 'arrived'];
+        break;
+      case 4: // En cours
+        statuses = ['in_progress'];
+        break;
+      case 5: // Terminées
+        statuses = ['completed', 'diagnostic_submitted', 'execution_confirmed'];
         break;
       default:
         setState(() => _filteredInterventions = _allInterventions);
@@ -133,7 +139,7 @@ class _TechnicianInterventionsScreenState
     setState(() {
       _filteredInterventions = _allInterventions
           .where((intervention) =>
-              intervention != null && intervention['status'] == status)
+              intervention != null && statuses.contains(intervention['status']))
           .toList();
     });
   }
@@ -163,6 +169,8 @@ class _TechnicianInterventionsScreenState
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          padding: EdgeInsets.zero,
           indicatorColor: Colors.white,
           indicatorWeight: 3,
           labelColor: Colors.white,
@@ -175,9 +183,12 @@ class _TechnicianInterventionsScreenState
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
+          labelPadding: const EdgeInsets.symmetric(horizontal: 12),
           tabs: const [
             Tab(text: 'Toutes'),
-            Tab(text: 'En attente'),
+            Tab(text: 'Assignées'),
+            Tab(text: 'Acceptées'),
+            Tab(text: 'En route'),
             Tab(text: 'En cours'),
             Tab(text: 'Terminées'),
           ],
@@ -472,7 +483,8 @@ class _TechnicianInterventionsScreenState
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    if (status == 'pending') ...[
+                    // Bouton Accepter pour les interventions assignées
+                    if (status == 'assigned') ...[
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
@@ -511,6 +523,153 @@ class _TechnicianInterventionsScreenState
                           },
                           icon: const Icon(Icons.check_circle, size: 18),
                           label: Text('Accepter',
+                              style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                    // Bouton En route pour les interventions acceptées
+                    if (status == 'accepted') ...[
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.indigo.shade600,
+                              Colors.indigo.shade400
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.indigo.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              await _apiService
+                                  .markInterventionOnTheWay(intervention['id']);
+                              if (context.mounted) {
+                                SnackBarHelper.showSuccess(
+                                    context, 'En route vers le client',
+                                    emoji: '🚗');
+                              }
+                              _loadInterventions();
+                            } catch (e) {
+                              if (context.mounted) {
+                                SnackBarHelper.showError(context, e.toString());
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.directions_car, size: 18),
+                          label: Text('En route',
+                              style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                    // Bouton Arrivé pour les interventions en route
+                    if (status == 'on_the_way') ...[
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.purple.shade600,
+                              Colors.purple.shade400
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.purple.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              await _apiService
+                                  .markInterventionArrived(intervention['id']);
+                              if (context.mounted) {
+                                SnackBarHelper.showSuccess(
+                                    context, 'Arrivée confirmée',
+                                    emoji: '📍');
+                              }
+                              _loadInterventions();
+                            } catch (e) {
+                              if (context.mounted) {
+                                SnackBarHelper.showError(context, e.toString());
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.location_on, size: 18),
+                          label: Text('Arrivé',
+                              style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w600)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                    // Bouton Démarrer pour les interventions arrivées
+                    if (status == 'arrived') ...[
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.blue.shade600,
+                              Colors.blue.shade400
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.blue.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              await _apiService
+                                  .startIntervention(intervention['id']);
+                              if (context.mounted) {
+                                SnackBarHelper.showSuccess(
+                                    context, 'Intervention démarrée',
+                                    emoji: '🔧');
+                              }
+                              _loadInterventions();
+                            } catch (e) {
+                              if (context.mounted) {
+                                SnackBarHelper.showError(context, e.toString());
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.play_arrow, size: 18),
+                          label: Text('Démarrer',
                               style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.w600)),
                           style: ElevatedButton.styleFrom(
@@ -606,13 +765,17 @@ class _TechnicianInterventionsScreenState
                               );
                             } else {
                               // Déterminer le type d'intervention pour choisir l'écran approprié
-                              final interventionType = intervention['type']?.toString().toLowerCase() ?? '';
-                              final isDiagnostic = interventionType.contains('diagnostic') || 
-                                                   interventionType.contains('depannage') ||
-                                                   interventionType.contains('dépannage') ||
-                                                   interventionType.contains('reparation') ||
-                                                   interventionType.contains('réparation') ||
-                                                   interventionType.contains('urgence');
+                              final interventionType = intervention['type']
+                                      ?.toString()
+                                      .toLowerCase() ??
+                                  '';
+                              final isDiagnostic =
+                                  interventionType.contains('diagnostic') ||
+                                      interventionType.contains('depannage') ||
+                                      interventionType.contains('dépannage') ||
+                                      interventionType.contains('reparation') ||
+                                      interventionType.contains('réparation') ||
+                                      interventionType.contains('urgence');
 
                               Widget reportScreen;
                               if (isDiagnostic) {
@@ -648,14 +811,25 @@ class _TechnicianInterventionsScreenState
                                 ? 'Voir rapport'
                                 : () {
                                     // Déterminer le texte du bouton selon le type
-                                    final interventionType = intervention['type']?.toString().toLowerCase() ?? '';
-                                    final isDiagnostic = interventionType.contains('diagnostic') || 
-                                                         interventionType.contains('depannage') ||
-                                                         interventionType.contains('dépannage') ||
-                                                         interventionType.contains('reparation') ||
-                                                         interventionType.contains('réparation') ||
-                                                         interventionType.contains('urgence');
-                                    return isDiagnostic ? 'Créer rapport diagnostic' : 'Créer rapport';
+                                    final interventionType =
+                                        intervention['type']
+                                                ?.toString()
+                                                .toLowerCase() ??
+                                            '';
+                                    final isDiagnostic = interventionType
+                                            .contains('diagnostic') ||
+                                        interventionType
+                                            .contains('depannage') ||
+                                        interventionType
+                                            .contains('dépannage') ||
+                                        interventionType
+                                            .contains('reparation') ||
+                                        interventionType
+                                            .contains('réparation') ||
+                                        interventionType.contains('urgence');
+                                    return isDiagnostic
+                                        ? 'Créer rapport diagnostic'
+                                        : 'Créer rapport';
                                   }(),
                             style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.w600),
@@ -686,9 +860,29 @@ class _TechnicianInterventionsScreenState
 
     switch (status) {
       case 'pending':
-        gradientColors = [Colors.orange.shade600, Colors.orange.shade400];
+        gradientColors = [Colors.grey.shade600, Colors.grey.shade400];
         label = 'En attente';
         icon = Icons.schedule;
+        break;
+      case 'assigned':
+        gradientColors = [Colors.orange.shade600, Colors.orange.shade400];
+        label = 'Assignée';
+        icon = Icons.assignment_ind;
+        break;
+      case 'accepted':
+        gradientColors = [Colors.teal.shade600, Colors.teal.shade400];
+        label = 'Acceptée';
+        icon = Icons.thumb_up;
+        break;
+      case 'on_the_way':
+        gradientColors = [Colors.indigo.shade600, Colors.indigo.shade400];
+        label = 'En route';
+        icon = Icons.directions_car;
+        break;
+      case 'arrived':
+        gradientColors = [Colors.purple.shade600, Colors.purple.shade400];
+        label = 'Sur place';
+        icon = Icons.location_on;
         break;
       case 'in_progress':
         gradientColors = [Colors.blue.shade600, Colors.blue.shade400];
@@ -699,6 +893,26 @@ class _TechnicianInterventionsScreenState
         gradientColors = [Colors.green.shade600, Colors.green.shade400];
         label = 'Terminée';
         icon = Icons.check_circle;
+        break;
+      case 'diagnostic_submitted':
+        gradientColors = [Colors.cyan.shade600, Colors.cyan.shade400];
+        label = 'Diagnostic';
+        icon = Icons.description;
+        break;
+      case 'execution_confirmed':
+        gradientColors = [Colors.green.shade700, Colors.green.shade500];
+        label = 'Confirmée';
+        icon = Icons.verified;
+        break;
+      case 'cancelled':
+        gradientColors = [Colors.red.shade600, Colors.red.shade400];
+        label = 'Annulée';
+        icon = Icons.cancel;
+        break;
+      case 'rejected':
+        gradientColors = [Colors.red.shade800, Colors.red.shade600];
+        label = 'Rejetée';
+        icon = Icons.block;
         break;
       default:
         gradientColors = [Colors.grey.shade600, Colors.grey.shade400];

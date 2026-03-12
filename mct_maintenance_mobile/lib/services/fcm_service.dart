@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -18,6 +19,14 @@ class FCMService {
   final ApiService _apiService = ApiService();
   String? _fcmToken;
   bool _initialized = false;
+
+  // Stream pour notifier quand une notification est cliquée
+  final StreamController<Map<String, dynamic>> _notificationTapController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Stream des clics sur notification (pour navigation immédiate)
+  Stream<Map<String, dynamic>> get onNotificationTap =>
+      _notificationTapController.stream;
 
   /// Initialiser FCM
   Future<void> initialize() async {
@@ -282,22 +291,30 @@ class FCMService {
 
   /// Gérer le clic sur une notification FCM
   void _handleNotificationTap(RemoteMessage message) {
-    print('👆 Notification cliquée');
+    print('👆 Notification cliquée (FCM)');
     print('   Data: ${message.data}');
 
+    // Convertir les données en Map<String, dynamic>
+    final Map<String, dynamic> notificationData =
+        Map<String, dynamic>.from(message.data);
+
     // Stocker les données de la notification pour la navigation
-    _pendingNotificationData = message.data;
+    _pendingNotificationData = notificationData;
+
+    // Émettre l'événement sur le stream pour navigation immédiate
+    _notificationTapController.add(notificationData);
+    print('📢 Événement de clic émis sur le stream');
 
     // Gérer les notifications de chat
     final String? type = message.data['type'];
 
     if (type == 'chat') {
       print('   → Type: Chat - Navigation vers la page de chat');
-      _lastChatNotification = message.data;
+      _lastChatNotification = notificationData;
     } else if (type == 'maintenance_offer_created' ||
         type == 'maintenance_offer_activated') {
       print('   → Type: Offre d\'entretien - Navigation vers les offres');
-      _lastOfferNotification = message.data;
+      _lastOfferNotification = notificationData;
     }
 
     final String? actionUrl = message.data['actionUrl'];
@@ -342,6 +359,10 @@ class FCMService {
 
       // Stocker pour la navigation
       _pendingNotificationData = data;
+
+      // Émettre l'événement sur le stream pour navigation immédiate
+      _notificationTapController.add(data);
+      print('📢 Événement de clic local émis sur le stream');
 
       if (notificationType == 'chat') {
         print('   → Type: Chat - Navigation vers la page de chat');

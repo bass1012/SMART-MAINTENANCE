@@ -81,7 +81,7 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
   String get _paymentDescription {
     return _currentPaymentPhase == 1
         ? 'À la validation du contrat'
-        : 'À la dernière visite (4ème visite)';
+        : 'Après la 3ème visite';
   }
 
   @override
@@ -381,7 +381,7 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
                   _buildPaymentRow(
                     '2ème paiement (50%)',
                     _secondPaymentAmount,
-                    '4ème visite',
+                    'Après 3ème visite',
                     widget.secondPaymentStatus == 'paid'
                         ? Icons.check_circle
                         : (_currentPaymentPhase == 2
@@ -1009,7 +1009,7 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Le deuxième paiement (50%) sera demandé à la 4ème visite.',
+                                'Le deuxième paiement (50%) sera demandé après la 3ème visite.',
                                 style:
                                     TextStyle(fontSize: 12, color: Colors.blue),
                               ),

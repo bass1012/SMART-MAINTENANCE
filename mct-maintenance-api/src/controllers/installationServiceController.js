@@ -46,9 +46,9 @@ exports.createInstallationService = async (req, res) => {
   try {
     const { title, model, price, description, duration, isActive } = req.body;
 
-    if (!title || !model || !price) {
+    if (!title || !model) {
       return res.status(400).json({ 
-        message: 'Titre, modèle et prix sont obligatoires' 
+        message: 'Titre et modèle sont obligatoires' 
       });
     }
 

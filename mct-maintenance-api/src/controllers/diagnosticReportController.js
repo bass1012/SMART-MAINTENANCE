@@ -1,5 +1,6 @@
 const { DiagnosticReport, Intervention, User, CustomerProfile, Quote } = require('../models');
 const { sequelize } = require('../config/database');
+const { Op } = require('sequelize');
 const notificationService = require('../services/notificationService');
 
 /**
@@ -81,9 +82,9 @@ exports.submitReport = async (req, res) => {
 
     await transaction.commit();
 
-    // Notifier les admins qu'un nouveau rapport est disponible (après le commit)
+    // Notifier les admins et managers qu'un nouveau rapport est disponible (après le commit)
     try {
-      const admins = await User.findAll({ where: { role: 'admin' } });
+      const admins = await User.findAll({ where: { role: { [Op.in]: ['admin', 'manager'] }, status: 'active' } });
       for (const admin of admins) {
         await notificationService.create({
           userId: admin.id,
@@ -294,7 +295,7 @@ exports.updateReportStatus = async (req, res) => {
       type: 'diagnostic_report_reviewed',
       title: 'Rapport de diagnostic examiné',
       message: `Votre rapport pour l'intervention #${report.intervention_id} a été ${status === 'approved' ? 'approuvé' : 'examiné'}`,
-      data: { report_id: report.id, status },
+      data: { report_id: report.id, status, role: 'technician' },
       priority: 'medium',
       actionUrl: `/diagnostic-reports`
     });

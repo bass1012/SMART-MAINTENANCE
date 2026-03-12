@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { Op } = require('sequelize');
 const { Order, CustomerProfile, User, Intervention, Quote, DiagnosticReport } = require('../../models');
 
 // Configuration CinetPay (à mettre dans les variables d'environnement)
@@ -798,8 +799,8 @@ const handleQuoteNotification = async (req, res) => {
           });
         }
 
-        // Notifier les admins
-        const adminUsers = await User.findAll({ where: { role: 'admin' } });
+        // Notifier les admins et managers
+        const adminUsers = await User.findAll({ where: { role: { [Op.in]: ['admin', 'manager'] }, status: 'active' } });
         for (const admin of adminUsers) {
           await notificationService.create({
             userId: admin.id,
