@@ -19,7 +19,7 @@ const InstallationService = sequelize.define('InstallationService', {
   },
   price: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
+    allowNull: true,
     comment: 'Prix en FCFA'
   },
   description: {
@@ -31,6 +31,12 @@ const InstallationService = sequelize.define('InstallationService', {
     type: DataTypes.INTEGER,
     allowNull: true,
     comment: 'Durée du contrat en mois'
+  },
+  availabilityInfo: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    defaultValue: 'Tous les jours et week-ends jusqu\'à 17h',
+    comment: 'Informations de disponibilité du service'
   },
   isActive: {
     type: DataTypes.BOOLEAN,

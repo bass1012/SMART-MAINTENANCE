@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
@@ -10,6 +11,7 @@ import 'package:mct_maintenance_mobile/screens/customer/notifications_screen.dar
 import 'package:mct_maintenance_mobile/screens/auth/login_screen.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
 import 'package:mct_maintenance_mobile/services/fcm_service.dart';
+import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import '../../utils/snackbar_helper.dart';
 
@@ -25,17 +27,50 @@ class _ManagerMainScreenState extends State<ManagerMainScreen> {
   bool _isLoading = true;
   UserModel? _user;
   int _unreadNotifications = 0;
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
+    // Écouter les clics de notification en temps réel
+    _notificationSubscription = FCMService().onNotificationTap.listen((data) {
+      print('🔔 [ManagerMainScreen] Notification tap reçue via stream');
+      if (mounted) {
+        final navigationService = NotificationNavigationService();
+        navigationService.navigateFromNotification(context, data);
+      }
+    });
     // Retarder le chargement pour éviter les conflits de layout
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadDashboardData();
         _loadUnreadNotifications();
+        _checkPendingNotifications();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  /// Vérifier s'il y a une notification en attente de traitement
+  Future<void> _checkPendingNotifications() async {
+    // Attendre que le widget soit monté
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
+    final fcmService = FCMService();
+    final notificationData = fcmService.getAndClearPendingNotification();
+
+    if (notificationData != null) {
+      print('📬 [Manager] Notification en attente détectée, navigation...');
+      final navigationService = NotificationNavigationService();
+      navigationService.navigateFromNotification(context, notificationData);
+    }
   }
 
   Future<void> _loadDashboardData() async {

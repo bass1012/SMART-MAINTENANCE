@@ -19,7 +19,7 @@ const RepairService = sequelize.define('RepairService', {
   },
   price: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
+    allowNull: true,
     comment: 'Prix en FCFA'
   },
   description: {

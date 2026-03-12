@@ -2,7 +2,7 @@ class RepairService {
   final int id;
   final String title;
   final String model;
-  final double price;
+  final double? price;
   final String? description;
   final bool isActive;
   final DateTime createdAt;
@@ -12,7 +12,7 @@ class RepairService {
     required this.id,
     required this.title,
     required this.model,
-    required this.price,
+    this.price,
     this.description,
     required this.isActive,
     required this.createdAt,
@@ -24,7 +24,7 @@ class RepairService {
       id: json['id'],
       title: json['title'],
       model: json['model'],
-      price: double.parse(json['price'].toString()),
+      price: json['price'] != null ? double.tryParse(json['price'].toString()) : null,
       description: json['description'],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
       createdAt: DateTime.parse(json['createdAt'] ?? json['created_at']),

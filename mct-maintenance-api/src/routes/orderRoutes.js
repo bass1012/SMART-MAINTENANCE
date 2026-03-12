@@ -303,8 +303,9 @@ router.patch('/:id/payment-status', (req, res, next) => {
               
               console.log(`✅ Notification envoyée au technicien ${technicianId} pour l'intervention standard ${standardIntervention.id}`);
               
-              // Notifier l'admin de la nouvelle intervention créée
-              const adminUsers = await User.findAll({ where: { role: 'admin' } });
+              // Notifier les admins et managers de la nouvelle intervention créée
+              const { Op } = require('sequelize');
+              const adminUsers = await User.findAll({ where: { role: { [Op.in]: ['admin', 'manager'] }, status: 'active' } });
               for (const admin of adminUsers) {
                 await notificationService.create({
                   userId: admin.id,

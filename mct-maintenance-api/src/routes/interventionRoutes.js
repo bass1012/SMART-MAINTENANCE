@@ -93,6 +93,24 @@ router.get('/pending-diagnostic-payment',
 
 /**
  * @swagger
+ * /api/interventions/pending-confirmation:
+ *   get:
+ *     summary: Récupérer les interventions avec rapport en attente de confirmation
+ *     tags: [Interventions]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Liste des interventions avec rapport à confirmer
+ */
+router.get('/pending-confirmation', 
+  authenticate, 
+  authorize('customer'),
+  interventionController.getPendingConfirmationReports
+);
+
+/**
+ * @swagger
  * /api/interventions/{id}:
  *   get:
  *     summary: Récupérer une demande d'intervention par ID

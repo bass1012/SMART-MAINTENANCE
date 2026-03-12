@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,7 @@ import 'package:mct_maintenance_mobile/screens/customer/maintenance_offers_scree
 import 'package:mct_maintenance_mobile/screens/customer/maintenance_reports_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/quotes_contracts_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/interventions_list_screen.dart';
+import 'package:mct_maintenance_mobile/screens/customer/intervention_detail_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/equipments_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/shop_screen.dart';
 import '../admin/suggest_technicians_screen.dart';
@@ -40,10 +42,19 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
   UserModel? _user;
   DashboardStats? _stats;
   int _unreadNotifications = 0;
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
+    // Écouter les clics de notification en temps réel
+    _notificationSubscription = FCMService().onNotificationTap.listen((data) {
+      print('🔔 [CustomerMainScreen] Notification tap reçue via stream');
+      if (mounted) {
+        final navigationService = NotificationNavigationService();
+        navigationService.navigateFromNotification(context, data);
+      }
+    });
     // Retarder le chargement pour éviter les conflits de layout
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -52,8 +63,174 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
         _checkPendingNotifications();
         _checkUnratedInterventions();
         _checkPendingDiagnosticPayments();
+        _checkPendingConfirmationReports();
       }
     });
+  }
+
+  /// Vérifier s'il y a des rapports en attente de confirmation
+  Future<void> _checkPendingConfirmationReports() async {
+    print(
+        '📋 [CustomerMainScreen] Vérification rapports en attente de confirmation...');
+    // Attendre pour ne pas surcharger au démarrage (après les autres checks)
+    await Future.delayed(const Duration(milliseconds: 4000));
+
+    if (!mounted) return;
+
+    try {
+      final pendingReports = await _apiService.getPendingConfirmationReports();
+
+      print('✅ ${pendingReports.length} rapport(s) en attente de confirmation');
+
+      if (pendingReports.isNotEmpty && mounted) {
+        _showPendingConfirmationDialog(pendingReports.first);
+      }
+    } catch (e) {
+      print('❌ Erreur vérification rapports: $e');
+    }
+  }
+
+  /// Afficher le dialogue de confirmation du rapport
+  void _showPendingConfirmationDialog(Map<String, dynamic> intervention) {
+    final title = intervention['title'] ?? 'Intervention';
+    final technicianName = intervention['technician'] != null
+        ? '${intervention['technician']['first_name']} ${intervention['technician']['last_name']}'
+        : 'Technicien';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.green.shade100,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.check_circle_rounded,
+            color: Colors.green.shade700,
+            size: 48,
+          ),
+        ),
+        title: const Text(
+          'Travaux terminés',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 15,
+                    height: 1.4,
+                  ),
+                  children: [
+                    const TextSpan(text: 'Le technicien '),
+                    TextSpan(
+                      text: technicianName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const TextSpan(text: ' a terminé l\'intervention '),
+                    TextSpan(
+                      text: '"$title"',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const TextSpan(text: ' et a soumis son rapport.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.assignment_turned_in_rounded,
+                      color: Colors.orange.shade700,
+                      size: 32,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Veuillez confirmer que les travaux ont bien été réalisés et procéder au solde de l\'intervention.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.red.shade700,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Important : Le solde doit être réglé avant la dernière intervention de maintenance.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Plus tard'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              // Naviguer vers le détail de l'intervention
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => InterventionDetailScreen(
+                    intervention: intervention,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.visibility, size: 18),
+            label: const Text('Voir et solder'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0a543d),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Vérifier s'il y a des paiements de diagnostic en attente
@@ -283,6 +460,12 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
       // Silently fail pour ne pas bloquer l'interface
       print('Erreur chargement notifications: $e');
     }
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -778,7 +961,8 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                                 ),
                                 _buildQuickAction(
                                   icon: Icons.description_outlined,
-                                  title: 'Conditions Générales d\'Utilisation et de Vente',
+                                  title:
+                                      'Conditions Générales d\'Utilisation et de Vente',
                                   onTap: () {
                                     Navigator.push(
                                       context,

@@ -976,14 +976,15 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              '${service.price.toStringAsFixed(0)} FCFA',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Color(0xFF0a543d),
+            if (service.price != null)
+              Text(
+                '${service.price!.toStringAsFixed(0)} FCFA',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Color(0xFF0a543d),
+                ),
               ),
-            ),
             const SizedBox(height: 16),
             const Text(
               'En confirmant, vous acceptez les conditions générales de vente.',
@@ -1106,16 +1107,17 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              service.price == 0
-                  ? 'Gratuit'
-                  : '${service.price.toStringAsFixed(0)} FCFA',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Colors.orange,
+            if (service.price != null)
+              Text(
+                service.price == 0
+                    ? 'Gratuit'
+                    : '${service.price!.toStringAsFixed(0)} FCFA',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Colors.orange,
+                ),
               ),
-            ),
             const SizedBox(height: 16),
             const Text(
               'En confirmant, vous acceptez les conditions générales de vente.',
@@ -2243,6 +2245,29 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                           color: Colors.grey.shade600,
                         ),
                       ),
+                      if (service.availabilityInfo != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.access_time,
+                              size: 14,
+                              color: Colors.orange.shade700,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                service.availabilityInfo!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -2256,7 +2281,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${service.price.toStringAsFixed(0)} F',
+                    service.price != null ? '${service.price!.toStringAsFixed(0)} F' : '-',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -2543,9 +2568,11 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    service.price == 0
-                        ? 'Gratuit'
-                        : '${service.price.toStringAsFixed(0)} F',
+                    service.price == null
+                        ? '-'
+                        : (service.price == 0
+                            ? 'Gratuit'
+                            : '${service.price!.toStringAsFixed(0)} F'),
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

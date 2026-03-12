@@ -1503,7 +1503,7 @@ const submitReport = async (req, res, next) => {
             technicianName: technicianName,
             requiresConfirmation: 'true'
           },
-          priority: 'critical', // Priorité critique pour le son
+          priority: 'urgent', // Priorité urgente pour le son
           actionUrl: `/interventions/${id}`
         });
         console.log('✅ Client notifié (demande confirmation)');
@@ -1511,17 +1511,17 @@ const submitReport = async (req, res, next) => {
         console.log(`⚠️ Impossible de notifier le client: User non trouvé pour CustomerProfile#${interventionWithRelations.customer_id}`);
       }
 
-      // 2. Notifier tous les admins
-      console.log('👥 Recherche des admins pour notification rapport...');
+      // 2. Notifier tous les admins et managers
+      console.log('👥 Recherche des admins/managers pour notification rapport...');
       const admins = await User.findAll({
         where: { 
-          role: 'admin',
+          role: { [Op.in]: ['admin', 'manager'] },
           status: 'active'
         },
         attributes: ['id', 'email']
       });
 
-      console.log(`👥 ${admins.length} admin(s) trouvé(s)`);
+      console.log(`👥 ${admins.length} admin(s)/manager(s) trouvé(s)`);
       
       for (const admin of admins) {
         await notificationService.create({
@@ -1959,7 +1959,8 @@ const rateIntervention = async (req, res) => {
             interventionId: fullIntervention.id,
             rating: rating,
             review: review,
-            customerName: customerName
+            customerName: customerName,
+            role: 'technician'
           },
           priority: 'medium',
           actionUrl: `/rapports-interventions`
@@ -1967,10 +1968,10 @@ const rateIntervention = async (req, res) => {
         console.log('📧 Notification envoyée au technicien');
       }
 
-      // 2. Notifier tous les admins
+      // 2. Notifier tous les admins et managers
       const admins = await User.findAll({
         where: { 
-          role: 'admin',
+          role: { [Op.in]: ['admin', 'manager'] },
           status: 'active'
         }
       });
@@ -2155,6 +2156,67 @@ const getPendingDiagnosticPayments = async (req, res) => {
   }
 };
 
+/**
+ * Récupérer les interventions avec rapport en attente de confirmation
+ * @route GET /api/interventions/pending-confirmation
+ */
+const getPendingConfirmationReports = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    console.log(`🔍 Recherche interventions avec rapport en attente de confirmation pour user #${userId}`);
+
+    // Récupérer le profil client
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    
+    if (!customerProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil client non trouvé',
+      });
+    }
+
+    const customerId = customerProfile.id;
+
+    // Récupérer les interventions avec rapport soumis mais non confirmé
+    const pendingConfirmations = await Intervention.findAll({
+      where: {
+        customer_id: customerId,
+        status: 'completed',
+        report_submitted_at: { [Op.ne]: null },
+        customer_confirmed: { [Op.or]: [null, false] }
+      },
+      include: [
+        {
+          model: User,
+          as: 'technician',
+          attributes: ['id', 'first_name', 'last_name', 'phone']
+        }
+      ],
+      order: [['report_submitted_at', 'DESC']],
+      attributes: [
+        'id', 'title', 'description', 'intervention_type', 'status', 
+        'report_submitted_at', 'report_data', 'customer_confirmed',
+        'created_at', 'completed_at', 'address'
+      ]
+    });
+
+    console.log(`✅ ${pendingConfirmations.length} intervention(s) avec rapport en attente de confirmation`);
+
+    res.status(200).json({
+      success: true,
+      data: pendingConfirmations,
+      count: pendingConfirmations.length
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération des confirmations en attente:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des confirmations en attente',
+      error: error.message
+    });
+  }
+};
+
 // ==================== CONFIRMATION CLIENT ====================
 
 /**
@@ -2257,15 +2319,16 @@ const confirmInterventionCompletion = async (req, res) => {
             interventionId: interventionIdNum,
             intervention_id: interventionIdNum,
             interventionTitle: intervention.title,
-            customerId: intervention.customer_id
+            customerId: intervention.customer_id,
+            role: 'technician'
           },
           priority: 'medium',
           actionUrl: `/interventions?id=${interventionIdNum}`
         });
 
-        // Notifier les admins de la confirmation
+        // Notifier les admins et managers de la confirmation
         const admins = await User.findAll({
-          where: { role: 'admin', status: 'active' },
+          where: { role: { [Op.in]: ['admin', 'manager'] }, status: 'active' },
           attributes: ['id']
         });
 
@@ -2297,15 +2360,16 @@ const confirmInterventionCompletion = async (req, res) => {
             intervention_id: interventionIdNum,
             interventionTitle: intervention.title,
             customerId: intervention.customer_id,
-            rejectionReason: rejection_reason
+            rejectionReason: rejection_reason,
+            role: 'technician'
           },
           priority: 'high',
           actionUrl: `/interventions?id=${interventionIdNum}`
         });
 
-        // Notifier aussi les admins en cas de litige
+        // Notifier aussi les admins et managers en cas de litige
         const admins = await User.findAll({
-          where: { role: 'admin', status: 'active' },
+          where: { role: { [Op.in]: ['admin', 'manager'] }, status: 'active' },
           attributes: ['id']
         });
 
@@ -2364,7 +2428,7 @@ const confirmInterventionCompletion = async (req, res) => {
                 amount: secondPaymentAmount,
                 total: quote.total
               },
-              priority: 'critical',
+              priority: 'urgent',
               actionUrl: `/paiement/${quote.id}?step=2`
             });
             console.log(`✅ Client notifié pour le second paiement (${secondPaymentAmount} FCFA)`);
@@ -2493,6 +2557,7 @@ module.exports = {
   rateIntervention,
   getUnratedInterventions,
   getPendingDiagnosticPayments,
+  getPendingConfirmationReports,
   suggestTechnicians,
   autoAssignIntervention,
   sendPaymentLink,

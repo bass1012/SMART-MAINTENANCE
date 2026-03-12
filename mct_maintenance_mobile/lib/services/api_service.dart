@@ -1309,6 +1309,23 @@ class ApiService {
     }
   }
 
+  // Récupérer les interventions avec rapport en attente de confirmation
+  Future<List<Map<String, dynamic>>> getPendingConfirmationReports() async {
+    print('🔍 Appel API getPendingConfirmationReports...');
+    try {
+      final response = await _handleRequest(
+        'GET',
+        '/api/interventions/pending-confirmation',
+      );
+      print(
+          '📋 Réponse API pending-confirmation: ${response['data']?.length ?? 0} interventions');
+      return List<Map<String, dynamic>>.from(response['data'] ?? []);
+    } catch (e) {
+      print('❌ Erreur getPendingConfirmationReports: $e');
+      rethrow;
+    }
+  }
+
   // Télécharger la facture PDF d'une commande
   Future<List<int>> downloadInvoicePDF(int orderId) async {
     try {

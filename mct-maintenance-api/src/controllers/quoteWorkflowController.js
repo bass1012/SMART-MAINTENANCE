@@ -1,5 +1,6 @@
 const { Quote, DiagnosticReport, Intervention, User, CustomerProfile } = require('../models');
 const { sequelize } = require('../config/database');
+const { Op } = require('sequelize');
 const notificationService = require('../services/notificationService');
 
 /**
@@ -216,8 +217,8 @@ exports.acceptQuote = async (req, res) => {
 
     await transaction.commit();
 
-    // Notifier les admins
-    const admins = await User.findAll({ where: { role: 'admin' } });
+    // Notifier les admins et managers
+    const admins = await User.findAll({ where: { role: { [Op.in]: ['admin', 'manager'] }, status: 'active' } });
     for (const admin of admins) {
       await notificationService.create({
         userId: admin.id,
@@ -354,8 +355,8 @@ exports.rejectQuote = async (req, res) => {
 
     await transaction.commit();
 
-    // Notifier les admins
-    const admins = await User.findAll({ where: { role: 'admin' } });
+    // Notifier les admins et managers
+    const admins = await User.findAll({ where: { role: { [Op.in]: ['admin', 'manager'] }, status: 'active' } });
     for (const admin of admins) {
       await notificationService.create({
         userId: admin.id,

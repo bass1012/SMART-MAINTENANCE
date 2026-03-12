@@ -31,7 +31,8 @@ const notifyInterventionAssigned = async (intervention, technician) => {
     title: 'Nouvelle intervention assignée',
     message: `Une intervention vous a été assignée`,
     data: {
-      interventionId: intervention.id
+      interventionId: intervention.id,
+      role: 'technician'
     },
     priority: 'high',
     actionUrl: `/interventions` // Liste des interventions
@@ -493,7 +494,8 @@ const notifyInterventionCancelled = async (intervention, customer, technician = 
         message: `${customerName} a annulé l'intervention #${intervention.id}`,
         data: {
           interventionId: intervention.id,
-          cancelledBy
+          cancelledBy,
+          role: 'technician'
         },
         priority: 'high',
         actionUrl: `/interventions`
@@ -556,7 +558,8 @@ const notifyInterventionRescheduled = async (intervention, customer, technician,
         message: `L'intervention #${intervention.id} a été déplacée au ${formattedDate}`,
         data: {
           interventionId: intervention.id,
-          newDate
+          newDate,
+          role: 'technician'
         },
         priority: 'high',
         actionUrl: `/interventions`
