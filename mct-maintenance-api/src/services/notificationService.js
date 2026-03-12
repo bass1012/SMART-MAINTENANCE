@@ -176,25 +176,28 @@ class NotificationService {
     }
   }
 
-  // Créer une notification pour tous les admins
+  // Créer une notification pour tous les admins et managers
   async notifyAdmins(notificationData) {
     try {
-      console.log('👥 Recherche des admins actifs...');
+      console.log('👥 Recherche des admins et managers actifs...');
       const admins = await User.findAll({
-        where: { role: 'admin', status: 'active' }
+        where: { 
+          role: { [Op.in]: ['admin', 'manager'] }, 
+          status: 'active' 
+        }
       });
       
-      console.log(`👥 ${admins.length} admin(s) trouvé(s):`, admins.map(a => ({ id: a.id, email: a.email })));
+      console.log(`👥 ${admins.length} admin(s)/manager(s) trouvé(s):`, admins.map(a => ({ id: a.id, email: a.email, role: a.role })));
       
       if (admins.length === 0) {
-        console.warn('⚠️  Aucun admin actif trouvé, notifications non envoyées');
+        console.warn('⚠️  Aucun admin/manager actif trouvé, notifications non envoyées');
         return [];
       }
       
       const adminIds = admins.map(admin => admin.id);
-      console.log('📬 Envoi de notifications à', adminIds.length, 'admin(s)');
+      console.log('📬 Envoi de notifications à', adminIds.length, 'admin(s)/manager(s)');
       const result = await this.createBulk(adminIds, notificationData);
-      console.log('✅ Notifications créées pour les admins');
+      console.log('✅ Notifications créées pour les admins et managers');
       return result;
     } catch (error) {
       console.error('❌ Erreur notification admins:', error);

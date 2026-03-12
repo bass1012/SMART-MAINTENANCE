@@ -922,6 +922,27 @@ const handleShopOrderPayment = async (orderId, reference, amount) => {
           },
           priority: 'high'
         });
+        console.log(`📲 Notification de paiement envoyée au client (boutique)`);
+        
+        // Notifier les admins et managers du paiement reçu
+        const customerName = customerProfile.first_name ? 
+          `${customerProfile.first_name} ${customerProfile.last_name || ''}`.trim() : 'Un client';
+        await notificationService.notifyAdmins({
+          type: 'payment_received',
+          title: '💰 Paiement reçu (boutique)',
+          message: `Paiement de ${amount} FCFA reçu de ${customerName} (commande boutique #${orderId})`,
+          data: {
+            orderId: orderId,
+            order_id: orderId,
+            amount: parseFloat(amount),
+            paymentType: 'shop',
+            reference: reference,
+            customerId: customerProfile.id
+          },
+          priority: 'medium',
+          actionUrl: `/commandes/${orderId}`
+        });
+        console.log(`📲 Notification de paiement boutique envoyée aux admins`);
       } else {
         console.log(`⚠️ User non trouvé pour CustomerProfile #${order.customerId}`);
       }
