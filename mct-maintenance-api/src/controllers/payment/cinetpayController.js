@@ -228,7 +228,52 @@ const handleNotification = async (req, res) => {
             }
           }
 
-          // TODO: Envoyer notification au client
+          // Envoyer notification au client et aux admins
+          const notificationService = require('../../services/notificationService');
+          const { CustomerProfile } = require('../../models');
+          
+          if (order.customerId) {
+            const customerProfile = await CustomerProfile.findByPk(order.customerId);
+            const userId = customerProfile ? customerProfile.user_id : null;
+            
+            if (userId) {
+              // Notification au client
+              await notificationService.create({
+                userId: userId,
+                type: 'payment_confirmed',
+                title: '✅ Paiement confirmé',
+                message: `Votre paiement de ${order.totalAmount || order.total_amount} FCFA pour la commande #${orderId} a été confirmé.`,
+                data: {
+                  orderId: orderId,
+                  order_id: orderId,
+                  amount: order.totalAmount || order.total_amount,
+                  reference: order.reference
+                },
+                priority: 'high'
+              });
+              console.log(`📲 Notification de paiement envoyée au client`);
+              
+              // Notification aux admins et managers
+              const customerName = customerProfile.first_name ? 
+                `${customerProfile.first_name} ${customerProfile.last_name || ''}`.trim() : 'Un client';
+              await notificationService.notifyAdmins({
+                type: 'payment_received',
+                title: '💰 Paiement reçu (boutique)',
+                message: `Paiement de ${order.totalAmount || order.total_amount} FCFA reçu de ${customerName} (commande #${order.reference || orderId})`,
+                data: {
+                  orderId: orderId,
+                  order_id: orderId,
+                  amount: order.totalAmount || order.total_amount,
+                  paymentType: 'shop',
+                  reference: order.reference,
+                  customerId: customerProfile.id
+                },
+                priority: 'medium',
+                actionUrl: `/commandes/${orderId}`
+              });
+              console.log(`📲 Notification de paiement envoyée aux admins`);
+            }
+          }
         }
       }
 
@@ -492,7 +537,58 @@ const handleDiagnosticNotification = async (req, res) => {
 
           console.log(`✅ Frais de diagnostic payés pour intervention ${interventionId}`);
 
-          // TODO: Envoyer notification au client et au technicien
+          // Envoyer notification au client et au technicien
+          const notificationService = require('../../services/notificationService');
+          
+          // Notification au client
+          if (intervention.customer?.user_id) {
+            await notificationService.create({
+              userId: intervention.customer.user_id,
+              type: 'diagnostic_payment_confirmed',
+              title: '✅ Frais de diagnostic payés',
+              message: `Votre paiement des frais de diagnostic a été confirmé. Le technicien va finaliser son rapport.`,
+              data: {
+                interventionId: interventionId,
+                intervention_id: interventionId
+              },
+              priority: 'high'
+            });
+            console.log(`📲 Notification diagnostic envoyée au client`);
+          }
+          
+          // Notification au technicien
+          if (intervention.technician_id) {
+            await notificationService.create({
+              userId: intervention.technician_id,
+              type: 'diagnostic_payment_confirmed',
+              title: '💳 Frais de diagnostic payés',
+              message: `Le client a payé les frais de diagnostic pour l'intervention #${interventionId}. Vous pouvez finaliser le rapport.`,
+              data: {
+                interventionId: interventionId,
+                intervention_id: interventionId,
+                role: 'technician'
+              },
+              priority: 'high'
+            });
+            console.log(`📲 Notification diagnostic envoyée au technicien`);
+          }
+          
+          // Notification aux admins et managers
+          const customerName = intervention.customer?.first_name ? 
+            `${intervention.customer.first_name} ${intervention.customer.last_name || ''}`.trim() : 'Un client';
+          await notificationService.notifyAdmins({
+            type: 'diagnostic_payment_received',
+            title: '💰 Paiement diagnostic reçu',
+            message: `Paiement des frais de diagnostic reçu de ${customerName} (intervention #${interventionId})`,
+            data: {
+              interventionId: interventionId,
+              intervention_id: interventionId,
+              customerId: intervention.customer?.id
+            },
+            priority: 'medium',
+            actionUrl: `/interventions/${interventionId}`
+          });
+          console.log(`📲 Notification diagnostic envoyée aux admins`);
         }
       }
 
