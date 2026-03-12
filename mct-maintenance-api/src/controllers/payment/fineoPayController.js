@@ -2197,6 +2197,62 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
 
         console.log(`✅ Diagnostic intervention #${interventionId} marqué comme payé`);
 
+        // 📱 Envoyer les notifications
+        const notificationService = require('../../services/notificationService');
+        const customer = intervention.customer?.user;
+        
+        if (customer) {
+          await notificationService.create({
+            userId: customer.id,
+            type: 'diagnostic_payment_confirmed',
+            title: '✅ Paiement diagnostic confirmé',
+            message: `Votre paiement de ${matchingTransaction.amount} FCFA pour le diagnostic a été confirmé. Le technicien peut maintenant intervenir.`,
+            data: {
+              intervention_id: interventionId,
+              interventionId: parseInt(interventionId),
+              amount: parseFloat(matchingTransaction.amount),
+              reference: matchingTransaction.reference
+            },
+            priority: 'high'
+          });
+          console.log(`📲 Notification de paiement diagnostic envoyée au client`);
+        }
+        
+        // Notifier le technicien
+        if (intervention.technician_id) {
+          await notificationService.create({
+            userId: intervention.technician_id,
+            type: 'diagnostic_payment_confirmed',
+            title: '💳 Paiement diagnostic reçu',
+            message: `Le client a payé les frais de diagnostic pour l'intervention #${interventionId}. Vous pouvez procéder.`,
+            data: {
+              intervention_id: interventionId,
+              interventionId: parseInt(interventionId),
+              role: 'technician'
+            },
+            priority: 'high'
+          });
+          console.log(`📲 Notification de paiement diagnostic envoyée au technicien`);
+        }
+        
+        // Notifier les admins et managers
+        const customerName = intervention.customer ? 
+          `${intervention.customer.first_name || ''} ${intervention.customer.last_name || ''}`.trim() : 'Un client';
+        await notificationService.notifyAdmins({
+          type: 'diagnostic_payment_received',
+          title: '💰 Paiement diagnostic reçu',
+          message: `Paiement diagnostic de ${matchingTransaction.amount} FCFA reçu de ${customerName || 'client'} (intervention #${interventionId})`,
+          data: {
+            interventionId: parseInt(interventionId),
+            amount: parseFloat(matchingTransaction.amount),
+            reference: matchingTransaction.reference,
+            customerId: intervention.customer?.id
+          },
+          priority: 'medium',
+          actionUrl: `/interventions/${interventionId}`
+        });
+        console.log(`📲 Notification de paiement diagnostic envoyée aux admins`);
+
         return res.status(200).json({
           success: true,
           data: {
