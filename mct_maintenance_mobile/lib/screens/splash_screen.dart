@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/fcm_service.dart';
 
@@ -97,22 +98,35 @@ class _SplashScreenState extends State<SplashScreen>
             Navigator.pushReplacementNamed(context, '/client');
           }
         } else {
-          // Pas de données utilisateur, aller au login
+          // Pas de données utilisateur, aller au login ou onboarding
           if (mounted) {
-            Navigator.pushReplacementNamed(context, '/login');
+            await _navigateToLoginOrOnboarding();
           }
         }
       } else {
-        // Non connecté, aller au login
+        // Non connecté, vérifier onboarding
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/login');
+          await _navigateToLoginOrOnboarding();
         }
       }
     } catch (e) {
       print('❌ Erreur vérification auth: $e');
-      // En cas d'erreur, aller au login
+      // En cas d'erreur, aller au login ou onboarding
       if (mounted) {
+        await _navigateToLoginOrOnboarding();
+      }
+    }
+  }
+
+  Future<void> _navigateToLoginOrOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    final onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+
+    if (mounted) {
+      if (onboardingCompleted) {
         Navigator.pushReplacementNamed(context, '/login');
+      } else {
+        Navigator.pushReplacementNamed(context, '/onboarding');
       }
     }
   }

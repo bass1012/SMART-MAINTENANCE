@@ -909,8 +909,14 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
         return 'Paiement en attente';
       case 'active':
         return 'Actif';
-      case 'terminated':
+      case 'awaiting_second_payment':
+        return 'Paiement final requis';
+      case 'completed':
         return 'Terminé';
+      case 'used':
+        return 'Consommé';
+      case 'terminated':
+        return 'Résilié';
       default:
         return status;
     }
@@ -1134,6 +1140,12 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
         return Colors.deepOrange;
       case 'active':
         return Colors.green;
+      case 'awaiting_second_payment':
+        return Colors.blue;
+      case 'completed':
+        return Colors.teal;
+      case 'used':
+        return Colors.purple;
       case 'expired':
         return Colors.red;
       case 'terminated':

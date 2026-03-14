@@ -481,6 +481,7 @@ router.get('/technicians', async (req, res) => {
     const { count, rows } = await User.findAndCountAll({
       where: {
         role: 'technician',
+        status: { [Op.ne]: 'deleted' }, // Exclure les techniciens supprimés
         ...whereClause
       },
       include: [{

@@ -1,0 +1,8 @@
+# Configuration de signature Android
+# IMPORTANT: Ne JAMAIS commiter ce fichier !
+# Copiez ce fichier en 'key.properties' et remplissez vos valeurs
+
+storePassword=VOTRE_MOT_DE_PASSE_KEYSTORE
+keyPassword=VOTRE_MOT_DE_PASSE_CLE
+keyAlias=mct-maintenance
+storeFile=../mct-maintenance-key.jks

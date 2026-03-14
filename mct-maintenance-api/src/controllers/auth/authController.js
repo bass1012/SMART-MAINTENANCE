@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User, CustomerProfile, TechnicianProfile, EmailVerificationCode } = require('../../models');
+const { User, CustomerProfile, TechnicianProfile, EmailVerificationCode, Intervention } = require('../../models');
 const { cache } = require('../../config/redis');
 const { validationResult } = require('express-validator');
 const PasswordResetCode = require('../../models/PasswordResetCode');
@@ -1257,6 +1257,23 @@ const updateProfile = async (req, res) => {
       profile = await CustomerProfile.findOne({ where: { user_id: user.id } });
       if (profile) {
         await profile.update(profileData);
+        
+        // Si l'adresse a été mise à jour, mettre à jour les interventions en attente avec "Adresse à compléter"
+        if (profileData.address && profileData.address.trim() !== '') {
+          const updatedInterventions = await Intervention.update(
+            { address: profileData.address },
+            {
+              where: {
+                customer_id: profile.id,
+                address: 'Adresse à compléter',
+                status: { [Op.in]: ['pending', 'assigned', 'scheduled'] }
+              }
+            }
+          );
+          if (updatedInterventions[0] > 0) {
+            console.log(`📍 ${updatedInterventions[0]} intervention(s) mise(s) à jour avec la nouvelle adresse pour customer ${profile.id}`);
+          }
+        }
       }
     } else if (user.role === 'technician') {
       profile = await TechnicianProfile.findOne({ where: { user_id: user.id } });

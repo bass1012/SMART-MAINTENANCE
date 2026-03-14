@@ -12,6 +12,7 @@ class UserModel {
   final Map<String, dynamic>? preferences;
   final double? latitude;
   final double? longitude;
+  final String? address;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -37,6 +38,7 @@ class UserModel {
     this.preferences,
     this.latitude,
     this.longitude,
+    this.address,
     this.createdAt,
     this.updatedAt,
   });
@@ -71,6 +73,7 @@ class UserModel {
       latitude: _parseDouble(userData['latitude'] ?? profileData['latitude']),
       longitude:
           _parseDouble(userData['longitude'] ?? profileData['longitude']),
+      address: userData['address'] ?? profileData['address'],
       createdAt: userData['createdAt'] != null
           ? DateTime.parse(userData['createdAt'])
           : null,
@@ -95,6 +98,7 @@ class UserModel {
       'preferences': preferences,
       'latitude': latitude,
       'longitude': longitude,
+      'address': address,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };
