@@ -11,6 +11,7 @@ import '../screens/customer/contract_detail_screen.dart';
 import '../screens/customer/notifications_screen.dart';
 import '../screens/customer/subscription_payment_screen.dart';
 import '../screens/customer/contract_payment_screen.dart';
+import '../screens/customer/profile_screen.dart';
 import '../services/api_service.dart';
 import '../models/quote_contract_model.dart';
 import '../models/contract_model.dart';
@@ -116,6 +117,16 @@ class NotificationNavigationService {
       case 'contract_renewal_approved':
       case 'contract_renewal_rejected':
       case 'maintenance_reminder':
+        _navigateToContractWithReplace(navigator, notificationData);
+        break;
+
+      // Alerte adresse requise - naviguer vers le profil
+      case 'alert':
+        _navigateToProfileWithReplace(navigator, notificationData);
+        break;
+
+      // Contrat activé - naviguer vers le contrat
+      case 'contract_activated':
         _navigateToContractWithReplace(navigator, notificationData);
         break;
 
@@ -377,8 +388,10 @@ class NotificationNavigationService {
   /// Navigation vers un contrat spécifique avec remplacement
   Future<void> _navigateToContractWithReplace(
       NavigatorState navigator, Map<String, dynamic> data) async {
-    final int? contractId =
-        _parseId(data['subscriptionId']) ?? _parseId(data['subscription_id']) ?? _parseId(data['contractId']) ?? _parseId(data['contract_id']);
+    final int? contractId = _parseId(data['subscriptionId']) ??
+        _parseId(data['subscription_id']) ??
+        _parseId(data['contractId']) ??
+        _parseId(data['contract_id']);
 
     print('→ Navigation vers contrat #$contractId (replace)');
 
@@ -421,6 +434,19 @@ class NotificationNavigationService {
         ),
       );
     }
+  }
+
+  /// Navigation vers le profil (pour mise à jour adresse)
+  void _navigateToProfileWithReplace(
+      NavigatorState navigator, Map<String, dynamic> data) {
+    final String? action = data['action']?.toString();
+    print('→ Navigation vers profil (action: $action) (replace)');
+
+    navigator.pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => const ProfileScreen(),
+      ),
+    );
   }
 
   /// Navigation vers le second paiement (50% à la dernière visite)
@@ -586,10 +612,19 @@ class NotificationNavigationService {
         _navigateToContracts(context);
         break;
 
+      // Contrat activé - naviguer vers le contrat
+      case 'contract_activated':
+        _navigateToContractDetails(context, notificationData);
+        break;
+
+      // Alerte adresse requise - naviguer vers le profil
+      case 'alert':
+        _navigateToProfile(context, notificationData);
+        break;
+
       // Notifications générales
       case 'general':
       case 'announcement':
-      case 'alert':
       case 'promotion':
         // Rester sur la page de notifications
         _navigateToNotifications(context);
@@ -982,6 +1017,18 @@ class NotificationNavigationService {
       context,
       MaterialPageRoute(
         builder: (context) => const QuotesContractsScreen(),
+      ),
+    );
+  }
+
+  /// Navigation vers le profil (pour mise à jour adresse)
+  void _navigateToProfile(BuildContext context, Map<String, dynamic> data) {
+    final String? action = data['action']?.toString();
+    print('→ Navigation vers profil (action: $action)');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ProfileScreen(),
       ),
     );
   }

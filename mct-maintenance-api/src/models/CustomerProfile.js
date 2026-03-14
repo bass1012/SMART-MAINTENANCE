@@ -53,6 +53,10 @@ const CustomerProfile = sequelize.define('CustomerProfile', {
     type: DataTypes.STRING(100),
     allowNull: true
   },
+  address: {
+    type: DataTypes.STRING(500),
+    allowNull: true
+  },
   company_name: {
     type: DataTypes.STRING(255),
     allowNull: true

@@ -49,3 +49,13 @@ app.*.map.json
 **/google-services.json
 **/*.p8
 **/*.p12
+
+# Signature Android
+android/key.properties
+*.jks
+*.keystore
+
+# Environnements
+.env
+.env.*
+!.env.example

@@ -164,6 +164,9 @@ class ContractSchedulingService {
       throw new Error(`CustomerProfile non trouvé pour user_id: ${subscription.customer_id}`);
     }
 
+    // Vérifier si le client a une adresse
+    const hasAddress = customerProfile.address && customerProfile.address.trim() !== '';
+
     // Créer la première intervention maintenant
     const firstIntervention = await this.createScheduledIntervention({
       subscription,
@@ -171,7 +174,7 @@ class ContractSchedulingService {
       maintenanceOffer: subscription.offer,
       scheduled_date: subscription.first_intervention_date,
       visit_number: 1,
-      address: customerProfile.address
+      address: hasAddress ? customerProfile.address : 'Adresse à compléter'
     });
 
     // Mettre à jour le statut du contrat
@@ -186,11 +189,35 @@ class ContractSchedulingService {
 
     // Notifier le client de l'activation
     const contractTitle = subscription.offer?.title || subscription.equipment_description || 'Maintenance planifiée';
+    const paymentAmount = subscription.first_payment_amount || Math.ceil(subscription.price / 2);
+    
+    // 1. D'abord envoyer la notification de paiement confirmé
+    try {
+      await notificationService.create({
+        userId: subscription.customer_id,
+        type: 'payment_success',
+        title: '✅ Paiement confirmé',
+        message: `Votre paiement de ${paymentAmount} FCFA pour le contrat "${contractTitle}" a été confirmé.`,
+        data: {
+          subscriptionId: String(subscription.id),
+          amount: String(paymentAmount),
+          paymentType: 'subscription_first_payment',
+          reference: paymentReference || ''
+        },
+        priority: 'high',
+        actionUrl: '/contracts'
+      });
+      console.log(`✅ Notification paiement envoyée pour contrat #${subscriptionId}`);
+    } catch (paymentNotifError) {
+      console.error(`⚠️ Erreur envoi notification paiement:`, paymentNotifError.message);
+    }
+    
+    // 2. Ensuite envoyer la notification d'activation du contrat
     try {
       await notificationService.create({
         userId: subscription.customer_id,
         type: 'contract_activated',
-        title: 'Contrat activé !',
+        title: '🎉 Contrat activé !',
         message: `Votre contrat "${contractTitle}" est maintenant actif. Première visite prévue le ${subscription.first_intervention_date.toLocaleDateString('fr-FR')}.`,
         data: {
           subscriptionId: String(subscription.id),
@@ -202,6 +229,30 @@ class ContractSchedulingService {
     } catch (notifError) {
       console.error(`⚠️ Erreur envoi notification contract_activated:`, notifError.message);
     }
+    
+    // 3. Si le client n'a pas d'adresse, lui demander de la mettre à jour
+    if (!hasAddress) {
+      try {
+        await notificationService.create({
+          userId: subscription.customer_id,
+          type: 'alert',
+          title: '📍 Adresse requise',
+          message: `Veuillez mettre à jour votre adresse dans votre profil pour que nous puissions planifier votre première visite de maintenance.`,
+          data: {
+            subscriptionId: String(subscription.id),
+            interventionId: String(firstIntervention.id),
+            action: 'update_address'
+          },
+          priority: 'urgent',
+          actionUrl: '/profile'
+        });
+        console.log(`📍 Notification adresse manquante envoyée pour contrat #${subscriptionId}`);
+      } catch (addressNotifError) {
+        console.error(`⚠️ Erreur envoi notification adresse:`, addressNotifError.message);
+      }
+    }
+    
+    // Note: La notification admin est déjà envoyée par fineoPayController.js
 
     return {
       subscription,

@@ -12,12 +12,13 @@ import 'package:mct_maintenance_mobile/config/environment.dart';
 const String supportPhone = '+225 07 09 09 09 42';
 const String supportEmail = 'contact@mct.ci';
 const String supportWhatsApp = '2250709090942';
-const String facebookUrl = 'https://www.facebook.com/MCTCI';
-const String instagramUrl =
-    'https://www.instagram.com/mct.sa.1?igsh=eDZjMHhsdmN0dmMx';
+const String facebookMessengerUrl =
+    'https://m.me/Smartmaintenancebymct'; // Lien Messenger direct
+const String instagramDmUrl =
+    'https://ig.me/m/smartmaintenancebymct'; // Lien DM Instagram direct
 const String linkedinUrl =
     'https://www.linkedin.com/company/mct-maintenance-climatisation-technique/posts/?feedView=all';
-const String websiteUrl = 'https://www.mct.ci/';
+const String websiteUrl = 'https://www.smartmaintenance.ci/';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -471,26 +472,26 @@ class _SupportScreenState extends State<SupportScreen>
     }
   }
 
-  Future<void> _openFacebook() async {
-    final Uri facebookUri = Uri.parse(facebookUrl);
+  Future<void> _openFacebookMessenger() async {
+    final Uri messengerUri = Uri.parse(facebookMessengerUrl);
     try {
-      if (await canLaunchUrl(facebookUri)) {
-        await launchUrl(facebookUri, mode: LaunchMode.externalApplication);
+      if (await canLaunchUrl(messengerUri)) {
+        await launchUrl(messengerUri, mode: LaunchMode.externalApplication);
       } else {
         if (mounted) {
-          SnackBarHelper.showError(context, 'Impossible d\'ouvrir Facebook');
+          SnackBarHelper.showError(context, 'Impossible d\'ouvrir Messenger');
         }
       }
     } catch (e) {
       if (mounted) {
         SnackBarHelper.showError(
-            context, 'Erreur lors de l\'ouverture de Facebook: $e');
+            context, 'Erreur lors de l\'ouverture de Messenger: $e');
       }
     }
   }
 
-  Future<void> _openInstagram() async {
-    final Uri instagramUri = Uri.parse(instagramUrl);
+  Future<void> _openInstagramDm() async {
+    final Uri instagramUri = Uri.parse(instagramDmUrl);
     try {
       if (await canLaunchUrl(instagramUri)) {
         await launchUrl(instagramUri, mode: LaunchMode.externalApplication);
@@ -581,12 +582,12 @@ class _SupportScreenState extends State<SupportScreen>
             ),
             const SizedBox(height: 16),
             _buildSocialMediaOption(
-              icon: FontAwesomeIcons.facebook,
-              label: 'Facebook',
-              color: const Color(0xFF1877F2),
+              icon: FontAwesomeIcons.facebookMessenger,
+              label: 'Messenger',
+              color: const Color(0xFF0084FF),
               onTap: () {
                 Navigator.pop(context);
-                _openFacebook();
+                _openFacebookMessenger();
               },
             ),
             _buildSocialMediaOption(
@@ -595,7 +596,7 @@ class _SupportScreenState extends State<SupportScreen>
               color: const Color(0xFFE4405F),
               onTap: () {
                 Navigator.pop(context);
-                _openInstagram();
+                _openInstagramDm();
               },
             ),
             _buildSocialMediaOption(

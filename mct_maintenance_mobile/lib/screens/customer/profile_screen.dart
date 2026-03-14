@@ -36,6 +36,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _phoneController;
   late TextEditingController _latitudeController;
   late TextEditingController _longitudeController;
+  late TextEditingController _addressController;
 
   bool _isLoadingLocation = false;
 
@@ -48,6 +49,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _phoneController = TextEditingController();
     _latitudeController = TextEditingController();
     _longitudeController = TextEditingController();
+    _addressController = TextEditingController();
     _loadUserProfile();
   }
 
@@ -59,6 +61,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _phoneController.dispose();
     _latitudeController.dispose();
     _longitudeController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -76,6 +79,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _phoneController.text = _user?.phone ?? '';
           _latitudeController.text = _user?.latitude?.toString() ?? '';
           _longitudeController.text = _user?.longitude?.toString() ?? '';
+          _addressController.text = _user?.address ?? '';
           _isLoading = false;
         });
       }
@@ -229,17 +233,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      if (mounted) {
-        setState(() {
-          _latitudeController.text = position.latitude.toStringAsFixed(6);
-          _longitudeController.text = position.longitude.toStringAsFixed(6);
-        });
+      // Stocker les coordonnées
+      _latitudeController.text = position.latitude.toStringAsFixed(6);
+      _longitudeController.text = position.longitude.toStringAsFixed(6);
 
-        SnackBarHelper.showSuccess(
-          context,
-          'Position GPS récupérée avec succès',
-          emoji: '📍',
+      // Convertir les coordonnées en adresse via géocodage inverse
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
         );
+
+        if (placemarks.isNotEmpty && mounted) {
+          Placemark place = placemarks.first;
+          // Construire l'adresse lisible
+          String address = [
+            place.street,
+            place.subLocality,
+            place.locality,
+            place.administrativeArea,
+          ].where((e) => e != null && e.isNotEmpty).join(', ');
+
+          setState(() {
+            _addressController.text = address;
+          });
+
+          SnackBarHelper.showSuccess(
+            context,
+            'Adresse récupérée avec succès',
+            emoji: '📍',
+          );
+        }
+      } catch (e) {
+        // Si le géocodage échoue, au moins on a les coordonnées
+        if (mounted) {
+          SnackBarHelper.showWarning(
+            context,
+            'Position GPS obtenue. Vous pouvez saisir l\'adresse manuellement.',
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -299,6 +331,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final longitude = double.tryParse(_longitudeController.text.trim());
       if (longitude != null) {
         updateData['longitude'] = longitude;
+      }
+
+      // Ajouter l'adresse si présente
+      final address = _addressController.text.trim();
+      if (address.isNotEmpty) {
+        updateData['address'] = address;
       }
 
       print('📦 updateData initial: $updateData');
@@ -607,36 +645,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               const SizedBox(height: 24),
 
-                              // Géolocalisation
+                              // Localisation
                               _buildSectionTitle('Localisation'),
                               const SizedBox(height: 16),
 
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildTextField(
-                                      controller: _latitudeController,
-                                      label: 'Latitude',
-                                      icon: Icons.location_on_outlined,
-                                      enabled: false,
-                                      keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                              decimal: true),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildTextField(
-                                      controller: _longitudeController,
-                                      label: 'Longitude',
-                                      icon: Icons.location_on_outlined,
-                                      enabled: false,
-                                      keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                              decimal: true),
-                                    ),
-                                  ),
-                                ],
+                              // Champ d'adresse
+                              _buildTextField(
+                                controller: _addressController,
+                                label: 'Adresse',
+                                icon: Icons.home_outlined,
+                                enabled: _isEditing,
+                                maxLines: 2,
+                                hintText: 'Ex: Cocody, Angré 8ème Tranche...',
                               ),
 
                               if (_isEditing) ...[
@@ -756,6 +776,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                               ?.longitude
                                                               ?.toString() ??
                                                           '';
+                                                      _addressController.text =
+                                                          _user?.address ?? '';
                                                       _selectedImage = null;
                                                     });
                                                   },
@@ -972,6 +994,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required bool enabled,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
+    int maxLines = 1,
+    String? hintText,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -990,12 +1014,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         enabled: enabled,
         keyboardType: keyboardType,
         validator: validator,
+        maxLines: maxLines,
         style: GoogleFonts.poppins(
           fontSize: 15,
           color: enabled ? Colors.black87 : Colors.grey[600],
         ),
         decoration: InputDecoration(
           labelText: label,
+          hintText: hintText,
+          hintStyle: GoogleFonts.poppins(
+            color: Colors.grey[400],
+            fontSize: 14,
+          ),
           labelStyle: GoogleFonts.poppins(
             color: enabled ? const Color(0xFF0a543d) : Colors.grey[500],
           ),
