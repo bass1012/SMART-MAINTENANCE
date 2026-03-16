@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
 import '../../utils/snackbar_helper.dart';
 import '../../widgets/common/support_fab_wrapper.dart';
+import '../../models/quote_contract_model.dart';
 import 'order_detail_screen.dart';
+import 'intervention_detail_screen.dart';
+import 'quote_detail_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -25,8 +28,9 @@ class _HistoryScreenState extends State<HistoryScreen>
   List<HistoryItem> _interventions = [];
   List<HistoryItem> _orders = [];
   List<HistoryItem> _quotes = [];
-  List<Map<String, dynamic>> _ordersRawData =
-      []; // Données brutes des commandes
+  List<Map<String, dynamic>> _ordersRawData = [];
+  List<Map<String, dynamic>> _interventionsRawData = [];
+  List<Map<String, dynamic>> _quotesRawData = [];
 
   @override
   void initState() {
@@ -56,10 +60,14 @@ class _HistoryScreenState extends State<HistoryScreen>
 
       if (mounted) {
         setState(() {
+          _interventionsRawData =
+              List<Map<String, dynamic>>.from(interventionsResponse['data'] ?? []);
           _interventions = _parseInterventions(interventionsResponse);
           _ordersRawData =
               List<Map<String, dynamic>>.from(ordersResponse['data'] ?? []);
           _orders = _parseOrders(ordersResponse);
+          _quotesRawData =
+              List<Map<String, dynamic>>.from(quotesResponse['data'] ?? []);
           _quotes = _parseQuotes(quotesResponse);
           _isLoading = false;
         });
@@ -636,6 +644,67 @@ class _HistoryScreenState extends State<HistoryScreen>
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
+  void _navigateToDetails(HistoryItem item) {
+    switch (item.type) {
+      case 'intervention':
+        _navigateToInterventionDetail(item);
+        break;
+      case 'order':
+        _navigateToOrderDetail(item);
+        break;
+      case 'quote':
+        _navigateToQuoteDetail(item);
+        break;
+      default:
+        SnackBarHelper.showInfo(context, 'Type non reconnu');
+    }
+  }
+
+  void _navigateToInterventionDetail(HistoryItem item) {
+    final interventionData = _interventionsRawData.firstWhere(
+      (intervention) => intervention['id'].toString() == item.id,
+      orElse: () => {},
+    );
+
+    if (interventionData.isEmpty) {
+      SnackBarHelper.showError(
+          context, 'Impossible de charger les détails de l\'intervention');
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => InterventionDetailScreen(intervention: interventionData),
+      ),
+    );
+  }
+
+  void _navigateToQuoteDetail(HistoryItem item) {
+    final quoteData = _quotesRawData.firstWhere(
+      (quote) => quote['id'].toString() == item.id,
+      orElse: () => {},
+    );
+
+    if (quoteData.isEmpty) {
+      SnackBarHelper.showError(
+          context, 'Impossible de charger les détails du devis');
+      return;
+    }
+
+    try {
+      final quote = QuoteContract.fromJson(quoteData);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => QuoteDetailScreen(quote: quote),
+        ),
+      );
+    } catch (e) {
+      SnackBarHelper.showError(context, 'Erreur lors du chargement: $e');
+    }
+  }
+
   void _navigateToOrderDetail(HistoryItem item) {
     // Trouver les données brutes de la commande
     final orderData = _ordersRawData.firstWhere(
@@ -698,8 +767,7 @@ class _HistoryScreenState extends State<HistoryScreen>
               child: ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
-                  SnackBarHelper.showInfo(
-                      context, 'Voir les détails - À implémenter');
+                  _navigateToDetails(item);
                 },
                 icon: const Icon(Icons.visibility),
                 label: const Text('Voir les détails complets'),
