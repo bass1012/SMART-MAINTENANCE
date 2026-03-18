@@ -60,14 +60,32 @@ class _HistoryScreenState extends State<HistoryScreen>
 
       if (mounted) {
         setState(() {
-          _interventionsRawData =
-              List<Map<String, dynamic>>.from(interventionsResponse['data'] ?? []);
+          // Stocker les données brutes avec vérification de type
+          final interventionsData = interventionsResponse['data'];
+          if (interventionsData is List) {
+            _interventionsRawData =
+                interventionsData.whereType<Map<String, dynamic>>().toList();
+          } else {
+            _interventionsRawData = [];
+          }
           _interventions = _parseInterventions(interventionsResponse);
-          _ordersRawData =
-              List<Map<String, dynamic>>.from(ordersResponse['data'] ?? []);
+
+          final ordersData = ordersResponse['data'];
+          if (ordersData is List) {
+            _ordersRawData =
+                ordersData.whereType<Map<String, dynamic>>().toList();
+          } else {
+            _ordersRawData = [];
+          }
           _orders = _parseOrders(ordersResponse);
-          _quotesRawData =
-              List<Map<String, dynamic>>.from(quotesResponse['data'] ?? []);
+
+          final quotesData = quotesResponse['data'];
+          if (quotesData is List) {
+            _quotesRawData =
+                quotesData.whereType<Map<String, dynamic>>().toList();
+          } else {
+            _quotesRawData = [];
+          }
           _quotes = _parseQuotes(quotesResponse);
           _isLoading = false;
         });
@@ -89,7 +107,9 @@ class _HistoryScreenState extends State<HistoryScreen>
 
   List<HistoryItem> _parseInterventions(Map<String, dynamic> response) {
     try {
-      final List<dynamic> interventionsData = response['data'] ?? [];
+      final data = response['data'];
+      if (data == null || data is! List) return [];
+      final List<dynamic> interventionsData = data;
 
       return interventionsData.map((interventionJson) {
         return HistoryItem(
@@ -159,7 +179,9 @@ class _HistoryScreenState extends State<HistoryScreen>
 
   List<HistoryItem> _parseQuotes(Map<String, dynamic> response) {
     try {
-      final List<dynamic> quotesData = response['data'] ?? [];
+      final data = response['data'];
+      if (data == null || data is! List) return [];
+      final List<dynamic> quotesData = data;
 
       return quotesData.map((quoteJson) {
         double amount = 0.0;
@@ -205,7 +227,9 @@ class _HistoryScreenState extends State<HistoryScreen>
 
   List<HistoryItem> _parseOrders(Map<String, dynamic> response) {
     try {
-      final List<dynamic> ordersData = response['data'] ?? [];
+      final data = response['data'];
+      if (data == null || data is! List) return [];
+      final List<dynamic> ordersData = data;
 
       return ordersData.map((orderJson) {
         // Parser le montant avec plusieurs tentatives
@@ -675,7 +699,8 @@ class _HistoryScreenState extends State<HistoryScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => InterventionDetailScreen(intervention: interventionData),
+        builder: (context) =>
+            InterventionDetailScreen(intervention: interventionData),
       ),
     );
   }
