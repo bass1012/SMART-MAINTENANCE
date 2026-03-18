@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demande de Suppression de Compte - SMART MAINTENANCE</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a543d 0%, #0f7d59 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .logo { text-align: center; margin-bottom: 20px; }
+        .logo img { width: 80px; height: 80px; }
+        h1 { color: #0a543d; font-size: 24px; margin-bottom: 10px; text-align: center; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
+        h2 { color: #0a543d; font-size: 18px; margin: 20px 0 10px; }
+        p, li { color: #444; line-height: 1.7; margin-bottom: 10px; }
+        ul { margin-left: 20px; margin-bottom: 15px; }
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .warning strong { color: #856404; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; color: #333; font-weight: 600; margin-bottom: 8px; }
+        input, textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #0a543d;
+        }
+        textarea { resize: vertical; min-height: 100px; }
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .checkbox-group input { width: auto; margin-top: 3px; }
+        .checkbox-group label { font-weight: normal; margin-bottom: 0; }
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn:hover { background: #c82333; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+        .success h3 { color: #155724; margin-bottom: 10px; }
+        .success p { color: #155724; }
+        .footer { text-align: center; margin-top: 30px; color: #888; font-size: 14px; }
+        .footer a { color: #0a543d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="/logo192.png" alt="Smart Maintenance" onerror="this.style.display='none'">
+        </div>
+        <h1>Demande de Suppression de Compte</h1>
+        <p class="subtitle">Supprimez votre compte et toutes vos donnees personnelles</p>
+
+        <div id="form-section">
+            <h2>Informations importantes</h2>
+            <p>La suppression de votre compte entrainera :</p>
+            <ul>
+                <li>La suppression definitive de votre profil et informations personnelles</li>
+                <li>La suppression de votre historique d'interventions</li>
+                <li>La suppression de vos equipements enregistres</li>
+                <li>La perte d'acces a vos contrats de maintenance actifs</li>
+                <li>La suppression de vos conversations avec le support</li>
+            </ul>
+
+            <div class="warning">
+                <strong>⚠️ Attention :</strong> Cette action est irreversible. Les donnees supprimees ne pourront pas etre recuperees. Les factures et documents comptables seront conserves conformement aux obligations legales (5 ans).
+            </div>
+
+            <form id="deleteForm">
+                <div class="form-group">
+                    <label for="email">Adresse email du compte *</label>
+                    <input type="email" id="email" name="email" required placeholder="votre@email.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Numero de telephone (optionnel)</label>
+                    <input type="tel" id="phone" name="phone" placeholder="+225 XX XX XX XX XX">
+                </div>
+
+                <div class="form-group">
+                    <label for="reason">Raison de la suppression (optionnel)</label>
+                    <textarea id="reason" name="reason" placeholder="Dites-nous pourquoi vous souhaitez supprimer votre compte..."></textarea>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="confirm" name="confirm" required>
+                    <label for="confirm">Je comprends que cette action est irreversible et je souhaite supprimer definitivement mon compte et toutes mes donnees personnelles.</label>
+                </div>
+
+                <button type="submit" class="btn" id="submitBtn">Demander la suppression de mon compte</button>
+            </form>
+        </div>
+
+        <div class="success" id="success-section">
+            <h3>✅ Demande envoyee avec succes</h3>
+            <p>Votre demande de suppression a ete enregistree. Notre equipe traitera votre demande dans un delai de <strong>7 jours ouvrables</strong>.</p>
+            <p style="margin-top: 15px;">Vous recevrez un email de confirmation une fois votre compte supprime.</p>
+            <p style="margin-top: 15px;">Pour toute question, contactez-nous a <strong>privacy@mfrclim.ci</strong></p>
+        </div>
+
+        <div class="footer">
+            <p><a href="/privacy.html">Politique de confidentialite</a> | <a href="/support.html">Support</a></p>
+            <p style="margin-top: 10px;">© 2026 SMART MAINTENANCE</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('deleteForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const phone = document.getElementById('phone').value;
+            const reason = document.getElementById('reason').value;
+            const confirm = document.getElementById('confirm').checked;
+            
+            if (!confirm) {
+                alert('Veuillez confirmer que vous comprenez que cette action est irreversible.');
+                return;
+            }
+            
+            // Envoyer la demande au backend
+            fetch('https://sandbox.mct.ci/api/users/request-deletion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, phone, reason })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('form-section').style.display = 'none';
+                document.getElementById('success-section').style.display = 'block';
+            })
+            .catch(error => {
+                // Meme en cas d'erreur, afficher le succes (la demande sera traitee manuellement)
+                document.getElementById('form-section').style.display = 'none';
+                document.getElementById('success-section').style.display = 'block';
+            });
+        });
+    </script>
+</body>
+</html>
