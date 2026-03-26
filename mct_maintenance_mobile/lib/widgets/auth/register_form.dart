@@ -640,7 +640,7 @@ class _RegisterFormState extends State<RegisterForm> {
         // Email (optionnel - recommandé pour recevoir le code par email si SMS indisponible)
         _buildModernTextField(
           controller: _emailController,
-          label: 'Email (recommandé)',
+          label: 'Email (Optionnel)',
           icon: Icons.email_outlined,
           keyboardType: TextInputType.emailAddress,
           hintText: 'exemple@domaine.com',

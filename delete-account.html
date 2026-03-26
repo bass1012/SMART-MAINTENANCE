@@ -162,7 +162,7 @@
             }
             
             // Envoyer la demande au backend
-            fetch('https://sandbox.mct.ci/api/users/request-deletion', {
+            fetch('https://api.sandbox.mct.ci/api/users/request-deletion', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, phone, reason })

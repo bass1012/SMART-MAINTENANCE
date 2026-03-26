@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'dart:convert';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
 
@@ -69,6 +71,23 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     return _codeControllers.map((c) => c.text).join();
   }
 
+  /// Met à jour manuellement le statut utilisateur local à 'active'
+  Future<void> _updateLocalUserStatus(ApiService apiService) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userData = prefs.getString('user_data');
+      if (userData != null) {
+        final Map<String, dynamic> user =
+            Map<String, dynamic>.from(jsonDecode(userData));
+        user['status'] = 'active';
+        await prefs.setString('user_data', jsonEncode(user));
+        debugPrint('✅ Statut utilisateur mis à jour localement à active');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur mise à jour statut local: $e');
+    }
+  }
+
   Future<void> _verifyCode() async {
     final code = _getCode();
 
@@ -104,7 +123,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           // Se connecter automatiquement et rediriger vers le dashboard
           await Future.delayed(const Duration(seconds: 1));
           if (mounted) {
-            // Le compte est maintenant actif, on peut utiliser les tokens de l'inscription
+            // Le compte est maintenant actif
+            // Mettre à jour IMMÉDIATEMENT le statut local à 'active' pour éviter de revoir l'écran de vérification
+            await _updateLocalUserStatus(ApiService());
+
             final apiService = ApiService();
 
             debugPrint('🔄 Récupération du profil utilisateur...');
@@ -130,16 +152,21 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 }
               } else {
                 debugPrint(
-                    '⚠️ Échec récupération profil, redirection vers login');
-                // Si échec de récupération du profil, rediriger vers le login
+                    '⚠️ Échec récupération profil, mise à jour locale du statut');
+                // Mettre à jour manuellement le statut local à 'active'
+                await _updateLocalUserStatus(apiService);
                 if (mounted) {
+                  // Rediriger vers le login pour une nouvelle connexion propre
                   Navigator.of(context)
                       .pushNamedAndRemoveUntil('/login', (route) => false);
                 }
               }
             } catch (e) {
               debugPrint('❌ Erreur récupération profil: $e');
-              // En cas d'erreur, rediriger vers le login
+              // En cas d'erreur, effacer les données locales obsolètes et rediriger vers login
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('token');
+              await prefs.remove('user_data');
               if (mounted) {
                 Navigator.of(context)
                     .pushNamedAndRemoveUntil('/login', (route) => false);
@@ -274,17 +301,17 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       ),
     );
   }
-  
+
   /// Gérer le collage automatique du code SMS (auto-fill iOS/Android)
   void _handlePastedCode(String pastedCode) {
     // Nettoyer le code (garder uniquement les chiffres)
     final digits = pastedCode.replaceAll(RegExp(r'[^0-9]'), '');
-    
+
     // Remplir les champs avec les chiffres disponibles
     for (int i = 0; i < 6 && i < digits.length; i++) {
       _codeControllers[i].text = digits[i];
     }
-    
+
     // Focus sur le dernier champ rempli ou le premier vide
     final filledCount = digits.length.clamp(0, 6);
     if (filledCount >= 6) {
@@ -294,7 +321,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     } else if (filledCount > 0) {
       _focusNodes[filledCount].requestFocus();
     }
-    
+
     setState(() {
       _errorMessage = null;
     });
@@ -418,185 +445,228 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         return shouldPop ?? false;
       },
       child: Scaffold(
+        extendBodyBehindAppBar: true,
+        extendBody: true,
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: Text(widget.email.contains('@')
               ? 'Vérification Email'
               : 'Vérification SMS'),
           backgroundColor: const Color(0xFF0a543d),
         ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 20),
-
-                // Icon
-                Icon(
-                  widget.email.contains('@')
-                      ? Icons.email_outlined
-                      : Icons.sms_outlined,
-                  size: 80,
-                  color: const Color(0xFF0a543d),
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Background image - pleine page
+              Positioned.fill(
+                child: Image.asset(
+                  'assets/images/call_center.png',
+                  fit: BoxFit.cover,
                 ),
-
-                const SizedBox(height: 30),
-
-                // Title
-                Text(
-                  widget.email.contains('@')
-                      ? 'Vérifiez votre email'
-                      : 'Vérifiez votre numéro',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
+              ),
+              // Overlay semi-transparent pour lisibilité
+              Positioned.fill(
+                child: Container(
+                  color: Colors.white.withOpacity(0.85),
                 ),
+              ),
+              // Content
+              SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 20),
 
-                const SizedBox(height: 12),
-
-                // Description
-                Text(
-                  'Nous avons envoyé un code de vérification ${widget.email.contains('@') ? 'à' : 'au'}\n${widget.email}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                const SizedBox(height: 40),
-
-                // Code inputs
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(
-                    6,
-                    (index) => _buildCodeInput(index),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Error message
-                if (_errorMessage != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline,
-                            color: Colors.red, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(color: Colors.red),
+                      // Icon badge
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0a543d).withOpacity(0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            widget.email.contains('@')
+                                ? Icons.email_outlined
+                                : Icons.sms_outlined,
+                            size: 40,
+                            color: const Color(0xFF0a543d),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                const SizedBox(height: 30),
+                      const SizedBox(height: 30),
 
-                // Verify button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _verifyCode,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0a543d),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text(
-                          'Vérifier',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Resend code
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Vous n\'avez pas reçu le code ? ',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    if (_resendCountdown > 0)
+                      // Title
                       Text(
-                        'Renvoyer dans ${_resendCountdown}s',
-                        style: const TextStyle(color: Colors.grey),
-                      )
-                    else
-                      TextButton(
-                        onPressed: _isResending
-                            ? null
-                            : () => _resendCode(method: 'sms'),
-                        child: _isResending
-                            ? const SizedBox(
-                                height: 16,
-                                width: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text(
-                                'Renvoyer',
-                                style: TextStyle(
-                                  color: Color(0xFF0a543d),
-                                  fontWeight: FontWeight.bold,
+                        widget.email.contains('@')
+                            ? 'Vérifiez votre email'
+                            : 'Vérifiez votre numéro',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1a1a1a),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Description
+                      Text(
+                        'Nous avons envoyé un code de vérification ${widget.email.contains('@') ? 'à' : 'au'}\n${widget.email}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF555555),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      // Code inputs
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: List.generate(
+                          6,
+                          (index) => _buildCodeInput(index),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Error message
+                      if (_errorMessage != null)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline,
+                                  color: Colors.red, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: const TextStyle(color: Colors.red),
                                 ),
                               ),
+                            ],
+                          ),
+                        ),
+
+                      const SizedBox(height: 30),
+
+                      // Verify button
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _verifyCode,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0a543d),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white),
+                                ),
+                              )
+                            : const Text(
+                                'Vérifier',
+                                style: TextStyle(fontSize: 16),
+                              ),
                       ),
-                  ],
-                ),
 
-                // Lien "Autre option" en dessous
-                if (_resendCountdown == 0)
-                  TextButton(
-                    onPressed: _isResending ? null : _showResendOptions,
-                    child: const Text(
-                      'Autre option (Email)',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontSize: 13,
+                      const SizedBox(height: 20),
+
+                      // Resend code
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'Vous n\'avez pas reçu le code ? ',
+                            style: TextStyle(
+                                color: Color.fromARGB(255, 40, 40, 40)),
+                          ),
+                          if (_resendCountdown > 0)
+                            Text(
+                              'Renvoyer dans ${_resendCountdown}s',
+                              style: const TextStyle(
+                                  color: Color.fromARGB(255, 28, 28, 28)),
+                            )
+                          else
+                            TextButton(
+                              onPressed: _isResending
+                                  ? null
+                                  : () => _resendCode(method: 'sms'),
+                              child: _isResending
+                                  ? const SizedBox(
+                                      height: 16,
+                                      width: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Text(
+                                      'Renvoyer',
+                                      style: TextStyle(
+                                        color: Color(0xFF0a543d),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                            ),
+                        ],
                       ),
-                    ),
-                  ),
 
-                const SizedBox(height: 40),
+                      // Lien "Autre option" en dessous
+                      if (_resendCountdown == 0)
+                        TextButton(
+                          onPressed: _isResending ? null : _showResendOptions,
+                          child: const Text(
+                            'Autre option (Email)',
+                            style: TextStyle(
+                              color: Colors.blue,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
 
-                // Back to login
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text(
-                    'Retour à la connexion',
-                    style: TextStyle(color: Colors.grey),
+                      const SizedBox(height: 40),
+
+                      // Back to login
+                      TextButton(
+                        onPressed: () {
+                          // Utiliser pushNamedAndRemoveUntil pour éviter l'écran noir
+                          // car cet écran peut être ouvert via pushReplacement
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                              '/login', (route) => false);
+                        },
+                        child: const Text(
+                          'Retour à la connexion',
+                          style:
+                              TextStyle(color: Color.fromARGB(255, 37, 37, 37)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -608,16 +678,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 class _CodeInputFormatter extends TextInputFormatter {
   final int index;
   final Function(String) onPastedCode;
-  
+
   _CodeInputFormatter(this.index, this.onPastedCode);
-  
+
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
     final newText = newValue.text;
-    
+
     // Si plusieurs chiffres sont collés (auto-fill SMS)
     if (newText.length > 1) {
       // Appeler le callback pour distribuer le code dans tous les champs
@@ -631,12 +701,12 @@ class _CodeInputFormatter extends TextInputFormatter {
         selection: const TextSelection.collapsed(offset: 1),
       );
     }
-    
+
     // Comportement normal: garder un seul caractère
     if (newText.length <= 1) {
       return newValue;
     }
-    
+
     return TextEditingValue(
       text: newText[0],
       selection: const TextSelection.collapsed(offset: 1),

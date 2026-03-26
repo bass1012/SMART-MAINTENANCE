@@ -13,11 +13,26 @@ router.get('/', authenticate, authorize('admin', 'manager'), async (req, res) =>
       order: [['price', 'ASC']]
     });
     
-    console.log(`✅ Found ${offers.length} maintenance offers`);
+    // Transformer les offres pour s'assurer que features est un tableau
+    const transformedOffers = offers.map(offer => {
+      const plainOffer = offer.toJSON();
+      // S'assurer que features est un tableau (parser si c'est une chaîne JSON)
+      if (typeof plainOffer.features === 'string') {
+        try {
+          plainOffer.features = JSON.parse(plainOffer.features);
+        } catch {
+          plainOffer.features = [];
+        }
+      }
+      plainOffer.features = plainOffer.features || [];
+      return plainOffer;
+    });
+    
+    console.log(`✅ Found ${transformedOffers.length} maintenance offers`);
     
     res.json({
       success: true,
-      data: offers,
+      data: transformedOffers,
       message: 'Offres récupérées avec succès'
     });
   } catch (error) {
@@ -45,11 +60,22 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req, res)
       });
     }
     
-    console.log(`✅ Offer found: ${offer.title}`);
+    // Transformer l'offre pour s'assurer que features est un tableau
+    const plainOffer = offer.toJSON();
+    if (typeof plainOffer.features === 'string') {
+      try {
+        plainOffer.features = JSON.parse(plainOffer.features);
+      } catch {
+        plainOffer.features = [];
+      }
+    }
+    plainOffer.features = plainOffer.features || [];
+    
+    console.log(`✅ Offer found: ${plainOffer.title}, features: ${plainOffer.features.length}`);
     
     res.json({
       success: true,
-      data: offer,
+      data: plainOffer,
       message: 'Offre récupérée avec succès'
     });
   } catch (error) {

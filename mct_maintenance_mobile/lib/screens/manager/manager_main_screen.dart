@@ -13,6 +13,7 @@ import 'package:mct_maintenance_mobile/services/api_service.dart';
 import 'package:mct_maintenance_mobile/services/fcm_service.dart';
 import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
+import 'package:mct_maintenance_mobile/utils/responsive_helper.dart';
 import '../../utils/snackbar_helper.dart';
 
 class ManagerMainScreen extends StatefulWidget {
@@ -248,72 +249,84 @@ class _ManagerMainScreenState extends State<ManagerMainScreen> {
 
                     // Grille de fonctionnalités
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: GridView.count(
+                      padding: EdgeInsets.symmetric(
+                        horizontal:
+                            ResponsiveHelper.getHorizontalPadding(context)
+                                .clamp(16, 32),
+                      ),
+                      child: GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 16,
-                        crossAxisSpacing: 16,
-                        childAspectRatio: 1.1,
-                        children: [
-                          _buildFeatureCard(
-                            context,
-                            icon: Icons.engineering,
-                            title: 'Interventions',
-                            color: const Color(0xFF1565C0),
-                            onTap: () {
-                              Navigator.push(
+                        gridDelegate:
+                            ResponsiveHelper.buildServiceGridDelegate(context),
+                        itemCount: 4,
+                        itemBuilder: (context, index) {
+                          switch (index) {
+                            case 0:
+                              return _buildFeatureCard(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const InterventionsListScreen(),
-                                ),
+                                icon: Icons.engineering,
+                                title: 'Interventions',
+                                color: const Color(0xFF1565C0),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const InterventionsListScreen(),
+                                    ),
+                                  );
+                                },
                               );
-                            },
-                          ),
-                          _buildFeatureCard(
-                            context,
-                            icon: Icons.report_problem_outlined,
-                            title: 'Réclamations',
-                            color: const Color(0xFFE53935),
-                            onTap: () {
-                              Navigator.push(
+                            case 1:
+                              return _buildFeatureCard(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const ComplaintsScreen(),
-                                ),
+                                icon: Icons.report_problem_outlined,
+                                title: 'Réclamations',
+                                color: const Color(0xFFE53935),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const ComplaintsScreen(),
+                                    ),
+                                  );
+                                },
                               );
-                            },
-                          ),
-                          _buildFeatureCard(
-                            context,
-                            icon: Icons.receipt_long_outlined,
-                            title: 'Factures',
-                            color: const Color(0xFF43A047),
-                            onTap: () {
-                              Navigator.push(
+                            case 2:
+                              return _buildFeatureCard(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (context) => const InvoicesScreen(),
-                                ),
+                                icon: Icons.receipt_long_outlined,
+                                title: 'Factures',
+                                color: const Color(0xFF43A047),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const InvoicesScreen(),
+                                    ),
+                                  );
+                                },
                               );
-                            },
-                          ),
-                          _buildFeatureCard(
-                            context,
-                            icon: Icons.bar_chart,
-                            title: 'Statistiques',
-                            color: const Color(0xFF7B1FA2),
-                            onTap: () {
-                              SnackBarHelper.showInfo(
+                            case 3:
+                              return _buildFeatureCard(
                                 context,
-                                'Statistiques - Bientôt disponible',
+                                icon: Icons.bar_chart,
+                                title: 'Statistiques',
+                                color: const Color(0xFF7B1FA2),
+                                onTap: () {
+                                  SnackBarHelper.showInfo(
+                                    context,
+                                    'Statistiques - Bientôt disponible',
+                                  );
+                                },
                               );
-                            },
-                          ),
-                        ],
+                            default:
+                              return const SizedBox.shrink();
+                          }
+                        },
                       ),
                     ),
                     const SizedBox(height: 32),

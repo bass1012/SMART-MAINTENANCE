@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
 import 'package:mct_maintenance_mobile/models/dashboard_stats_model.dart';
+import 'package:mct_maintenance_mobile/utils/responsive_helper.dart';
 import 'package:mct_maintenance_mobile/screens/customer/complaints_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/maintenance_offers_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/maintenance_reports_screen.dart';
@@ -28,6 +30,7 @@ import 'package:mct_maintenance_mobile/services/api_service.dart';
 import 'package:mct_maintenance_mobile/services/fcm_service.dart';
 import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
+import 'package:mct_maintenance_mobile/widgets/common/responsive_background.dart';
 
 class CustomerMainScreen extends StatefulWidget {
   const CustomerMainScreen({super.key});
@@ -518,501 +521,673 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
       ),
       body: _isLoading
           ? const Center(child: LoadingIndicator())
-          : Container(
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: const AssetImage(
-                      'assets/images/Maintenancier_SMART_Maintenance.png'),
-                  fit: BoxFit.cover,
-                  colorFilter: ColorFilter.mode(
-                    Colors.black.withOpacity(0.4),
-                    BlendMode.darken,
-                  ),
-                ),
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFF0a543d).withOpacity(0.30),
-                      const Color(0xFF0d6b4d).withOpacity(0.30),
-                      const Color(0xFF0f7d59).withOpacity(0.30),
-                      Colors.white.withOpacity(0.5),
-                    ],
-                    stops: const [0.0, 0.3, 0.5, 0.8],
-                  ),
-                ),
-                child: RefreshIndicator(
-                  onRefresh: _loadDashboardData,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // En-tête moderne avec effet glassmorphism
-                        Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Colors.white.withOpacity(0.1),
-                                Colors.white.withOpacity(0.05),
-                              ],
-                            ),
-                            borderRadius: const BorderRadius.only(
-                              bottomLeft: Radius.circular(32),
-                              bottomRight: Radius.circular(32),
-                            ),
+          : ResponsiveBackground(
+              imagePath: 'assets/images/Maintenancier_SMART_Maintenance.png',
+              imageOpacity: 0.5,
+              showGradient: true,
+              gradientColors: [
+                const Color(0xFF0a543d).withOpacity(0.30),
+                const Color(0xFF0d6b4d).withOpacity(0.30),
+                const Color(0xFF0f7d59).withOpacity(0.30),
+                Colors.white.withOpacity(0.5),
+              ],
+              gradientStops: const [0.0, 0.3, 0.5, 0.8],
+              child: RefreshIndicator(
+                onRefresh: _loadDashboardData,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // En-tête moderne avec effet glassmorphism
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withOpacity(0.1),
+                              Colors.white.withOpacity(0.05),
+                            ],
                           ),
-                          child: SafeArea(
-                            bottom: false,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 16),
-                                  // Carte de bienvenue glassmorphism
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.30),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.2),
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                Colors.white.withOpacity(0.2),
-                                            borderRadius:
-                                                BorderRadius.circular(14),
-                                          ),
-                                          child: const Icon(
-                                            Icons.waving_hand,
-                                            color: Colors.white,
-                                            size: 32,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'Bonjour,',
-                                                style: GoogleFonts.poppins(
-                                                  fontSize: 14,
-                                                  color: Colors.white
-                                                      .withOpacity(0.9),
-                                                  fontWeight: FontWeight.w400,
-                                                ),
-                                              ),
-                                              Text(
-                                                _user?.firstName ?? 'Client',
-                                                style: GoogleFonts.poppins(
-                                                  fontSize: 22,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(32),
+                            bottomRight: Radius.circular(32),
                           ),
                         ),
-
-                        const SizedBox(height: 24),
-
-                        // Bannière défilante - Horaires service client
-                        _buildScrollingBanner(),
-
-                        const SizedBox(height: 24),
-
-                        // Grille des fonctionnalités
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            'Services',
-                            style: GoogleFonts.poppins(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  offset: const Offset(0, 2),
-                                  blurRadius: 4,
+                        child: SafeArea(
+                          bottom: false,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 16),
+                                // Carte de bienvenue liquid glass
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(22),
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(
+                                        sigmaX: 15, sigmaY: 15),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            Colors.white.withOpacity(0.85),
+                                            Colors.white.withOpacity(0.65),
+                                            const Color(0xFF0a543d)
+                                                .withOpacity(0.05),
+                                          ],
+                                          stops: const [0.0, 0.6, 1.0],
+                                        ),
+                                        borderRadius: BorderRadius.circular(22),
+                                        border: Border.all(
+                                          color: Colors.white.withOpacity(0.7),
+                                          width: 1.5,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.08),
+                                            blurRadius: 20,
+                                            offset: const Offset(0, 10),
+                                          ),
+                                          BoxShadow(
+                                            color:
+                                                Colors.white.withOpacity(0.5),
+                                            blurRadius: 6,
+                                            offset: const Offset(-2, -2),
+                                            spreadRadius: -4,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              gradient: const LinearGradient(
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                                colors: [
+                                                  Color(0xFF0d6b4d),
+                                                  Color(0xFF0a543d),
+                                                ],
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: Colors.white
+                                                    .withOpacity(0.2),
+                                                width: 1,
+                                              ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(0xFF0a543d)
+                                                      .withOpacity(0.35),
+                                                  blurRadius: 10,
+                                                  offset: const Offset(0, 5),
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Icon(
+                                              Icons.waving_hand,
+                                              color: Colors.white,
+                                              size: 32,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Bonjour,',
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 14,
+                                                    color:
+                                                        const Color(0xFF0a543d),
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  _user?.firstName ?? 'Client',
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 22,
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        const Color(0xFF0a543d),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: GridView.count(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                            children: [
-                              // Première ligne de cartes
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.engineering_outlined,
-                                title: 'Nos Offres',
-                                color: const Color(0xFF0a543d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const MaintenanceOffersScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.engineering,
-                                title: 'Planifier une Intervention',
-                                color: const Color(0xFF0a543d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const InterventionsListScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.description_outlined,
-                                title: 'Devis et Contrat',
-                                color: const Color(0xFF0d6b4d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const QuotesContractsScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
+                      ),
 
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.shopping_cart_outlined,
-                                title: 'Boutique',
-                                color: const Color(0xFF0d6b4d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const ShopScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                              // Deuxième ligne de cartes
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.report_problem_outlined,
-                                title: 'Réclamation',
-                                color: const Color(0xFF0d6b4d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const ComplaintsScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                              // Troisième ligne de cartes
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.devices_other,
-                                title: 'Mes équipements',
-                                color: const Color(0xFF0a543d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const EquipmentsScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
+                      const SizedBox(height: 24),
 
-                              // Quatrième ligne de cartes
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.history,
-                                title: 'Historique',
-                                color: const Color(0xFF0a543d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const HistoryScreen(
-                                        initialTabIndex:
-                                            0, // Ouvrir sur le premier onglet (Interventions)
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              _buildFeatureCard(
-                                context,
-                                icon: Icons.verified_user,
-                                title: 'Garantie',
-                                color: const Color(0xFF0d6b4d),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const WarrantyScreen(),
-                                    ),
-                                  );
-                                },
+                      // Bannière défilante - Horaires service client
+                      _buildScrollingBanner(),
+
+                      const SizedBox(height: 24),
+
+                      // Grille des fonctionnalités
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal:
+                              ResponsiveHelper.getHorizontalPadding(context)
+                                  .clamp(24.0, 48.0),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0a543d),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF0a543d).withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
                               ),
                             ],
                           ),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // Section des statistiques (déplacée ici)
-                        if (_stats != null) ...[
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Text(
-                              'Mes Statistiques',
-                              style: GoogleFonts.poppins(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    context,
-                                    icon: Icons.build_circle_outlined,
-                                    title: 'Interventions',
-                                    value: '${_stats!.totalInterventions}',
-                                    subtitle:
-                                        '${_stats!.pendingInterventions} en cours',
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    context,
-                                    icon: Icons.description_outlined,
-                                    title: 'Devis',
-                                    value: '${_stats!.totalQuotes}',
-                                    subtitle:
-                                        '${_stats!.pendingQuotes} en attente',
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    context,
-                                    icon: Icons.shopping_bag_outlined,
-                                    title: 'Commandes',
-                                    value: '${_stats!.totalOrders}',
-                                    subtitle: 'Total',
-                                    color: Colors.orange,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                        ],
-
-                        // Section des actions rapides
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Text(
-                            'Actions Rapides',
+                            'Services',
                             style: GoogleFonts.poppins(
-                              fontSize: 20,
+                              fontSize:
+                                  ResponsiveHelper.getHeaderFontSize(context),
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  offset: const Offset(0, 2),
-                                  blurRadius: 4,
-                                ),
-                              ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.95),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.6),
-                                width: 1.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      const Color(0xFF0a543d).withOpacity(0.12),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
-                                  spreadRadius: 0,
-                                ),
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                _buildQuickAction(
-                                  icon: Icons.receipt_long_outlined,
-                                  title: 'Voir mes factures',
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const InvoicesScreen(),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20),
-                                  child: Divider(
-                                    height: 1,
-                                    color: Colors.grey.shade200,
-                                  ),
-                                ),
-                                _buildQuickAction(
-                                  icon: Icons.help_outline,
-                                  title: 'FAQ',
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => const FAQScreen(),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20),
-                                  child: Divider(
-                                    height: 1,
-                                    color: Colors.grey.shade200,
-                                  ),
-                                ),
-                                _buildQuickAction(
-                                  icon: Icons.description_outlined,
-                                  title:
-                                      'Conditions Générales d\'Utilisation et de Vente',
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const CGUCGVScreen(),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                // Bouton test suggestions pour admins uniquement
-                                if (_user?.role == 'admin') ...[
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 20),
-                                    child: Divider(
-                                      height: 1,
-                                      color: Colors.grey.shade200,
-                                    ),
-                                  ),
-                                  _buildQuickAction(
-                                    icon: Icons.person_search,
-                                    title: '🧪 Test Suggestions Techniciens',
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const SuggestTechniciansScreen(
-                                            interventionId: 122,
-                                            interventionTitle:
-                                                'Intervention test - Non assignée',
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal:
+                              ResponsiveHelper.getHorizontalPadding(context)
+                                  .clamp(24, 48),
                         ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
+                        child: GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              ResponsiveHelper.buildServiceGridDelegate(
+                                  context),
+                          itemCount: 8,
+                          itemBuilder: (context, index) {
+                            return _buildServiceItemAtIndex(context, index);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Section des statistiques (responsive)
+                      ..._buildStatisticsSection(),
+
+                      // Section des actions rapides
+                      ..._buildQuickActionsSection(),
+
+                      const SizedBox(height: 24),
+                    ],
                   ),
                 ),
               ),
             ),
     );
+  }
+
+  /// Build service card at given index
+  Widget _buildServiceItemAtIndex(BuildContext context, int index) {
+    switch (index) {
+      case 0:
+        return _buildFeatureCard(
+          context,
+          icon: Icons.engineering_outlined,
+          title: 'Nos Offres',
+          color: const Color(0xFF0a543d),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MaintenanceOffersScreen(),
+              ),
+            );
+          },
+        );
+      case 1:
+        return _buildFeatureCard(
+          context,
+          icon: Icons.engineering,
+          title: 'Planifier une Intervention',
+          color: const Color(0xFF0a543d),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const InterventionsListScreen(),
+              ),
+            );
+          },
+        );
+      case 2:
+        return _buildFeatureCard(
+          context,
+          icon: Icons.description_outlined,
+          title: 'Devis et Contrat',
+          color: const Color(0xFF0d6b4d),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const QuotesContractsScreen(),
+              ),
+            );
+          },
+        );
+      case 3:
+        return _buildFeatureCard(
+          context,
+          icon: Icons.shopping_cart_outlined,
+          title: 'Boutique',
+          color: const Color(0xFF0d6b4d),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ShopScreen(),
+              ),
+            );
+          },
+        );
+      case 4:
+        return _buildFeatureCard(
+          context,
+          icon: Icons.report_problem_outlined,
+          title: 'Réclamation',
+          color: const Color(0xFF0d6b4d),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ComplaintsScreen(),
+              ),
+            );
+          },
+        );
+      case 5:
+        return _buildFeatureCard(
+          context,
+          icon: Icons.devices_other,
+          title: 'Mes équipements',
+          color: const Color(0xFF0a543d),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const EquipmentsScreen(),
+              ),
+            );
+          },
+        );
+      case 6:
+        return _buildFeatureCard(
+          context,
+          icon: Icons.history,
+          title: 'Historique',
+          color: const Color(0xFF0a543d),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const HistoryScreen(
+                  initialTabIndex: 0,
+                ),
+              ),
+            );
+          },
+        );
+      case 7:
+        return _buildFeatureCard(
+          context,
+          icon: Icons.verified_user,
+          title: 'Garantie',
+          color: const Color(0xFF0d6b4d),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const WarrantyScreen(),
+              ),
+            );
+          },
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  /// Section des statistiques (affichage responsive)
+  List<Widget> _buildStatisticsSection() {
+    if (_stats == null) return [];
+
+    return [
+      Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal:
+              ResponsiveHelper.getHorizontalPadding(context).clamp(24.0, 48.0),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0a543d),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0a543d).withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Text(
+            'Mes Statistiques',
+            style: GoogleFonts.poppins(
+              fontSize: ResponsiveHelper.getHeaderFontSize(context),
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal:
+              ResponsiveHelper.getHorizontalPadding(context).clamp(24.0, 48.0),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Sur tablettes et grands écrans, afficher en grille
+            if (constraints.maxWidth > 600) {
+              return Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      context,
+                      icon: Icons.build_circle_outlined,
+                      title: 'Interventions',
+                      value: '${_stats!.totalInterventions}',
+                      subtitle: '${_stats!.pendingInterventions} en cours',
+                      color: Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildStatCard(
+                      context,
+                      icon: Icons.description_outlined,
+                      title: 'Devis',
+                      value: '${_stats!.totalQuotes}',
+                      subtitle: '${_stats!.pendingQuotes} en attente',
+                      color: Colors.green,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildStatCard(
+                      context,
+                      icon: Icons.shopping_bag_outlined,
+                      title: 'Commandes',
+                      value: '${_stats!.totalOrders}',
+                      subtitle: 'Total',
+                      color: Colors.orange,
+                    ),
+                  ),
+                ],
+              );
+            }
+            // Sur téléphones, deux lignes
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        context,
+                        icon: Icons.build_circle_outlined,
+                        title: 'Interventions',
+                        value: '${_stats!.totalInterventions}',
+                        subtitle: '${_stats!.pendingInterventions} en cours',
+                        color: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatCard(
+                        context,
+                        icon: Icons.description_outlined,
+                        title: 'Devis',
+                        value: '${_stats!.totalQuotes}',
+                        subtitle: '${_stats!.pendingQuotes} en attente',
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        context,
+                        icon: Icons.shopping_bag_outlined,
+                        title: 'Commandes',
+                        value: '${_stats!.totalOrders}',
+                        subtitle: 'Total',
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      const SizedBox(height: 24),
+    ];
+  }
+
+  /// Section des actions rapides (responsive)
+  List<Widget> _buildQuickActionsSection() {
+    final horizontalPadding =
+        ResponsiveHelper.getHorizontalPadding(context).clamp(24.0, 48.0);
+
+    return [
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0a543d),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0a543d).withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Text(
+            'Actions Rapides',
+            style: GoogleFonts.poppins(
+              fontSize: ResponsiveHelper.getHeaderFontSize(context),
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Liste des actions rapides
+            final actions = [
+              _buildQuickAction(
+                icon: Icons.receipt_long_outlined,
+                title: 'Voir mes factures',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const InvoicesScreen(),
+                    ),
+                  );
+                },
+              ),
+              _buildQuickAction(
+                icon: Icons.help_outline,
+                title: 'FAQ',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const FAQScreen(),
+                    ),
+                  );
+                },
+              ),
+              _buildQuickAction(
+                icon: Icons.description_outlined,
+                title: 'CGU / CGV',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CGUCGVScreen(),
+                    ),
+                  );
+                },
+              ),
+            ];
+
+            // Sur tablette landscape / grand écran, afficher en grille horizontale
+            if (constraints.maxWidth > 700) {
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.white.withOpacity(0.9),
+                          Colors.white.withOpacity(0.75),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.7),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0a543d).withOpacity(0.1),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Wrap(
+                      spacing: 8,
+                      children: actions
+                          .map((action) => SizedBox(
+                                width: ((constraints.maxWidth - 32) / 3)
+                                    .clamp(200.0, 300.0),
+                                child: action,
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            // Sur téléphone/tablette portrait, liste verticale
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withOpacity(0.9),
+                        Colors.white.withOpacity(0.75),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.7),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0a543d).withOpacity(0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: actions.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final action = entry.value;
+                      return Column(
+                        children: [
+                          action,
+                          if (index < actions.length - 1)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 20),
+                              child: Divider(
+                                  height: 1,
+                                  color: Colors.grey.shade200.withOpacity(0.5)),
+                            ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ];
   }
 
   Widget _buildScrollingBanner() {
@@ -1076,80 +1251,115 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.95),
-            color.withOpacity(0.08),
-          ],
-        ),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.6),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-            spreadRadius: 0,
-          ),
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Container(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        color,
-                        color.withOpacity(0.8),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withOpacity(0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Icon(icon, size: 32, color: Colors.white),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13.5,
-                    color: Colors.white,
-                    height: 1.3,
-                  ),
-                ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.55),
+                Colors.white.withOpacity(0.35),
+                color.withOpacity(0.12),
               ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.5),
+              width: 1.5,
+            ),
+            boxShadow: [
+              // Ombre externe douce
+              BoxShadow(
+                color: color.withOpacity(0.12),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+                spreadRadius: -2,
+              ),
+              // Lueur interne subtile
+              BoxShadow(
+                color: Colors.white.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(-2, -2),
+                spreadRadius: -4,
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(24),
+              splashColor: color.withOpacity(0.1),
+              highlightColor: color.withOpacity(0.05),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Icône avec effet liquid glass
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            color.withOpacity(0.9),
+                            color,
+                            color.withOpacity(0.85),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withOpacity(0.35),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                          // Reflet lumineux
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.2),
+                            blurRadius: 6,
+                            offset: const Offset(-1, -1),
+                          ),
+                        ],
+                      ),
+                      child: Icon(icon, size: 30, color: Colors.white),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: const Color(0xFF1a1a1a),
+                        height: 1.25,
+                        letterSpacing: -0.2,
+                        shadows: [
+                          Shadow(
+                            color: Colors.white.withOpacity(0.8),
+                            offset: const Offset(0, 1),
+                            blurRadius: 3,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -1223,74 +1433,97 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
     required String subtitle,
     required Color color,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(18.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  color.withOpacity(0.2),
-                  color.withOpacity(0.1),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(14),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(18.0),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.9),
+                Colors.white.withOpacity(0.7),
+                color.withOpacity(0.05),
+              ],
+              stops: const [0.0, 0.6, 1.0],
             ),
-            child: Icon(icon, color: color, size: 26),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.black54,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.7),
+              width: 1.5,
             ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.poppins(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                  height: 1,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Text(
-                  subtitle,
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.black45,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      color.withOpacity(0.2),
+                      color.withOpacity(0.1),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: color.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    value,
+                    style: GoogleFonts.poppins(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.black45,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

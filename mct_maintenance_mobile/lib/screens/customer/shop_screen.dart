@@ -6,6 +6,8 @@ import 'package:mct_maintenance_mobile/models/product_model.dart';
 import 'package:mct_maintenance_mobile/models/maintenance_offer_model.dart';
 import 'package:mct_maintenance_mobile/services/cart_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/support_fab_wrapper.dart';
+import 'package:mct_maintenance_mobile/utils/responsive_helper.dart';
+import 'package:mct_maintenance_mobile/widgets/common/responsive_background.dart';
 import 'cart_screen.dart';
 import '../../utils/snackbar_helper.dart';
 import '../../utils/test_keys.dart';
@@ -315,15 +317,9 @@ class _ShopScreenState extends State<ShopScreen> {
             ),
           ],
         ),
-        body: Container(
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage(
-                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
-              fit: BoxFit.cover,
-              opacity: 0.4,
-            ),
-          ),
+        body: SimpleResponsiveBackground(
+          imagePath: 'assets/images/Maintenancier_SMART_Maintenance_two.png',
+          opacity: 0.4,
           child: Column(
             children: [
               // Header avec filtres par marque
@@ -403,14 +399,12 @@ class _ShopScreenState extends State<ShopScreen> {
                           )
                         : GridView.builder(
                             key: const ValueKey(TestKeys.productsList),
-                            padding: const EdgeInsets.all(16),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 0.7,
+                            padding: EdgeInsets.all(
+                              ResponsiveHelper.isPhone(context) ? 16 : 24,
                             ),
+                            gridDelegate:
+                                ResponsiveHelper.buildProductGridDelegate(
+                                    context),
                             itemCount: _filteredProducts.length,
                             itemBuilder: (context, index) {
                               final product = _filteredProducts[index];
@@ -611,7 +605,7 @@ class _ShopScreenState extends State<ShopScreen> {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Flexible(
                                 child: Text(
@@ -622,51 +616,52 @@ class _ShopScreenState extends State<ShopScreen> {
                                     fontWeight: FontWeight.w600,
                                     fontSize: 12,
                                     color: Colors.black87,
-                                    height: 1.2,
+                                    height: 1.1,
                                   ),
                                 ),
                               ),
                               // Offre pour les climatiseurs
                               if (product.categorieId == 1 &&
                                   _premiumOffer != null)
-                                Container(
-                                  margin: const EdgeInsets.only(top: 2),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFF3CD),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: const Color(0xFFFFD700),
-                                      width: 1,
+                                Flexible(
+                                  child: Container(
+                                    margin: const EdgeInsets.only(top: 1),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 1,
                                     ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.card_giftcard,
-                                        size: 10,
-                                        color: Color(0xFFD4A800),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFF3CD),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: const Color(0xFFFFD700),
+                                        width: 1,
                                       ),
-                                      const SizedBox(width: 3),
-                                      Flexible(
-                                        child: Text(
-                                          '${_premiumOffer!.title} incluse',
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 8,
-                                            fontWeight: FontWeight.w600,
-                                            color: const Color(0xFFD4A800),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.card_giftcard,
+                                          size: 9,
+                                          color: Color(0xFFD4A800),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Flexible(
+                                          child: Text(
+                                            '${_premiumOffer!.title} incluse',
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 7,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFFD4A800),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              const SizedBox(height: 2),
                               Text(
                                 '${product.prix.toStringAsFixed(0)} FCFA',
                                 style: GoogleFonts.poppins(
