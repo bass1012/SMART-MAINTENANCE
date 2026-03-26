@@ -36,10 +36,10 @@ router.post('/quotes/:id/accept', async (req, res) => {
     const notificationService = require('../services/notificationService');
     const userId = req.user.id;
     const quoteId = req.params.id;
-    const { execute_now, scheduled_date, second_contact } = req.body;
+    const { execute_now, scheduled_date, second_contact, payment_option } = req.body;
     
     console.log(`✅ Acceptation du devis ${quoteId} par user_id: ${userId}`);
-    console.log('📅 Paramètres:', { execute_now, scheduled_date, second_contact });
+    console.log('📅 Paramètres:', { execute_now, scheduled_date, second_contact, payment_option });
     
     // Vérifier que le devis appartient au client
     const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
@@ -166,13 +166,17 @@ router.post('/quotes/:id/accept', async (req, res) => {
       // Extraire les valeurs avec fallback
       const customerId = fullQuote.customerId || fullQuote.customer_id;
       
+      // Déterminer le mode de paiement: 'split' = 50%+50%, 'full' = 100%
+      // Priorité: payment_option du client > payment_type du devis > split par défaut
+      const isSplitPayment = payment_option === 'full' ? false : (payment_option === 'split' ? true : (fullQuote.payment_type === 'split' || fullQuote.payment_type !== 'full'));
+      const paymentType = isSplitPayment ? 'split' : 'full';
+      
       // Pour le split payment, utiliser le montant du premier paiement (50%)
       const quoteTotal = fullQuote.total || fullQuote.totalAmount || fullQuote.subtotal || 0;
-      const firstPaymentAmount = fullQuote.first_payment_amount || Math.ceil(quoteTotal / 2);
-      const isSplitPayment = fullQuote.payment_type === 'split';
+      const firstPaymentAmount = isSplitPayment ? Math.ceil(quoteTotal / 2) : quoteTotal;
       
       // La commande représente le premier paiement (50% pour split, 100% pour full)
-      const totalAmount = isSplitPayment ? firstPaymentAmount : quoteTotal;
+      const totalAmount = firstPaymentAmount;
 
       console.log('🔍 Valeurs pour création commande:', {
         customerId,
@@ -180,6 +184,8 @@ router.post('/quotes/:id/accept', async (req, res) => {
         quoteTotal,
         firstPaymentAmount,
         isSplitPayment,
+        paymentType,
+        payment_option,
         orderReference
       });
 
@@ -189,25 +195,28 @@ router.post('/quotes/:id/accept', async (req, res) => {
         customerId: customerId,
         quoteId: fullQuote.id,
         totalAmount: totalAmount,
-        paymentType: isSplitPayment ? 'split' : 'full',
-        paymentStep: 1, // Premier paiement
+        paymentType: paymentType,
+        paymentStep: isSplitPayment ? 1 : 0, // 1 = premier paiement (split), 0 = paiement complet
         status: execute_now ? 'pending' : 'scheduled',
         paymentStatus: execute_now ? 'pending' : 'deferred',
         paymentMethod: null,
         lineItems: JSON.stringify(lineItems),
         notes: isSplitPayment
           ? `Commande créée automatiquement - Premier paiement (50%) de ${totalAmount} FCFA`
-          : `Commande créée automatiquement - Paiement intégral`,
+          : `Commande créée automatiquement - Paiement intégral de ${totalAmount} FCFA`,
         scheduledDate: scheduledDateTime
       });
 
-      // Mettre à jour le statut de paiement du devis
-      await fullQuote.update({ payment_status: execute_now ? 'pending' : 'deferred' });
+      // Mettre à jour le type de paiement et statut du devis
+      await fullQuote.update({ 
+        payment_status: execute_now ? 'pending' : 'deferred',
+        payment_type: paymentType
+      });
 
-      console.log(`✅ Commande ${orderReference} créée automatiquement pour le devis ${fullQuote.reference}`);
+      console.log(`✅ Commande ${orderReference} créée automatiquement pour le devis ${fullQuote.reference} (${paymentType})`);
       
       // Calculer les montants pour la réponse
-      const secondPaymentAmount = quoteTotal - firstPaymentAmount;
+      const secondPaymentAmount = isSplitPayment ? (quoteTotal - firstPaymentAmount) : 0;
       
       // Réponse avec first_payment pour le mobile
       res.json({
@@ -217,14 +226,16 @@ router.post('/quotes/:id/accept', async (req, res) => {
         first_payment: {
           amount: firstPaymentAmount,
           status: 'pending',
-          description: 'Paiement à l\'acceptation du devis (50%)'
+          description: isSplitPayment 
+            ? 'Paiement à l\'acceptation du devis (50%)'
+            : 'Paiement intégral (100%)'
         },
-        second_payment: {
+        second_payment: isSplitPayment ? {
           amount: secondPaymentAmount,
           status: 'pending',
           description: 'Paiement à la fin de l\'intervention (50%)'
-        },
-        payment_type: 'split',
+        } : null,
+        payment_type: paymentType,
         total_amount: quoteTotal,
         order_id: order.id,
         order_reference: orderReference
@@ -2026,6 +2037,9 @@ router.get('/quotes/:id', async (req, res) => {
     }
     
     // Formater les données
+    const paymentType = quote.payment_type || 'split';
+    const isPaidInFull = quote.payment_status === 'paid';
+    
     const formattedQuote = {
       id: quote.id.toString(),
       reference: quote.reference,
@@ -2046,12 +2060,13 @@ router.get('/quotes/:id', async (req, res) => {
       scheduled_date: quote.scheduled_date,
       execute_now: quote.execute_now,
       second_contact: quote.second_contact,
-      // Champs split payment (50/50)
-      payment_type: quote.payment_type || 'split',
-      first_payment_amount: quote.first_payment_amount ? parseFloat(quote.first_payment_amount) : Math.ceil(parseFloat(quote.total) / 2),
-      first_payment_status: quote.first_payment_status || 'pending',
-      second_payment_amount: quote.second_payment_amount ? parseFloat(quote.second_payment_amount) : Math.floor(parseFloat(quote.total) / 2),
-      second_payment_status: quote.second_payment_status || 'pending'
+      // Champs split payment (50/50) - seulement pour paiements split non complétés
+      payment_type: paymentType,
+      // Pour paiement intégral: ne pas afficher les champs split
+      first_payment_amount: paymentType === 'full' ? null : (quote.first_payment_amount ? parseFloat(quote.first_payment_amount) : Math.ceil(parseFloat(quote.total) / 2)),
+      first_payment_status: paymentType === 'full' ? (isPaidInFull ? 'paid' : quote.payment_status) : (quote.first_payment_status || 'pending'),
+      second_payment_amount: paymentType === 'full' ? null : (quote.second_payment_amount ? parseFloat(quote.second_payment_amount) : Math.floor(parseFloat(quote.total) / 2)),
+      second_payment_status: paymentType === 'full' ? (isPaidInFull ? 'paid' : quote.payment_status) : (quote.second_payment_status || 'pending')
     };
     
     res.json({

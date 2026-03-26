@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/fcm_service.dart';
+import 'auth/email_verification_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -85,10 +86,59 @@ class _SplashScreenState extends State<SplashScreen>
           // Continuer même si FCM échoue
         }
 
-        // Charger les données utilisateur
-        final userData = await _apiService.loadUserData();
+        // Charger les données utilisateur locales
+        Map<String, dynamic>? localUserData = await _apiService.loadUserData();
 
-        if (userData != null && mounted) {
+        if (localUserData != null && mounted) {
+          // Toujours vérifier le statut côté serveur pour avoir les données à jour
+          print('🔄 Vérification du statut utilisateur côté serveur...');
+          Map<String, dynamic> userData = localUserData;
+          try {
+            final serverProfile = await _apiService.getProfile();
+            if (serverProfile['success'] == true &&
+                serverProfile['data'] != null &&
+                serverProfile['data']['user'] != null) {
+              final serverUser = serverProfile['data']['user'] as Map<String, dynamic>;
+              print('✅ Données serveur récupérées - mise à jour locale');
+              await _apiService.saveUserData(serverUser);
+              userData = serverUser; // Utiliser les données serveur
+            }
+          } catch (e) {
+            print('⚠️ Impossible de récupérer les données serveur: $e');
+            // Continuer avec les données locales
+          }
+
+          // Vérifier si le compte est vérifié (email OU phone)
+          final emailVerified = userData['email_verified'] == true ||
+              userData['emailVerified'] == true;
+          final phoneVerified = userData['phone_verified'] == true ||
+              userData['phoneVerified'] == true;
+          final status = userData['status']?.toString().toLowerCase() ?? '';
+
+          print('📊 État utilisateur: email_verified=$emailVerified, phone_verified=$phoneVerified, status=$status');
+
+          // Si le compte n'est pas vérifié, rediriger vers l'écran de vérification
+          if (status == 'pending') {
+            print('⚠️ Compte non vérifié (status=pending) - redirection vers vérification');
+
+            // Récupérer les infos pour l'écran de vérification
+            final phone = userData['phone']?.toString() ?? '';
+            final userId = int.tryParse(userData['id']?.toString() ?? '0') ?? 0;
+
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EmailVerificationScreen(
+                    email: phone.isNotEmpty ? phone : (userData['email'] ?? ''),
+                    userId: userId,
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+
           final role = userData['role']?.toString().toLowerCase() ?? '';
 
           // Rediriger selon le rôle

@@ -29,78 +29,230 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
   }
 
   Future<void> _acceptQuote() async {
-    // Premier dialog: choisir entre exécution immédiate ou planification
+    String paymentOption = 'split'; // 'split' = 50%+50%, 'full' = 100%
+
+    // Premier dialog: choisir entre exécution immédiate ou planification + mode de paiement
     final choice = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Accepter le devis'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Comment souhaitez-vous procéder ?',
-              style: TextStyle(fontSize: 14, color: Colors.black54),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.pop(context, 'immediate'),
-                icon: const Icon(Icons.flash_on, color: Colors.white),
-                label: const Text('Exécuter immédiatement'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0a543d),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final halfAmount = (_quote.amount / 2).ceil();
+          final totalAmount = _quote.amount.toInt();
+
+          return AlertDialog(
+            title: const Text('Accepter le devis'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Section Mode de paiement
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0a543d).withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: const Color(0xFF0a543d).withOpacity(0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.payment,
+                                color: const Color(0xFF0a543d), size: 20),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Mode de paiement',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0a543d),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Option 50%
+                        InkWell(
+                          onTap: () =>
+                              setDialogState(() => paymentOption = 'split'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8, horizontal: 4),
+                            decoration: BoxDecoration(
+                              color: paymentOption == 'split'
+                                  ? const Color(0xFF0a543d).withOpacity(0.1)
+                                  : null,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              children: [
+                                Radio<String>(
+                                  value: 'split',
+                                  groupValue: paymentOption,
+                                  onChanged: (v) =>
+                                      setDialogState(() => paymentOption = v!),
+                                  activeColor: const Color(0xFF0a543d),
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Payer 50% maintenant',
+                                        style: TextStyle(
+                                          fontWeight: paymentOption == 'split'
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      Text(
+                                        '$halfAmount FCFA maintenant + $halfAmount FCFA après la 3ᵉ intervention',
+                                        style: const TextStyle(
+                                            fontSize: 11, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 4),
+
+                        // Option 100%
+                        InkWell(
+                          onTap: () =>
+                              setDialogState(() => paymentOption = 'full'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8, horizontal: 4),
+                            decoration: BoxDecoration(
+                              color: paymentOption == 'full'
+                                  ? const Color(0xFF0a543d).withOpacity(0.1)
+                                  : null,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              children: [
+                                Radio<String>(
+                                  value: 'full',
+                                  groupValue: paymentOption,
+                                  onChanged: (v) =>
+                                      setDialogState(() => paymentOption = v!),
+                                  activeColor: const Color(0xFF0a543d),
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Payer la totalité',
+                                        style: TextStyle(
+                                          fontWeight: paymentOption == 'full'
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      Text(
+                                        '$totalAmount FCFA en une seule fois',
+                                        style: const TextStyle(
+                                            fontSize: 11, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  const Text(
+                    'Comment souhaitez-vous procéder ?',
+                    style: TextStyle(fontSize: 14, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () =>
+                          Navigator.pop(context, 'immediate_$paymentOption'),
+                      icon: const Icon(Icons.flash_on, color: Colors.white),
+                      label: const Text('Exécuter immédiatement'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0a543d),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Le technicien est sur place',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () =>
+                          Navigator.pop(context, 'schedule_$paymentOption'),
+                      icon: const Icon(Icons.calendar_today),
+                      label: const Text('Planifier pour plus tard'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0a543d),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: Color(0xFF0a543d)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Choisir une date et heure',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Le technicien est sur place',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.pop(context, 'schedule'),
-                icon: const Icon(Icons.calendar_today),
-                label: const Text('Planifier pour plus tard'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF0a543d),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: const BorderSide(color: Color(0xFF0a543d)),
-                ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuler'),
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Choisir une date et heure',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
 
     if (choice == null) return;
 
-    if (choice == 'immediate') {
+    // Parser le choix (format: "action_paymentOption")
+    final parts = choice.split('_');
+    final action = parts[0];
+    final selectedPaymentOption = parts.length > 1 ? parts[1] : 'split';
+
+    if (action == 'immediate') {
       // Exécution immédiate
-      await _processAcceptQuote(executeNow: true);
+      await _processAcceptQuote(
+          executeNow: true, paymentOption: selectedPaymentOption);
     } else {
       // Planification
-      await _showScheduleDialog();
+      await _showScheduleDialog(paymentOption: selectedPaymentOption);
     }
   }
 
-  Future<void> _showScheduleDialog() async {
+  Future<void> _showScheduleDialog({String paymentOption = 'split'}) async {
     DateTime? selectedDate;
     TimeOfDay? selectedTime;
     final secondContactController = TextEditingController();
@@ -237,6 +389,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
     await _processAcceptQuote(
       scheduledDate: scheduledDateTime,
       secondContact: secondContact.isNotEmpty ? secondContact : null,
+      paymentOption: paymentOption,
     );
   }
 
@@ -244,6 +397,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
     DateTime? scheduledDate,
     bool executeNow = false,
     String? secondContact,
+    String paymentOption = 'split',
   }) async {
     setState(() => _isLoading = true);
 
@@ -254,6 +408,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
         scheduledDate: scheduledDate,
         executeNow: executeNow,
         secondContact: secondContact,
+        paymentOption: paymentOption,
       );
 
       // Extraire le montant du premier paiement (50%)
@@ -372,11 +527,17 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
             print(
                 '✅ Navigation vers paiement pour commande ${recentOrder['id']}');
 
-            // Utiliser le montant 50% de la réponse API
+            // Calculer le montant selon le mode de paiement choisi
             double amountToPay;
             int paymentStep = 1;
 
-            if (firstPaymentAmount != null && firstPaymentAmount > 0) {
+            if (paymentOption == 'full') {
+              // Paiement intégral (100%)
+              amountToPay = _quote.amount;
+              paymentStep = 0; // 0 = paiement complet
+              print(
+                  '💰 Paiement intégral: ${amountToPay.toStringAsFixed(0)} FCFA (100%)');
+            } else if (firstPaymentAmount != null && firstPaymentAmount > 0) {
               amountToPay = firstPaymentAmount;
               paymentStep = 1;
               print(
@@ -848,83 +1009,20 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                       ),
                     if (_quote.items.isNotEmpty) const SizedBox(height: 16),
 
-                    // Montant avec split payment
-                    Card(
-                      elevation: 2,
-                      color: Colors.blue.shade50,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Montant Total',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  '${_quote.amount.toStringAsFixed(0)} FCFA',
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            // Affichage du paiement en 2 fois (50%)
-                            if (_quote.paymentType == 'split' &&
-                                _quote.firstPaymentAmount != null) ...[
-                              const SizedBox(height: 12),
-                              const Divider(),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Paiement en 2 fois (50%)',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              _buildPaymentRow(
-                                '1er paiement (à l\'acceptation)',
-                                _quote.firstPaymentAmount!,
-                                _quote.firstPaymentStatus ?? 'pending',
-                              ),
-                              const SizedBox(height: 4),
-                              _buildPaymentRow(
-                                '2ème paiement (après travaux)',
-                                _quote.secondPaymentAmount ??
-                                    _quote.firstPaymentAmount!,
-                                _quote.secondPaymentStatus ?? 'pending',
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
+                    
                     const SizedBox(height: 24),
 
-                    // Explication du paiement en 2 fois pour les devis en attente
-                    if ((_quote.status == 'pending' ||
-                            _quote.status == 'sent') &&
-                        _quote.paymentType == 'split' &&
-                        _quote.firstPaymentAmount != null)
+                    // Explication des options de paiement pour les devis en attente
+                    if (_quote.status == 'pending' || _quote.status == 'sent')
                       Container(
                         width: double.infinity,
                         margin: const EdgeInsets.only(bottom: 16),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
+                          color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                              color: Colors.amber.shade400, width: 1.5),
+                              color: Colors.blue.shade400, width: 1.5),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -932,14 +1030,14 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                             Row(
                               children: [
                                 Icon(
-                                  Icons.info_outline,
-                                  color: Colors.amber.shade700,
+                                  Icons.payment,
+                                  color: Colors.blue.shade700,
                                   size: 24,
                                 ),
                                 const SizedBox(width: 10),
                                 const Expanded(
                                   child: Text(
-                                    'Modalités de paiement',
+                                    'Options de paiement',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -950,56 +1048,90 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            RichText(
-                              text: TextSpan(
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.black87,
-                                  height: 1.5,
-                                ),
+                            // Option 1 - 50%
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Row(
                                 children: [
-                                  const TextSpan(
-                                    text: 'En acceptant ce devis, vous payez ',
-                                  ),
-                                  TextSpan(
-                                    text:
-                                        '${_quote.firstPaymentAmount!.toStringAsFixed(0)} FCFA',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0a543d),
+                                  Icon(Icons.looks_one,
+                                      color: Colors.blue.shade600, size: 28),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Payer 50% maintenant',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${(_quote.amount / 2).ceil()} FCFA à l\'acceptation + ${(_quote.amount / 2).ceil()} FCFA après la 3ᵉ intervention',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  const TextSpan(
-                                    text: ' soit ',
-                                  ),
-                                  const TextSpan(
-                                    text: '50% du montant total',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  const TextSpan(
-                                    text: '.\n\nLes ',
-                                  ),
-                                  TextSpan(
-                                    text:
-                                        '${(_quote.secondPaymentAmount ?? _quote.firstPaymentAmount!).toStringAsFixed(0)} FCFA',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0a543d),
-                                    ),
-                                  ),
-                                  const TextSpan(
-                                    text: ' restants seront à payer ',
-                                  ),
-                                  const TextSpan(
-                                    text: 'après la fin des travaux',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  const TextSpan(
-                                    text: '.',
                                   ),
                                 ],
+                              ),
+                            ),
+                            // Option 2 - 100%
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.looks_two,
+                                      color: Colors.green.shade600, size: 28),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Payer la totalité',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${_quote.amount.toInt()} FCFA en une seule fois',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Vous pourrez choisir votre option lors de l\'acceptation du devis.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.grey.shade600,
                               ),
                             ),
                           ],
@@ -1016,12 +1148,9 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                             child: ElevatedButton.icon(
                               onPressed: _isLoading ? null : _acceptQuote,
                               icon: const Icon(Icons.check_circle),
-                              label: Text(
-                                _quote.paymentType == 'split' &&
-                                        _quote.firstPaymentAmount != null
-                                    ? 'Accepter et payer ${_quote.firstPaymentAmount!.toStringAsFixed(0)} FCFA (50%)'
-                                    : 'Accepter le devis',
-                                style: const TextStyle(fontSize: 15),
+                              label: const Text(
+                                'Accepter le devis',
+                                style: TextStyle(fontSize: 16),
                               ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,

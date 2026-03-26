@@ -376,12 +376,14 @@ class ApiService {
     DateTime? scheduledDate,
     bool executeNow = false,
     String? secondContact,
+    String paymentOption = 'split', // 'split' = 50%+50%, 'full' = 100%
   }) async {
     final response = await _handleRequest(
       'POST',
       '/api/customer/quotes/$quoteId/accept',
       body: {
         'execute_now': executeNow,
+        'payment_option': paymentOption,
         if (scheduledDate != null)
           'scheduled_date': scheduledDate.toIso8601String(),
         if (secondContact != null) 'second_contact': secondContact,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../widgets/common/support_fab_wrapper.dart';
+import '../../widgets/common/responsive_background.dart';
 import 'intervention_detail_screen.dart';
 import 'new_intervention_screen.dart';
 import 'diagnostic_payment_screen.dart';
@@ -157,15 +158,9 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
             style: TextStyle(color: Colors.white),
           ),
         ),
-        body: Container(
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage(
-                  'assets/images/Maintenancier_SMART_Maintenance_two.png'),
-              fit: BoxFit.cover,
-              opacity: 0.4,
-            ),
-          ),
+        body: SimpleResponsiveBackground(
+          imagePath: 'assets/images/Maintenancier_SMART_Maintenance_two.png',
+          opacity: 0.4,
           child: Column(
             children: [
               // Banner pour paiements diagnostic en attente

@@ -472,10 +472,12 @@ const handleCallback = async (req, res) => {
     console.log(`📋 Callback debug - orderId: ${orderId}, quoteId: ${orderQuoteId}, paymentStep: ${orderPaymentStep}, paymentType: ${orderPaymentType}`);
     
     const quote = orderQuoteId ? await Quote.findByPk(orderQuoteId) : null;
-    const isSplitPayment = orderPaymentType === 'split' || (quote && quote.payment_type === 'split');
+    // Priorité à l'Order.paymentType car c'est le choix actuel du client
+    // Ne pas se fier au Quote.payment_type qui peut être obsolète
+    const isSplitPayment = orderPaymentType === 'split';
     const paymentStep = orderPaymentStep;
     
-    console.log(`📋 Split check - isSplitPayment: ${isSplitPayment}, quote: ${quote ? 'found' : 'null'}, quote.second_payment_status: ${quote?.second_payment_status}`);
+    console.log(`📋 Split check - isSplitPayment: ${isSplitPayment}, orderPaymentType: ${orderPaymentType}, quote: ${quote ? 'found' : 'null'}, quote.payment_type: ${quote?.payment_type}`);
     
     // Pour les split payments, vérifier si le paiement correspondant n'est pas déjà fait
     if (order.paymentStatus === 'paid') {
@@ -553,8 +555,11 @@ const handleCallback = async (req, res) => {
         console.log(`✅ Devis #${orderQuoteId} - Second paiement (50%) marqué comme payé via webhook - COMPLET`);
       } else {
         // Paiement intégral (non-split)
-        quoteUpdateData = { payment_status: 'paid' };
-        console.log(`✅ Devis #${orderQuoteId} marqué comme payé via webhook`);
+        quoteUpdateData = { 
+          payment_status: 'paid',
+          payment_type: 'full' // S'assurer que le type est bien 'full'
+        };
+        console.log(`✅ Devis #${orderQuoteId} marqué comme payé via webhook (paiement intégral)`);
       }
       
       await Quote.update(quoteUpdateData, { where: { id: orderQuoteId } });

@@ -62,12 +62,16 @@ class _PaymentScreenState extends State<PaymentScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
+      extendBody: true,
       appBar: AppBar(
         title: const Text('Paiement'),
         backgroundColor: const Color(0xFF0a543d),
         foregroundColor: Colors.white,
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage('assets/images/background_tech_2.png'),
@@ -75,84 +79,60 @@ class _PaymentScreenState extends State<PaymentScreen>
             opacity: 0.4,
           ),
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Résumé de la facture
-              _buildInvoiceSummary(),
-              const SizedBox(height: 24),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Résumé de la facture
+                _buildInvoiceSummary(),
+                const SizedBox(height: 24),
 
-              // Information sur FineoPay
-              _buildFineoPayInfo(),
-              const SizedBox(height: 32),
+                // Information sur FineoPay
+                _buildFineoPayInfo(),
+                const SizedBox(height: 32),
 
-              // Bouton de paiement
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _isProcessing ? null : _processPayment,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                // Bouton de paiement
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isProcessing ? null : _processPayment,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
-                  ),
-                  icon: _isProcessing
-                      ? const SizedBox.shrink()
-                      : const Icon(Icons.credit_card),
-                  label: _isProcessing
-                      ? SizedBox(
-                          height: 20,
-                          child: ButtonLoadingIndicator(
-                            color: Colors.white,
-                            size: 6.0,
+                    icon: _isProcessing
+                        ? const SizedBox.shrink()
+                        : const Icon(Icons.credit_card),
+                    label: _isProcessing
+                        ? SizedBox(
+                            height: 20,
+                            child: ButtonLoadingIndicator(
+                              color: Colors.white,
+                              size: 6.0,
+                            ),
+                          )
+                        : Text(
+                            'Payer ${_formatCurrency(widget.amount)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        )
-                      : Text(
-                          'Payer ${_formatCurrency(widget.amount)}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Bouton paiement en espèces
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isProcessing ? null : _showCashPaymentInfo,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF0a543d),
-                    side: const BorderSide(color: Color(0xFF0a543d), width: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: const Icon(Icons.money),
-                  label: const Text(
-                    'Payer en espèces',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              // Note de sécurité
-              _buildSecurityNote(),
-            ],
+                // Note de sécurité
+                _buildSecurityNote(),
+              ],
+            ),
           ),
         ),
       ),
@@ -174,7 +154,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                   'Facture',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey,
+                    color: Color.fromARGB(255, 21, 21, 21),
                   ),
                 ),
                 Text(
@@ -568,16 +548,11 @@ class _PaymentScreenState extends State<PaymentScreen>
           _stopPolling();
 
           if (mounted) {
-            // Fermer le dialog de loading s'il est ouvert
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
-
             // Afficher un message de succès
             showDialog(
               context: context,
               barrierDismissible: false,
-              builder: (context) => AlertDialog(
+              builder: (dialogContext) => AlertDialog(
                 icon: const Icon(
                   Icons.check_circle,
                   color: Colors.green,
@@ -592,8 +567,11 @@ class _PaymentScreenState extends State<PaymentScreen>
                 actions: [
                   ElevatedButton(
                     onPressed: () {
-                      Navigator.pop(context); // Fermer le dialog
-                      Navigator.pop(context); // Retourner à l'écran précédent
+                      // Fermer le dialog et retourner à l'écran précédent
+                      Navigator.of(dialogContext).pop();
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop(true); // Retourner avec résultat
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0a543d),
@@ -609,14 +587,9 @@ class _PaymentScreenState extends State<PaymentScreen>
           _stopPolling();
 
           if (mounted) {
-            // Fermer le dialog de loading s'il est ouvert
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
-
             showDialog(
               context: context,
-              builder: (context) => AlertDialog(
+              builder: (dialogContext) => AlertDialog(
                 icon: const Icon(
                   Icons.error,
                   color: Colors.red,
@@ -631,7 +604,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                 actions: [
                   TextButton(
                     onPressed: () {
-                      Navigator.pop(context); // Fermer le dialog
+                      Navigator.of(dialogContext).pop(); // Fermer le dialog
                     },
                     child: const Text('OK'),
                   ),
@@ -647,9 +620,10 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   void _showCashPaymentInfo() {
+    final parentContext = context;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         icon: const Icon(
           Icons.store,
           color: Color(0xFF0a543d),
@@ -720,14 +694,14 @@ class _PaymentScreenState extends State<PaymentScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Fermer'),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context); // Fermer le dialog
-              Navigator.pop(context); // Retourner à l'écran précédent
-              ScaffoldMessenger.of(context).showSnackBar(
+              Navigator.pop(dialogContext); // Fermer le dialog
+              Navigator.pop(parentContext); // Retourner à l'écran précédent
+              ScaffoldMessenger.of(parentContext).showSnackBar(
                 const SnackBar(
                   content: Text(
                       'N\'oubliez pas de mentionner la référence de votre commande'),

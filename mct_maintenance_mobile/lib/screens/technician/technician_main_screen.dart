@@ -8,6 +8,7 @@ import 'package:mct_maintenance_mobile/models/user_model.dart';
 import 'package:mct_maintenance_mobile/models/technician_stats_model.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/utils/avatar_helper.dart';
+import 'package:mct_maintenance_mobile/utils/responsive_helper.dart';
 import 'package:mct_maintenance_mobile/screens/technician/interventions_screen.dart';
 import 'package:mct_maintenance_mobile/screens/technician/calendar_screen.dart';
 import 'package:mct_maintenance_mobile/screens/technician/reports_screen.dart';
@@ -840,66 +841,73 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
   }
 
   Widget _buildServicesGrid() {
-    return GridView.count(
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      children: [
-        _buildServiceCard(
-          icon: Icons.assignment_outlined,
-          title: 'Mes Interventions',
-          color: const Color(0xFF0a543d),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const TechnicianInterventionsScreen(),
-              ),
+      gridDelegate: ResponsiveHelper.buildServiceGridDelegate(context),
+      itemCount: 4,
+      itemBuilder: (context, index) {
+        switch (index) {
+          case 0:
+            return _buildServiceCard(
+              icon: Icons.assignment_outlined,
+              title: 'Mes Interventions',
+              color: const Color(0xFF0a543d),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TechnicianInterventionsScreen(),
+                  ),
+                );
+              },
             );
-          },
-        ),
-        _buildServiceCard(
-          icon: Icons.calendar_today_outlined,
-          title: 'Mon Calendrier',
-          color: Colors.blue,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const TechnicianCalendarScreen(),
-              ),
+          case 1:
+            return _buildServiceCard(
+              icon: Icons.calendar_today_outlined,
+              title: 'Mon Calendrier',
+              color: Colors.blue,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TechnicianCalendarScreen(),
+                  ),
+                );
+              },
             );
-          },
-        ),
-        _buildServiceCard(
-          icon: Icons.description_outlined,
-          title: 'Rapports',
-          color: Colors.orange,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const TechnicianReportsScreen(),
-              ),
+          case 2:
+            return _buildServiceCard(
+              icon: Icons.description_outlined,
+              title: 'Rapports',
+              color: Colors.orange,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TechnicianReportsScreen(),
+                  ),
+                );
+              },
             );
-          },
-        ),
-        _buildServiceCard(
-          icon: Icons.star_outline,
-          title: 'Évaluations',
-          color: Colors.amber,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const TechnicianReviewsScreen(),
-              ),
+          case 3:
+            return _buildServiceCard(
+              icon: Icons.star_outline,
+              title: 'Évaluations',
+              color: Colors.amber,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TechnicianReviewsScreen(),
+                  ),
+                );
+              },
             );
-          },
-        ),
-      ],
+          default:
+            return const SizedBox.shrink();
+        }
+      },
     );
   }
 

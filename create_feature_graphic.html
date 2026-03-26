@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; }
+        .container {
+            width: 1024px;
+            height: 500px;
+            background: linear-gradient(135deg, #0a543d 0%, #0f7d59 50%, #14a76c 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+        .pattern {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.1;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+        .content {
+            text-align: center;
+            z-index: 1;
+            color: white;
+        }
+        .logo-circle {
+            width: 120px;
+            height: 120px;
+            background: white;
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .logo-icon {
+            font-size: 60px;
+        }
+        h1 {
+            font-size: 56px;
+            font-weight: 700;
+            margin: 0 0 15px;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .tagline {
+            font-size: 24px;
+            opacity: 0.95;
+            font-weight: 300;
+        }
+        .icons {
+            position: absolute;
+            bottom: 30px;
+            display: flex;
+            gap: 40px;
+            opacity: 0.8;
+        }
+        .icon-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="pattern"></div>
+        <div class="content">
+            <div class="logo-circle">
+                <span class="logo-icon">❄️</span>
+            </div>
+            <h1>Smart Maintenance</h1>
+            <p class="tagline">Gestion intelligente de vos climatiseurs</p>
+        </div>
+        <div class="icons">
+            <div class="icon-item">🔧 Interventions</div>
+            <div class="icon-item">📋 Contrats</div>
+            <div class="icon-item">💳 Paiements</div>
+            <div class="icon-item">🔔 Notifications</div>
+        </div>
+    </div>
+</body>
+</html>
