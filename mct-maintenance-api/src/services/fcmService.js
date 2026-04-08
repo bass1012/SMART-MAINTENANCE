@@ -1,36 +1,78 @@
-const admin = require('firebase-admin');
+const { GoogleAuth } = require('google-auth-library');
 const path = require('path');
+const https = require('https');
 
 class FCMService {
   constructor() {
     this.initialized = false;
+    this.auth = null;
+    this.projectId = null;
   }
 
   /**
-   * Initialiser Firebase Admin SDK
+   * Initialiser Google Auth pour FCM API v1
    */
   initialize() {
     if (this.initialized) {
-      console.log('🔔 Firebase Admin SDK déjà initialisé');
+      console.log('🔔 FCM Service déjà initialisé');
       return;
     }
 
     try {
       const serviceAccountPath = path.join(__dirname, '../../firebase-service-account.json');
       const serviceAccount = require(serviceAccountPath);
+      this.projectId = serviceAccount.project_id;
 
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        projectId: serviceAccount.project_id
+      this.auth = new GoogleAuth({
+        keyFile: serviceAccountPath,
+        scopes: ['https://www.googleapis.com/auth/cloud-platform']
       });
 
       this.initialized = true;
-      console.log('✅ Firebase Admin SDK initialisé avec succès');
-      console.log(`   Project ID: ${serviceAccount.project_id}`);
+      console.log('✅ FCM Service initialisé avec succès (HTTP v1)');
+      console.log(`   Project ID: ${this.projectId}`);
     } catch (error) {
-      console.error('❌ Erreur initialisation Firebase Admin SDK:', error.message);
+      console.error('❌ Erreur initialisation FCM Service:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * Envoyer un message via FCM HTTP v1 API
+   */
+  async _sendFCMv1(messagePayload) {
+    const token = await this.auth.getAccessToken();
+    const postData = JSON.stringify({ message: messagePayload });
+
+    return new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'fcm.googleapis.com',
+        path: `/v1/projects/${this.projectId}/messages:send`,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }, res => {
+        let body = '';
+        res.on('data', d => body += d);
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            const data = JSON.parse(body);
+            resolve(data.name);
+          } else {
+            const err = JSON.parse(body);
+            const error = new Error(err.error?.message || 'FCM error');
+            error.code = err.error?.details?.[0]?.errorCode || `messaging/${res.statusCode}`;
+            reject(error);
+          }
+        });
+      });
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
   }
 
   /**
@@ -82,7 +124,7 @@ class FCMService {
           priority: 'high',
           notification: {
             sound: 'default',
-            color: '#0a543d', // Vert MCT
+            color: '#0a543d',
             channelId: 'default_channel'
           }
         },
@@ -96,7 +138,7 @@ class FCMService {
         }
       };
 
-      const response = await admin.messaging().send(message);
+      const response = await this._sendFCMv1(message);
       
       console.log('✅ Notification FCM envoyée avec succès');
       console.log(`   Token: ${fcmToken.substring(0, 20)}...`);
@@ -167,10 +209,23 @@ class FCMService {
         }
       };
 
-      const response = await admin.messaging().sendMulticast({
-        tokens: validTokens,
-        ...message
-      });
+      // Envoyer individuellement via HTTP v1
+      let successCount = 0;
+      let failureCount = 0;
+      
+      for (const token of validTokens) {
+        try {
+          await this._sendFCMv1({
+            token,
+            ...message
+          });
+          successCount++;
+        } catch (err) {
+          failureCount++;
+        }
+      }
+
+      const response = { successCount, failureCount };
 
       console.log('✅ Notifications FCM envoyées');
       console.log(`   Tokens: ${validTokens.length}`);
@@ -199,10 +254,10 @@ class FCMService {
     }
 
     try {
-      await admin.messaging().send({
+      await this._sendFCMv1({
         token: fcmToken,
         data: { test: 'true' }
-      }, true); // dry run
+      });
 
       return true;
     } catch (error) {

@@ -570,7 +570,8 @@ class _PaymentScreenState extends State<PaymentScreen>
                       // Fermer le dialog et retourner à l'écran précédent
                       Navigator.of(dialogContext).pop();
                       if (Navigator.of(context).canPop()) {
-                        Navigator.of(context).pop(true); // Retourner avec résultat
+                        Navigator.of(context)
+                            .pop(true); // Retourner avec résultat
                       }
                     },
                     style: ElevatedButton.styleFrom(

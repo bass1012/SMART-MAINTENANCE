@@ -3,7 +3,7 @@
  * Envoie des notifications push aux clients qui n'ont pas finalisé le paiement
  */
 
-const { Intervention, CustomerProfile, User } = require('../models');
+const { Intervention, CustomerProfile, User, Notification } = require('../models');
 const { Op } = require('sequelize');
 const notificationService = require('../services/notificationService');
 
@@ -56,6 +56,25 @@ const sendPendingDiagnosticReminders = async () => {
         // Vérifier si on a déjà envoyé une notification aujourd'hui pour cette intervention
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+
+        const existingNotification = await Notification.findOne({
+          where: {
+            user_id: user.id,
+            type: 'diagnostic_payment_reminder',
+            created_at: { [Op.gte]: today },
+            data: {
+              [Op.or]: [
+                { intervention_id: intervention.id },
+                { intervention_id: String(intervention.id) }
+              ]
+            }
+          }
+        });
+
+        if (existingNotification) {
+          console.log(`   ⏭️  Notification déjà envoyée aujourd'hui pour intervention #${intervention.id}, ignoré`);
+          continue;
+        }
 
         // Créer la notification de rappel
         await notificationService.create({

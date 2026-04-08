@@ -98,7 +98,8 @@ class _SplashScreenState extends State<SplashScreen>
             if (serverProfile['success'] == true &&
                 serverProfile['data'] != null &&
                 serverProfile['data']['user'] != null) {
-              final serverUser = serverProfile['data']['user'] as Map<String, dynamic>;
+              final serverUser =
+                  serverProfile['data']['user'] as Map<String, dynamic>;
               print('✅ Données serveur récupérées - mise à jour locale');
               await _apiService.saveUserData(serverUser);
               userData = serverUser; // Utiliser les données serveur
@@ -115,11 +116,13 @@ class _SplashScreenState extends State<SplashScreen>
               userData['phoneVerified'] == true;
           final status = userData['status']?.toString().toLowerCase() ?? '';
 
-          print('📊 État utilisateur: email_verified=$emailVerified, phone_verified=$phoneVerified, status=$status');
+          print(
+              '📊 État utilisateur: email_verified=$emailVerified, phone_verified=$phoneVerified, status=$status');
 
           // Si le compte n'est pas vérifié, rediriger vers l'écran de vérification
           if (status == 'pending') {
-            print('⚠️ Compte non vérifié (status=pending) - redirection vers vérification');
+            print(
+                '⚠️ Compte non vérifié (status=pending) - redirection vers vérification');
 
             // Récupérer les infos pour l'écran de vérification
             final phone = userData['phone']?.toString() ?? '';

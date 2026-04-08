@@ -882,7 +882,13 @@ class _SupportScreenState extends State<SupportScreen>
                               ),
                             ),
                           Container(
-                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                            padding: EdgeInsets.fromLTRB(
+                                20,
+                                12,
+                                20,
+                                MediaQuery.of(context).viewInsets.bottom > 0
+                                    ? 12
+                                    : 20),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: const BorderRadius.only(
@@ -899,6 +905,8 @@ class _SupportScreenState extends State<SupportScreen>
                             ),
                             child: SafeArea(
                               top: false,
+                              bottom:
+                                  MediaQuery.of(context).viewInsets.bottom == 0,
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
