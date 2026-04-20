@@ -31,5 +31,17 @@
 
 ## Actions restantes
 
+### 6. ✅ Notifications de paiement manquantes (échec shop/subscription/diagnostic)
+- **Causes racines** :
+  1. ENUM `enum_notifications_type` dans PostgreSQL n'avait pas les types `payment_failed`, `payment_confirmed`, `payment_success`, `diagnostic_payment_*` → notifications échouaient silencieusement
+  2. Bloc `status !== 'success'` dans `handleCallback` ne parsait pas le `syncRef` → ne notifiait que les devis, pas shop/subscription/diagnostic
+- **Fichiers modifiés** :
+  - `mct-maintenance-api/src/models/Notification.js` (ajout 7 types ENUM)
+  - `mct-maintenance-api/src/controllers/payment/fineoPayController.js` (refonte bloc échec avec parsing syncRef)
+- **Migration SQL** : `ALTER TYPE enum_notifications_type ADD VALUE` pour 7 nouveaux types
+- **Résultat** : Tous les flux de paiement (devis, boutique, abonnement, diagnostic) notifient client + dashboard en succès ET en échec
+
+## Actions restantes
+
 1. ⬜ Vérifier les notifications end-to-end depuis l'app (envoi de message chat)
 
