@@ -104,7 +104,7 @@ Promise.all([pubClient.connect(), subClient.connect()])
     console.log('✅ Socket.IO Redis adapter connecté');
   })
   .catch(err => {
-    console.error('⚠️  Redis adapter non disponible, Socket.IO en mode mémoire:', err.message);
+    console.error('❌ CRITIQUE: Redis adapter non disponible — les notifications temps réel ne fonctionneront PAS entre les workers PM2:', err.message);
   });
 
 // Initialiser le service de notifications avec Socket.IO
