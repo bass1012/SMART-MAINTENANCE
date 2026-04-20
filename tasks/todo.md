@@ -41,6 +41,16 @@
 - **Migration SQL** : `ALTER TYPE enum_notifications_type ADD VALUE` pour 7 nouveaux types
 - **Résultat** : Tous les flux de paiement (devis, boutique, abonnement, diagnostic) notifient client + dashboard en succès ET en échec
 
+### 7. ✅ Dashboard notifications temps réel ne fonctionnent pas
+- **Cause racine** : PM2 cluster (8 workers) + Socket.IO sans adapter → chaque worker a ses propres rooms en mémoire, les événements cross-worker sont perdus
+- **Fix** :
+  1. Installé Redis v7.0.15 sur le serveur (`apt-get install redis-server`)
+  2. Installé `@socket.io/redis-adapter` + `redis` (npm)
+  3. Ajouté dans `app.js` : `createAdapter(pubClient, subClient)` pour connecter Socket.IO à Redis pub/sub
+  4. Fallback gracieux si Redis indisponible
+- **Fichier modifié** : `mct-maintenance-api/src/app.js`
+- **Résultat** : ✅ Redis adapter connecté — vérifié dans les logs PM2
+
 ## Actions restantes
 
 1. ⬜ Vérifier les notifications end-to-end depuis l'app (envoi de message chat)

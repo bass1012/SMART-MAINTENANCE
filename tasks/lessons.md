@@ -18,3 +18,5 @@
 
 [2026-04-20] | Notifications de paiement échouent silencieusement car les types (payment_failed, payment_confirmed, etc.) ne sont pas dans l'ENUM PostgreSQL du modèle Notification | Toujours vérifier que les types utilisés dans notificationService.create() existent dans l'ENUM du modèle Notification.js ET dans la base PostgreSQL (ALTER TYPE ADD VALUE)
 
+[2026-04-20] | Dashboard ne reçoit pas les notifications Socket.IO en temps réel — l'utilisateur doit rafraîchir la page | En PM2 cluster mode, chaque worker a sa propre instance Socket.IO avec ses propres rooms en mémoire. Un événement émis par le worker C n'atteint jamais les sockets connectés au worker A. Solution : installer @socket.io/redis-adapter pour propager les événements entre tous les workers via Redis pub/sub
+
