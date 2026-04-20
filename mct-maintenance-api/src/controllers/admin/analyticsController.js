@@ -191,7 +191,7 @@ exports.getTechnicianPerformance = async (req, res) => {
     });
 
     const performanceData = await Promise.all(
-      technicians.map(async (tech) => {
+      technicians.filter(tech => tech.user).map(async (tech) => {
         const interventions = await Intervention.findAll({
           where: {
             technician_id: tech.user_id,
