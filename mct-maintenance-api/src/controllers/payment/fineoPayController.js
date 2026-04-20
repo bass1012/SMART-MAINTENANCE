@@ -262,55 +262,92 @@ const handleCallback = async (req, res) => {
       // 📱 Envoyer des notifications d'échec de paiement
       try {
         const notificationService = require('../../services/notificationService');
-        const { Order, Quote, Intervention, CustomerProfile } = require('../../models');
+        const { Order, Quote, Intervention, CustomerProfile, Subscription } = require('../../models');
         
-        // Essayer de retrouver la commande via la référence
-        const order = await Order.findOne({
-          where: { fineopayReference: reference },
-          include: [{ model: Quote, as: 'quote', include: [{ model: Intervention, as: 'intervention', include: [{ model: CustomerProfile, as: 'customer' }] }] }]
-        });
-        
-        if (order && order.quote?.intervention?.customer) {
-          const customer = order.quote.intervention.customer;
-          
-          // Notification au client
-          if (customer.user_id) {
-            await notificationService.create({
-              userId: customer.user_id,
-              type: 'payment_failed',
-              title: '❌ Échec de paiement',
-              message: `Votre paiement de ${amount} FCFA pour la commande ${order.reference} a échoué. Veuillez réessayer.`,
-              data: {
-                order_id: order.id,
-                amount: parseFloat(amount),
-                reference: reference,
-                status: status
-              },
-              priority: 'high',
-              actionUrl: `/commandes/${order.id}`
-            });
-            console.log(`📲 Notification d'échec envoyée au client`);
+        // Parser le syncRef pour identifier le type de paiement
+        const syncRef = bodySyncRef || '';
+        const shopOrderMatch = syncRef.match(/SHOP_ORDER_(\d+)/);
+        const diagnosticMatch = syncRef.match(/DIAGNOSTIC_(\d+)/);
+        const subscriptionMatch = syncRef.match(/SUBSCRIPTION_(\d+)/);
+        const quoteOrderMatch = syncRef.match(/ORDER_(\d+)/);
+
+        let userId = null;
+        let customerName = 'Un client';
+        let failureMessage = '';
+        let failureData = {};
+
+        if (diagnosticMatch) {
+          // Échec paiement diagnostic
+          const interventionId = parseInt(diagnosticMatch[1]);
+          const intervention = await Intervention.findByPk(interventionId, {
+            include: [{ model: CustomerProfile, as: 'customer', include: [{ model: User, as: 'user' }] }]
+          });
+          if (intervention?.customer?.user) {
+            userId = intervention.customer.user.id;
+            customerName = `${intervention.customer.first_name || ''} ${intervention.customer.last_name || ''}`.trim() || 'Un client';
+            failureMessage = `Votre paiement de ${amount} FCFA pour le diagnostic de l'intervention #${interventionId} a échoué. Veuillez réessayer.`;
+            failureData = { intervention_id: interventionId, amount: parseFloat(amount), reference, status };
           }
-          
-          // Notification aux admins
-          const customerName = customer.first_name ? 
-            `${customer.first_name} ${customer.last_name || ''}`.trim() : 'Un client';
-          await notificationService.notifyAdmins({
+        } else if (subscriptionMatch) {
+          // Échec paiement souscription
+          const subscriptionId = parseInt(subscriptionMatch[1]);
+          const subscription = await Subscription.findByPk(subscriptionId, {
+            include: [{ model: User, as: 'customer' }]
+          });
+          if (subscription?.customer) {
+            userId = subscription.customer.id;
+            customerName = `${subscription.customer.first_name || ''} ${subscription.customer.last_name || ''}`.trim() || 'Un client';
+            failureMessage = `Votre paiement de ${amount} FCFA pour votre abonnement a échoué. Veuillez réessayer.`;
+            failureData = { subscription_id: subscriptionId, amount: parseFloat(amount), reference, status };
+          }
+        } else if (shopOrderMatch) {
+          // Échec paiement boutique
+          const orderId = parseInt(shopOrderMatch[1]);
+          const order = await Order.findByPk(orderId);
+          if (order?.customerId) {
+            const customerProfile = await CustomerProfile.findByPk(order.customerId);
+            userId = customerProfile?.user_id;
+            customerName = customerProfile ? `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() || 'Un client' : 'Un client';
+            failureMessage = `Votre paiement de ${amount} FCFA pour la commande #${orderId} a échoué. Veuillez réessayer.`;
+            failureData = { order_id: orderId, amount: parseFloat(amount), reference, status };
+          }
+        } else if (quoteOrderMatch) {
+          // Échec paiement devis (logique existante via fineopayReference)
+          const order = await Order.findOne({
+            where: { fineopayReference: reference },
+            include: [{ model: Quote, as: 'quote', include: [{ model: Intervention, as: 'intervention', include: [{ model: CustomerProfile, as: 'customer' }] }] }]
+          });
+          if (order?.quote?.intervention?.customer) {
+            const customer = order.quote.intervention.customer;
+            userId = customer.user_id;
+            customerName = customer.first_name ? `${customer.first_name} ${customer.last_name || ''}`.trim() : 'Un client';
+            failureMessage = `Votre paiement de ${amount} FCFA pour la commande ${order.reference} a échoué. Veuillez réessayer.`;
+            failureData = { order_id: order.id, amount: parseFloat(amount), reference, status };
+          }
+        }
+
+        // Notification au client
+        if (userId) {
+          await notificationService.create({
+            userId,
             type: 'payment_failed',
             title: '❌ Échec de paiement',
-            message: `Paiement de ${amount} FCFA échoué pour ${customerName} (commande ${order.reference})`,
-            data: {
-              orderId: order.id,
-              amount: parseFloat(amount),
-              reference: reference,
-              status: status,
-              customerId: customer.id
-            },
-            priority: 'high',
-            actionUrl: `/commandes/${order.id}`
+            message: failureMessage,
+            data: failureData,
+            priority: 'high'
           });
-          console.log(`📲 Notification d'échec envoyée aux admins`);
+          console.log(`📲 Notification d'échec envoyée au client`);
         }
+
+        // Notification aux admins
+        await notificationService.notifyAdmins({
+          type: 'payment_failed',
+          title: '❌ Échec de paiement',
+          message: `Paiement de ${amount} FCFA échoué pour ${customerName} (réf: ${syncRef || reference})`,
+          data: { ...failureData, syncRef, customerId: userId },
+          priority: 'high'
+        });
+        console.log(`📲 Notification d'échec envoyée aux admins`);
       } catch (notifError) {
         console.error('⚠️ Erreur envoi notification d\'échec:', notifError.message);
       }

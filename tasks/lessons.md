@@ -16,3 +16,5 @@
 
 [2026-04-20] | 8 notifications identiques envoyées simultanément pour un même rappel de paiement | En mode PM2 cluster, les cron jobs s'exécutent sur CHAQUE worker. Toujours limiter les cron jobs au worker 0 avec: if (!process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0')
 
+[2026-04-20] | Notifications de paiement échouent silencieusement car les types (payment_failed, payment_confirmed, etc.) ne sont pas dans l'ENUM PostgreSQL du modèle Notification | Toujours vérifier que les types utilisés dans notificationService.create() existent dans l'ENUM du modèle Notification.js ET dans la base PostgreSQL (ALTER TYPE ADD VALUE)
+
