@@ -90,6 +90,23 @@ const io = new Server(server, {
   allowEIO3: true
 });
 
+// Connecter Socket.IO à Redis pour le mode cluster PM2
+const { createAdapter } = require('@socket.io/redis-adapter');
+const { createClient } = require('redis');
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const pubClient = createClient({ url: redisUrl });
+const subClient = pubClient.duplicate();
+
+Promise.all([pubClient.connect(), subClient.connect()])
+  .then(() => {
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('✅ Socket.IO Redis adapter connecté');
+  })
+  .catch(err => {
+    console.error('⚠️  Redis adapter non disponible, Socket.IO en mode mémoire:', err.message);
+  });
+
 // Initialiser le service de notifications avec Socket.IO
 notificationService.initialize(io);
 console.log('✅ Socket.IO initialisé');
