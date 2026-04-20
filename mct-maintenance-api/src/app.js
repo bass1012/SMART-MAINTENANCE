@@ -220,8 +220,12 @@ const startServer = async () => {
       console.log('ℹ️  Les notifications push mobiles ne fonctionneront pas');
     }
     
-    // Initialize CRON jobs
-    cronService.initializeJobs();
+    // Initialize CRON jobs (uniquement sur le worker 0 en mode cluster pour éviter les doublons)
+    if (!process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0') {
+      cronService.initializeJobs();
+    } else {
+      console.log(`⏰ [Cron] Worker ${process.env.NODE_APP_INSTANCE} - cron jobs désactivés (géré par worker 0)`);
+    }
     
     // Start server (utiliser server au lieu de app pour Socket.IO)
     server.listen(PORT, '0.0.0.0', () => {

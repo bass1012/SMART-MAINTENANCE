@@ -23,8 +23,13 @@
 - **Cause** : PM2 processes corrompus
 - **Fix** : `pm2 kill && pm2 start ecosystem.config.js`
 
+### 5. ✅ 8 notifications dupliquées par rappel de paiement
+- **Cause racine** : PM2 cluster mode (8 workers) → chaque worker exécute les mêmes cron jobs
+- **Fix** : Conditionner l'init des cron jobs à `NODE_APP_INSTANCE === '0'` dans `app.js`
+- **Fichier modifié** : `mct-maintenance-api/src/app.js`
+- **Résultat** : ✅ Seul le worker 0 exécute les cron jobs — vérifié dans les logs PM2
+
 ## Actions restantes
 
-1. ⬜ Commit et push de tous les changements sur GitHub
-2. ⬜ Vérifier les notifications end-to-end depuis l'app (envoi de message chat)
+1. ⬜ Vérifier les notifications end-to-end depuis l'app (envoi de message chat)
 
