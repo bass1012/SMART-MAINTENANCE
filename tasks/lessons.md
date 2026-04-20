@@ -14,3 +14,5 @@
 
 [2026-04-08] | PM2 processes corrompus ("Process 0 not found") → 502 Bad Gateway | Quand pm2 restart échoue, utiliser: pm2 kill && pm2 start ecosystem.config.js
 
+[2026-04-20] | 8 notifications identiques envoyées simultanément pour un même rappel de paiement | En mode PM2 cluster, les cron jobs s'exécutent sur CHAQUE worker. Toujours limiter les cron jobs au worker 0 avec: if (!process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0')
+
