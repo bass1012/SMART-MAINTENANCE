@@ -8,10 +8,14 @@ import 'package:mct_maintenance_mobile/config/environment.dart';
 class ChatService {
   static final ChatService _instance = ChatService._internal();
   factory ChatService() => _instance;
+  bool _lastEmittedConnectionState = false;
   ChatService._internal() {
-    // Timer qui émet l'état de connexion toutes les secondes
-    Timer.periodic(const Duration(seconds: 1), (timer) {
-      _connectionController.add(isConnected);
+    // Timer qui émet l'état de connexion uniquement quand il change
+    Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (isConnected != _lastEmittedConnectionState) {
+        _lastEmittedConnectionState = isConnected;
+        _connectionController.add(isConnected);
+      }
     });
   }
 
