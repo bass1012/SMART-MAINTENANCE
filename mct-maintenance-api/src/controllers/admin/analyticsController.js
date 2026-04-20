@@ -211,13 +211,13 @@ exports.getTechnicianPerformance = async (req, res) => {
 
         return {
           technicianId: tech.user_id,
-          name: `${tech.user.first_name} ${tech.user.last_name}`,
-          email: tech.user.email,
+          name: `${tech.user.first_name || tech.first_name || ''} ${tech.user.last_name || tech.last_name || ''}`.trim() || 'Sans nom',
+          email: tech.user.email || '',
           totalInterventions,
           completedInterventions,
           completionRate: parseFloat(completionRate),
           avgRating: avgRating.toFixed(2),
-          specialty: tech.specialty
+          specialty: tech.specialization || ''
         };
       })
     );
