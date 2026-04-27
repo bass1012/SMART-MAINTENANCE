@@ -1,4 +1,5 @@
 import '../../utils/snackbar_helper.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/quote_contract_model.dart';
@@ -493,98 +494,93 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
         SnackBarHelper.showSuccess(context, 'Devis accepté avec succès',
             emoji: '✓');
 
-        // 🛒 Récupérer la liste des commandes pour trouver celle qui vient d'être créée
-        try {
-          final ordersResponse = await _apiService.get('/orders');
-          print('🔍 DEBUG Orders response: $ordersResponse');
+        // Utiliser order_id retourné directement par acceptQuote (pas de race condition)
+        Map<String, dynamic> recentOrder = {};
+        final directOrderId = acceptResponse['order_id'];
+        final directOrderRef = acceptResponse['order_reference'] as String?;
 
-          final orders =
-              (ordersResponse['data'] as List?)?.cast<Map<String, dynamic>>() ??
-                  [];
-          print('🔍 DEBUG Nombre de commandes: ${orders.length}');
-
-          if (orders.isNotEmpty) {
-            print('🔍 DEBUG Première commande: ${orders.first}');
-          }
-
-          final quoteIdInt = int.tryParse(_quote.id);
-          print('🔍 DEBUG Recherche commande pour quoteId: $quoteIdInt');
-
-          // Trouver la commande la plus récente liée à ce devis
-          final recentOrder = orders.firstWhere(
-            (order) {
-              final orderQuoteId = order['quoteId'];
-              print('🔍 DEBUG Order ${order['id']}: quoteId=$orderQuoteId');
-              return orderQuoteId == quoteIdInt ||
-                  orderQuoteId.toString() == _quote.id;
-            },
-            orElse: () => <String, dynamic>{},
-          );
-
-          print('🔍 DEBUG Commande trouvée: $recentOrder');
-
-          if (recentOrder.isNotEmpty && recentOrder['id'] != null) {
-            print(
-                '✅ Navigation vers paiement pour commande ${recentOrder['id']}');
-
-            // Calculer le montant selon le mode de paiement choisi
-            double amountToPay;
-            int paymentStep = 1;
-
-            if (paymentOption == 'full') {
-              // Paiement intégral (100%)
-              amountToPay = _quote.amount;
-              paymentStep = 0; // 0 = paiement complet
-              print(
-                  '💰 Paiement intégral: ${amountToPay.toStringAsFixed(0)} FCFA (100%)');
-            } else if (firstPaymentAmount != null && firstPaymentAmount > 0) {
-              amountToPay = firstPaymentAmount;
-              paymentStep = 1;
-              print(
-                  '💰 Paiement split (API): ${amountToPay.toStringAsFixed(0)} FCFA (50% - étape 1)');
-            } else if (_quote.paymentType == 'split' &&
-                _quote.firstPaymentAmount != null) {
-              amountToPay = _quote.firstPaymentAmount!;
-              paymentStep = 1;
-              print(
-                  '💰 Paiement split (quote): ${amountToPay.toStringAsFixed(0)} FCFA (50% - étape 1)');
-            } else {
-              // Fallback: utiliser le montant de la commande directement
-              // Note: totalAmount de la commande est DÉJÀ le montant 50% pour split payment
-              final orderAmount = recentOrder['totalAmount'];
-              if (orderAmount != null && orderAmount > 0) {
-                amountToPay = (orderAmount as num).toDouble();
-                print(
-                    '💰 Paiement (order totalAmount): ${amountToPay.toStringAsFixed(0)} FCFA');
-              } else {
-                // Si pas de totalAmount, calculer 50% du total du devis
-                amountToPay = (_quote.amount / 2).ceilToDouble();
-                print(
-                    '💰 Paiement (quote 50%): ${amountToPay.toStringAsFixed(0)} FCFA');
-              }
-              paymentStep = 1;
-            }
-
-            // Naviguer directement vers l'écran de paiement
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => PaymentScreen(
-                  invoiceId: recentOrder['id'].toString(),
-                  invoiceNumber: recentOrder['reference'] ?? 'N/A',
-                  amount: amountToPay,
-                  paymentStep: paymentStep,
-                ),
-              ),
+        if (directOrderId != null) {
+          recentOrder = {
+            'id': directOrderId,
+            'reference': directOrderRef,
+            'totalAmount': (acceptResponse['first_payment']
+                as Map<String, dynamic>?)?['amount'],
+          };
+        } else {
+          // Fallback: GET /orders si order_id absent de la réponse
+          try {
+            final ordersResponse = await _apiService.get('/orders');
+            final orders = (ordersResponse['data'] as List?)
+                    ?.cast<Map<String, dynamic>>() ??
+                [];
+            final quoteIdInt = int.tryParse(_quote.id);
+            recentOrder = orders.firstWhere(
+              (order) {
+                final orderQuoteId = order['quoteId'];
+                return orderQuoteId == quoteIdInt ||
+                    orderQuoteId.toString() == _quote.id;
+              },
+              orElse: () => <String, dynamic>{},
             );
-          } else {
-            print('⚠️  Aucune commande trouvée, retour normal');
-            // Si pas de commande trouvée, retourner normalement
-            Navigator.pop(context, true);
+          } catch (e) {
+            if (kDebugMode)
+              debugPrint('⚠️ Erreur récupération commande fallback: $e');
           }
-        } catch (e) {
-          print('⚠️  Erreur récupération commande: $e');
-          // En cas d'erreur, retourner normalement
+        }
+
+        if (recentOrder.isNotEmpty && recentOrder['id'] != null) {
+          // Calculer le montant selon le mode de paiement choisi
+          double amountToPay;
+          int paymentStep = 1;
+
+          if (paymentOption == 'full') {
+            // Paiement intégral (100%)
+            amountToPay = _quote.amount;
+            paymentStep = 0; // 0 = paiement complet
+            print(
+                '💰 Paiement intégral: ${amountToPay.toStringAsFixed(0)} FCFA (100%)');
+          } else if (firstPaymentAmount != null && firstPaymentAmount > 0) {
+            amountToPay = firstPaymentAmount;
+            paymentStep = 1;
+            print(
+                '💰 Paiement split (API): ${amountToPay.toStringAsFixed(0)} FCFA (50% - étape 1)');
+          } else if (_quote.paymentType == 'split' &&
+              _quote.firstPaymentAmount != null) {
+            amountToPay = _quote.firstPaymentAmount!;
+            paymentStep = 1;
+            print(
+                '💰 Paiement split (quote): ${amountToPay.toStringAsFixed(0)} FCFA (50% - étape 1)');
+          } else {
+            // Fallback: utiliser le montant de la commande directement
+            // Note: totalAmount de la commande est DÉJÀ le montant 50% pour split payment
+            final orderAmount = recentOrder['totalAmount'];
+            if (orderAmount != null && orderAmount > 0) {
+              amountToPay = (orderAmount as num).toDouble();
+              print(
+                  '💰 Paiement (order totalAmount): ${amountToPay.toStringAsFixed(0)} FCFA');
+            } else {
+              // Si pas de totalAmount, calculer 50% du total du devis
+              amountToPay = (_quote.amount / 2).ceilToDouble();
+              print(
+                  '💰 Paiement (quote 50%): ${amountToPay.toStringAsFixed(0)} FCFA');
+            }
+            paymentStep = 1;
+          }
+
+          // Naviguer directement vers l'écran de paiement
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PaymentScreen(
+                invoiceId: recentOrder['id'].toString(),
+                invoiceNumber: recentOrder['reference'] ?? 'N/A',
+                amount: amountToPay,
+                paymentStep: paymentStep,
+              ),
+            ),
+          );
+        } else {
+          // Aucune commande trouvée (order_id absent et fallback GET /orders vide)
           Navigator.pop(context, true);
         }
       }
@@ -1009,7 +1005,6 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                       ),
                     if (_quote.items.isNotEmpty) const SizedBox(height: 16),
 
-                    
                     const SizedBox(height: 24),
 
                     // Explication des options de paiement pour les devis en attente

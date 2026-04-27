@@ -75,3 +75,6 @@ KEYS
 DEL
 *.sh.backup
 node_modules/
+
+# Builds locaux
+releases/

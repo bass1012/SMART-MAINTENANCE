@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'api_service.dart';
 
@@ -14,7 +15,7 @@ class PaymentService {
     int paymentStep = 1, // 1 = premier paiement 50%, 2 = second paiement 50%
   }) async {
     try {
-      print(
+      if (kDebugMode) debugPrint(
           '💳 Initialisation paiement pour commande $orderId (étape $paymentStep)');
 
       final response = await _apiService.post(
@@ -33,14 +34,14 @@ class PaymentService {
       );
 
       if (response['success'] == true) {
-        print('✅ Paiement initialisé avec FineoPay');
+        if (kDebugMode) debugPrint('✅ Paiement initialisé avec FineoPay');
         return response['data'];
       } else {
         throw Exception(
             response['message'] ?? 'Erreur initialisation paiement');
       }
     } catch (e) {
-      print('❌ Erreur initialisation paiement: $e');
+      if (kDebugMode) debugPrint('❌ Erreur initialisation paiement: $e');
       rethrow;
     }
   }
@@ -48,29 +49,29 @@ class PaymentService {
   /// Ouvrir le lien de paiement FineoPay dans le navigateur
   Future<void> openPaymentUrl(String paymentUrl) async {
     try {
-      print('🔗 Tentative d\'ouverture de l\'URL: $paymentUrl');
+      if (kDebugMode) debugPrint('🔗 Tentative d\'ouverture de l\'URL: $paymentUrl');
       final Uri url = Uri.parse(paymentUrl);
 
-      print('🔍 Vérification canLaunchUrl...');
+      if (kDebugMode) debugPrint('🔍 Vérification canLaunchUrl...');
       final canLaunch = await canLaunchUrl(url);
-      print('🔍 canLaunchUrl result: $canLaunch');
+      if (kDebugMode) debugPrint('🔍 canLaunchUrl result: $canLaunch');
 
       if (canLaunch) {
-        print('🚀 Lancement de l\'URL dans le navigateur...');
+        if (kDebugMode) debugPrint('🚀 Lancement de l\'URL dans le navigateur...');
         final result = await launchUrl(
           url,
           mode: LaunchMode.externalApplication,
         );
-        print('✅ launchUrl result: $result');
-        print('✅ URL de paiement ouverte: $paymentUrl');
+        if (kDebugMode) debugPrint('✅ launchUrl result: $result');
+        if (kDebugMode) debugPrint('✅ URL de paiement ouverte: $paymentUrl');
       } else {
-        print('❌ canLaunchUrl a retourné false');
+        if (kDebugMode) debugPrint('❌ canLaunchUrl a retourné false');
         throw Exception(
             'Impossible d\'ouvrir le lien de paiement. Veuillez vérifier vos paramètres.');
       }
     } catch (e) {
-      print('❌ Erreur ouverture URL: $e');
-      print('❌ Stack trace: ${StackTrace.current}');
+      if (kDebugMode) debugPrint('❌ Erreur ouverture URL: $e');
+      if (kDebugMode) debugPrint('❌ Stack trace: ${StackTrace.current}');
       rethrow;
     }
   }
@@ -78,20 +79,20 @@ class PaymentService {
   /// Vérifier le statut d'un paiement
   Future<Map<String, dynamic>> checkPaymentStatus(String transactionId) async {
     try {
-      print('🔍 Vérification statut paiement: $transactionId');
+      if (kDebugMode) debugPrint('🔍 Vérification statut paiement: $transactionId');
 
       final response = await _apiService.get(
         '/payments/fineopay/status/$transactionId',
       );
 
       if (response['success'] == true) {
-        print('✅ Statut récupéré: ${response['data']}');
+        if (kDebugMode) debugPrint('✅ Statut récupéré: ${response['data']}');
         return response['data'];
       } else {
         throw Exception(response['message'] ?? 'Erreur vérification statut');
       }
     } catch (e) {
-      print('❌ Erreur vérification statut: $e');
+      if (kDebugMode) debugPrint('❌ Erreur vérification statut: $e');
       rethrow;
     }
   }
@@ -100,7 +101,7 @@ class PaymentService {
   Future<Map<String, dynamic>> initializeDiagnosticPayment(
       int interventionId) async {
     try {
-      print(
+      if (kDebugMode) debugPrint(
           '💳 Initialisation paiement diagnostic pour intervention $interventionId');
 
       final response = await _apiService.post(
@@ -109,7 +110,7 @@ class PaymentService {
       );
 
       if (response['success'] == true) {
-        print(
+        if (kDebugMode) debugPrint(
             '✅ Paiement diagnostic initialisé: ${response['data']['transaction_id']}');
         return response['data'];
       } else {
@@ -117,7 +118,7 @@ class PaymentService {
             response['message'] ?? 'Erreur initialisation paiement diagnostic');
       }
     } catch (e) {
-      print('❌ Erreur initialisation paiement diagnostic: $e');
+      if (kDebugMode) debugPrint('❌ Erreur initialisation paiement diagnostic: $e');
       rethrow;
     }
   }
@@ -137,10 +138,10 @@ class PaymentService {
       // 2. Ouvrir le lien de paiement
       await openPaymentUrl(paymentUrl);
 
-      print('✅ Paiement FineoPay lancé avec succès');
+      if (kDebugMode) debugPrint('✅ Paiement FineoPay lancé avec succès');
       return true;
     } catch (e) {
-      print('❌ Erreur processus paiement: $e');
+      if (kDebugMode) debugPrint('❌ Erreur processus paiement: $e');
       return false;
     }
   }
@@ -156,7 +157,7 @@ class PaymentService {
       final phaseLabel = paymentPhase == 1
           ? '1er paiement (50%)'
           : (paymentPhase == 2 ? '2ème paiement (50%)' : '');
-      print(
+      if (kDebugMode) debugPrint(
           '💳 Initialisation paiement pour contrat $subscriptionId - $phaseLabel');
 
       final response = await _apiService.post(
@@ -173,14 +174,14 @@ class PaymentService {
       );
 
       if (response['success'] == true) {
-        print('✅ Paiement contrat initialisé avec FineoPay');
+        if (kDebugMode) debugPrint('✅ Paiement contrat initialisé avec FineoPay');
         return response['data'];
       } else {
         throw Exception(
             response['message'] ?? 'Erreur initialisation paiement contrat');
       }
     } catch (e) {
-      print('❌ Erreur initialisation paiement contrat: $e');
+      if (kDebugMode) debugPrint('❌ Erreur initialisation paiement contrat: $e');
       rethrow;
     }
   }

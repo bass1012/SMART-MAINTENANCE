@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class TechnicianSettingsScreen extends StatefulWidget {
   const TechnicianSettingsScreen({super.key});
@@ -41,11 +42,22 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
 
   // Langue
   String _selectedLanguage = 'Français';
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = '${info.version}+${info.buildNumber}';
+      });
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -149,137 +161,139 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
                   children: [
                     const SizedBox(height: 16),
 
-                // Section Compte
-                _buildSectionHeader('Compte'),
-                _buildSettingTile(
-                  icon: Icons.person_outline,
-                  title: 'Informations personnelles',
-                  subtitle: 'Nom, prénom, téléphone',
-                  onTap: () => _showEditProfileDialog(),
-                ),
-                _buildSettingTile(
-                  icon: Icons.email_outlined,
-                  title: 'Email',
-                  subtitle: _user?.email ?? 'Non défini',
-                  onTap: () {
-                    SnackBarHelper.showInfo(
-                        context, 'Modifier email - À implémenter');
-                  },
-                ),
-                _buildSettingTile(
-                  icon: Icons.lock_outline,
-                  title: 'Mot de passe',
-                  subtitle: 'Modifier votre mot de passe',
-                  onTap: () => _showChangePasswordDialog(),
-                ),
+                    // Section Compte
+                    _buildSectionHeader('Compte'),
+                    _buildSettingTile(
+                      icon: Icons.person_outline,
+                      title: 'Informations personnelles',
+                      subtitle: 'Nom, prénom, téléphone',
+                      onTap: () => _showEditProfileDialog(),
+                    ),
+                    _buildSettingTile(
+                      icon: Icons.email_outlined,
+                      title: 'Email',
+                      subtitle: _user?.email ?? 'Non défini',
+                      onTap: () {
+                        SnackBarHelper.showInfo(
+                            context, 'Modifier email - À implémenter');
+                      },
+                    ),
+                    _buildSettingTile(
+                      icon: Icons.lock_outline,
+                      title: 'Mot de passe',
+                      subtitle: 'Modifier votre mot de passe',
+                      onTap: () => _showChangePasswordDialog(),
+                    ),
 
-                const Divider(),
+                    const Divider(),
 
-                // Section Professionnel
-                _buildSectionHeader('Professionnel'),
-                _buildSettingTile(
-                  icon: Icons.work_outline,
-                  title: 'Spécialisation',
-                  subtitle: _specializations.isEmpty
-                      ? 'Aucune spécialisation sélectionnée'
-                      : _specializations.join(', '),
-                  onTap: () => _showSpecializationDialog(),
-                ),
-                _buildSettingTile(
-                  icon: Icons.schedule_outlined,
-                  title: 'Horaires de travail',
-                  subtitle: _getWorkingDaysText(),
-                  onTap: () => _showWorkingHoursDialog(),
-                ),
-                _buildSettingTile(
-                  icon: Icons.location_on_outlined,
-                  title: 'Zone d\'intervention',
-                  subtitle: _serviceAreas.isEmpty
-                      ? 'Aucune zone sélectionnée'
-                      : _serviceAreas.join(', '),
-                  onTap: () => _showServiceAreasDialog(),
-                ),
+                    // Section Professionnel
+                    _buildSectionHeader('Professionnel'),
+                    _buildSettingTile(
+                      icon: Icons.work_outline,
+                      title: 'Spécialisation',
+                      subtitle: _specializations.isEmpty
+                          ? 'Aucune spécialisation sélectionnée'
+                          : _specializations.join(', '),
+                      onTap: () => _showSpecializationDialog(),
+                    ),
+                    _buildSettingTile(
+                      icon: Icons.schedule_outlined,
+                      title: 'Horaires de travail',
+                      subtitle: _getWorkingDaysText(),
+                      onTap: () => _showWorkingHoursDialog(),
+                    ),
+                    _buildSettingTile(
+                      icon: Icons.location_on_outlined,
+                      title: 'Zone d\'intervention',
+                      subtitle: _serviceAreas.isEmpty
+                          ? 'Aucune zone sélectionnée'
+                          : _serviceAreas.join(', '),
+                      onTap: () => _showServiceAreasDialog(),
+                    ),
 
-                const Divider(),
+                    const Divider(),
 
-                // Section Notifications
-                _buildSectionHeader('Notifications'),
-                _buildSwitchTile(
-                  icon: Icons.notifications_outlined,
-                  title: 'Notifications push',
-                  subtitle: 'Recevoir des notifications sur votre téléphone',
-                  value: _pushNotifications,
-                  onChanged: (value) {
-                    setState(() => _pushNotifications = value);
-                    if (value) {
-                      SnackBarHelper.showSuccess(
-                          context, 'Notifications push activées');
-                    } else {
-                      SnackBarHelper.showWarning(
-                          context, 'Notifications push désactivées');
-                    }
-                  },
-                ),
-                _buildSwitchTile(
-                  icon: Icons.email_outlined,
-                  title: 'Notifications email',
-                  subtitle:
-                      'Recevoir des emails pour les nouvelles interventions',
-                  value: _emailNotifications,
-                  onChanged: (value) {
-                    setState(() => _emailNotifications = value);
-                    if (value) {
-                      SnackBarHelper.showSuccess(
-                          context, 'Notifications email activées',
-                          emoji: '✉️');
-                    } else {
-                      SnackBarHelper.showWarning(
-                          context, 'Notifications email désactivées');
-                    }
-                  },
-                ),
-                _buildSwitchTile(
-                  icon: Icons.vibration_outlined,
-                  title: 'Vibration',
-                  subtitle: 'Vibrer lors des notifications',
-                  value: _vibrationEnabled,
-                  onChanged: (value) {
-                    setState(() => _vibrationEnabled = value);
-                    if (value) {
-                      SnackBarHelper.showSuccess(context, 'Vibration activée');
-                    } else {
-                      SnackBarHelper.showWarning(
-                          context, 'Vibration désactivée');
-                    }
-                  },
-                ),
+                    // Section Notifications
+                    _buildSectionHeader('Notifications'),
+                    _buildSwitchTile(
+                      icon: Icons.notifications_outlined,
+                      title: 'Notifications push',
+                      subtitle:
+                          'Recevoir des notifications sur votre téléphone',
+                      value: _pushNotifications,
+                      onChanged: (value) {
+                        setState(() => _pushNotifications = value);
+                        if (value) {
+                          SnackBarHelper.showSuccess(
+                              context, 'Notifications push activées');
+                        } else {
+                          SnackBarHelper.showWarning(
+                              context, 'Notifications push désactivées');
+                        }
+                      },
+                    ),
+                    _buildSwitchTile(
+                      icon: Icons.email_outlined,
+                      title: 'Notifications email',
+                      subtitle:
+                          'Recevoir des emails pour les nouvelles interventions',
+                      value: _emailNotifications,
+                      onChanged: (value) {
+                        setState(() => _emailNotifications = value);
+                        if (value) {
+                          SnackBarHelper.showSuccess(
+                              context, 'Notifications email activées',
+                              emoji: '✉️');
+                        } else {
+                          SnackBarHelper.showWarning(
+                              context, 'Notifications email désactivées');
+                        }
+                      },
+                    ),
+                    _buildSwitchTile(
+                      icon: Icons.vibration_outlined,
+                      title: 'Vibration',
+                      subtitle: 'Vibrer lors des notifications',
+                      value: _vibrationEnabled,
+                      onChanged: (value) {
+                        setState(() => _vibrationEnabled = value);
+                        if (value) {
+                          SnackBarHelper.showSuccess(
+                              context, 'Vibration activée');
+                        } else {
+                          SnackBarHelper.showWarning(
+                              context, 'Vibration désactivée');
+                        }
+                      },
+                    ),
 
-                const Divider(),
+                    const Divider(),
 
-                // Section Application
-                _buildSectionHeader('Application'),
-                _buildSettingTile(
-                  icon: Icons.language_outlined,
-                  title: 'Langue',
-                  subtitle: _selectedLanguage,
-                  onTap: () => _showLanguageDialog(),
-                ),
-                _buildSettingTile(
-                  icon: Icons.help_outline,
-                  title: 'Aide & Support',
-                  subtitle: 'Obtenir de l\'aide',
-                  onTap: () => _showHelpDialog(),
-                ),
-                _buildSettingTile(
-                  icon: Icons.info_outline,
-                  title: 'À propos',
-                  subtitle: 'Version 1.0.0',
-                  onTap: () => _showAboutDialog(),
-                ),
+                    // Section Application
+                    _buildSectionHeader('Application'),
+                    _buildSettingTile(
+                      icon: Icons.language_outlined,
+                      title: 'Langue',
+                      subtitle: _selectedLanguage,
+                      onTap: () => _showLanguageDialog(),
+                    ),
+                    _buildSettingTile(
+                      icon: Icons.help_outline,
+                      title: 'Aide & Support',
+                      subtitle: 'Obtenir de l\'aide',
+                      onTap: () => _showHelpDialog(),
+                    ),
+                    _buildSettingTile(
+                      icon: Icons.info_outline,
+                      title: 'À propos',
+                      subtitle: 'Version 1.0.0',
+                      onTap: () => _showAboutDialog(),
+                    ),
 
-                const SizedBox(height: 32),
-              ],
-            ),
+                    const SizedBox(height: 32),
+                  ],
+                ),
         ],
       ),
     );
@@ -1148,7 +1162,7 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
     showAboutDialog(
       context: context,
       applicationName: 'MCT Maintenance',
-      applicationVersion: '1.0.0',
+      applicationVersion: _appVersion.isEmpty ? '...' : _appVersion,
       applicationIcon: Icon(
         Icons.engineering,
         size: 48,

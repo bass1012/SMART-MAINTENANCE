@@ -215,7 +215,10 @@ const uploadDocument = async (req, res) => {
 // Supprimer un fichier
 const deleteUploadedFile = async (req, res) => {
   try {
-    const { type, filename } = req.params;
+    const { filename } = req.params;
+    // Normaliser : accepter 'products'/'product', 'equipments'/'equipment', 'avatars'/'avatar'
+    const rawType = req.params.type;
+    const type = rawType.replace(/s$/, ''); // strip trailing 's'
     
     let filePath;
     switch (type) {

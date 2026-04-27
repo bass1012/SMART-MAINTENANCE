@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'api_service_new.dart';
+import 'api_service.dart';
 
 class AuthService {
   final _apiService = ApiService();
@@ -7,8 +6,7 @@ class AuthService {
   Future<Map<String, dynamic>> verifyEmailCode(
       String emailOrPhone, String code) async {
     try {
-      final response = await _apiService.verifyEmailCode(emailOrPhone, code);
-      return json.decode(response.body);
+      return await _apiService.verifyEmailCode(emailOrPhone, code);
     } catch (e) {
       return {
         'success': false,
@@ -22,11 +20,10 @@ class AuthService {
     String verificationMethod = 'auto',
   }) async {
     try {
-      final response = await _apiService.resendVerificationCode(
+      return await _apiService.resendVerificationCode(
         emailOrPhone,
         verificationMethod: verificationMethod,
       );
-      return json.decode(response.body);
     } catch (e) {
       return {
         'success': false,
@@ -35,7 +32,5 @@ class AuthService {
     }
   }
 
-  void dispose() {
-    _apiService.dispose();
-  }
+  void dispose() {}
 }

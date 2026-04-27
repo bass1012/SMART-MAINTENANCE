@@ -104,30 +104,55 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
   }
 
   bool _isPaymentSuccessUrl(String url) {
-    final lowerUrl = url.toLowerCase();
-    return lowerUrl.contains('success') ||
-        lowerUrl.contains('payment/success') ||
-        lowerUrl.contains('payment-success') ||
-        lowerUrl.contains('paid=true') ||
-        lowerUrl.contains('status=success') ||
-        lowerUrl.contains('status=completed') ||
-        lowerUrl.contains('status=paid') ||
-        lowerUrl.contains('paymentcomplete') ||
-        lowerUrl.contains('payment_complete') ||
-        lowerUrl.contains('thank') ||
-        lowerUrl.contains('confirmed') ||
-        lowerUrl.contains('receipt');
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    final path = uri.path.toLowerCase();
+    final query = uri.query.toLowerCase();
+
+    // Domaine FineoPay uniquement — chemins/params spécifiques
+    if (host.contains('fineopay.com')) {
+      return path.endsWith('/success') ||
+          path.endsWith('/completed') ||
+          path.endsWith('/done') ||
+          query.contains('status=success') ||
+          query.contains('status=completed') ||
+          query.contains('status=paid');
+    }
+
+    // Domaine MCT API — chemins de callback configurés
+    if (host.contains('mct.ci')) {
+      return path.contains('/payment/success') ||
+          path.contains('/payments/success') ||
+          path.contains('/fineopay/success');
+    }
+
+    return false;
   }
 
   bool _isPaymentFailureUrl(String url) {
-    final lowerUrl = url.toLowerCase();
-    return lowerUrl.contains('failed') ||
-        lowerUrl.contains('failure') ||
-        lowerUrl.contains('cancel') ||
-        lowerUrl.contains('declined') ||
-        lowerUrl.contains('status=failed') ||
-        lowerUrl.contains('status=cancelled') ||
-        lowerUrl.contains('status=declined');
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    final path = uri.path.toLowerCase();
+    final query = uri.query.toLowerCase();
+
+    if (host.contains('fineopay.com')) {
+      return path.endsWith('/failed') ||
+          path.endsWith('/failure') ||
+          path.endsWith('/cancelled') ||
+          query.contains('status=failed') ||
+          query.contains('status=cancelled') ||
+          query.contains('status=declined');
+    }
+
+    if (host.contains('mct.ci')) {
+      return path.contains('/payment/cancel') ||
+          path.contains('/payment/failed') ||
+          path.contains('/payments/cancel');
+    }
+
+    return false;
   }
 
   void _handlePaymentSuccess() {
@@ -369,7 +394,8 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.paid_rounded, color: Color(0xFF0a543d), size: 16),
+                    const Icon(Icons.paid_rounded,
+                        color: Color(0xFF0a543d), size: 16),
                     const SizedBox(width: 6),
                     Text(
                       'Terminé le processus de paiement dans le navigateur\navant cliquer sur "Paiement effectué"',

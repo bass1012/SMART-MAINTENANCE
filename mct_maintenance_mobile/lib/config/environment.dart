@@ -1,5 +1,5 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 
 // Configuration des environnements
 enum Environment { development, staging, production }
@@ -25,14 +25,14 @@ class AppConfig {
     Location.office: '192.168.1.139', // IP du bureau
     Location.home: '192.168.1.4', // IP de la maison
     Location.ngrok:
-        'https://unlanguid-lauran-nonanimatingly.ngrok-free.dev', // URL ngrok (ex: abc123.ngrok-free.app)
+        '', // URL ngrok à renseigner localement (ex: https://abc123.ngrok-free.app)
   };
 
   // URL ngrok complète (à mettre à jour après chaque lancement de ngrok)
   // Lancez: ngrok http 3000
   // Copiez l'URL "Forwarding" ici
   static const String ngrokUrl =
-      'https://unlanguid-lauran-nonanimatingly.ngrok-free.dev';
+      ''; // À renseigner localement après `ngrok http 3000`
 
   // Configuration des environnements
   // IMPORTANT: Remplacez xxx par l'adresse IP de votre machine à la maison
@@ -96,21 +96,14 @@ class ApiConfig {
   // Timeout des requêtes
   static const Duration timeout = Duration(seconds: 30);
 
-  // Activer/désactiver les logs en mode debug
-  static const bool debugLogs = true;
+  // Activer/désactiver les logs en mode debug uniquement
+  static bool get debugLogs => kDebugMode;
 
   // Configuration des en-têtes par défaut
   static const Map<String, String> defaultHeaders = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
-  };
-
-  // Configuration CORS pour le développement
-  static const Map<String, String> corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Origin, Content-Type, X-Auth-Token',
   };
 }
 
@@ -128,6 +121,5 @@ class AppSecrets {
   static const String appVersion = '1.0.0';
 }
 
-// Raccourcis pour la rétrocompatibilité
+// Raccourci pour la rétrocompatibilité
 String get apiBaseUrl => AppConfig.baseUrl;
-Map<String, String> get corsHeaders => Map.from(ApiConfig.corsHeaders);

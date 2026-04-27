@@ -449,6 +449,7 @@ const acceptQuote = async (req, res) => {
     });
 
     // 🛒 Créer automatiquement une commande à partir du devis accepté
+    let createdOrder = null;
     try {
       // Parser line_items si c'est un string JSON
       let lineItems = quote.line_items;
@@ -490,6 +491,7 @@ const acceptQuote = async (req, res) => {
       // Mettre à jour le statut de paiement du devis
       await quote.update({ payment_status: paymentStatus });
 
+      createdOrder = { id: order.id, reference: orderReference };
       console.log(`✅ Commande ${orderReference} créée automatiquement pour le devis ${quote.reference} (paiement: ${paymentStatus})`);
     } catch (orderError) {
       console.error('⚠️  Erreur création commande automatique:', orderError.message);
@@ -524,7 +526,7 @@ const acceptQuote = async (req, res) => {
       console.error('⚠️  Erreur notification acceptation devis:', notifError.message);
     }
     
-    res.status(200).json({ success: true, data: quote, message: 'Devis accepté avec succès' });
+    res.status(200).json({ success: true, data: { ...quote.get({ plain: true }), createdOrder }, message: 'Devis accepté avec succès' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Erreur lors de l\'acceptation du devis', error: error.message });
   }

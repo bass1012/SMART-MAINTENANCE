@@ -2122,7 +2122,7 @@ const getPendingDiagnosticPayments = async (req, res) => {
         customer_id: customerId,
         is_free_diagnosis: false,
         diagnostic_paid: false,
-        status: { [Op.notIn]: ['cancelled', 'completed'] }
+        status: { [Op.notIn]: ['cancelled', 'completed', 'rejected', 'diagnostic_submitted', 'execution_confirmed'] }
       },
       include: [
         {

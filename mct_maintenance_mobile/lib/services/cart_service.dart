@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/cart_item_model.dart';
@@ -14,12 +15,13 @@ class CartService extends ChangeNotifier {
 
   int get itemCount => _items.fold(0, (sum, item) => sum + item.quantity);
 
-  double get totalAmount => _items.fold(0, (sum, item) => sum + item.totalPrice);
+  double get totalAmount =>
+      _items.fold(0, (sum, item) => sum + item.totalPrice);
 
   // Corriger l'URL de l'image si elle contient localhost
   String _fixImageUrl(String? imageUrl) {
     if (imageUrl == null) return '';
-    
+
     // Si l'URL contient localhost, la remplacer par la vraie base URL
     if (imageUrl.contains('localhost:3000')) {
       // Extraire le chemin (ex: /uploads/products/...)
@@ -27,26 +29,26 @@ class CartService extends ChangeNotifier {
       final path = uri.path;
       return '${AppConfig.baseUrl}$path';
     }
-    
+
     return imageUrl;
   }
 
   // Charger le panier depuis SharedPreferences
   Future<void> loadCart() async {
     if (_isLoaded) return;
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final cartData = prefs.getString(_cartKey);
-      
+
       if (cartData != null) {
         final List<dynamic> decoded = jsonDecode(cartData);
         _items.clear();
-        
+
         // Charger les items et corriger les URLs d'images
         for (var itemJson in decoded) {
           final cartItem = CartItem.fromJson(itemJson);
-          
+
           // Corriger l'URL de l'image du produit
           if (cartItem.product.imageUrl != null) {
             final fixedUrl = _fixImageUrl(cartItem.product.imageUrl);
@@ -66,7 +68,7 @@ class CartService extends ChangeNotifier {
               createdAt: cartItem.product.createdAt,
               updatedAt: cartItem.product.updatedAt,
             );
-            
+
             _items.add(CartItem(
               product: fixedProduct,
               quantity: cartItem.quantity,
@@ -75,12 +77,12 @@ class CartService extends ChangeNotifier {
             _items.add(cartItem);
           }
         }
-        
+
         // Sauvegarder le panier avec les URLs corrigées
         await _saveCart();
         notifyListeners();
       }
-      
+
       _isLoaded = true;
     } catch (e) {
       debugPrint('Erreur lors du chargement du panier: $e');
@@ -100,22 +102,23 @@ class CartService extends ChangeNotifier {
 
   // Ajouter un produit au panier
   void addItem(ProductModel product, {int quantity = 1}) {
-    final existingIndex = _items.indexWhere((item) => item.product.id == product.id);
-    
+    final existingIndex =
+        _items.indexWhere((item) => item.product.id == product.id);
+
     if (existingIndex >= 0) {
       _items[existingIndex].quantity += quantity;
     } else {
       _items.add(CartItem(product: product, quantity: quantity));
     }
-    
-    _saveCart();
+
+    unawaited(_saveCart());
     notifyListeners();
   }
 
   // Retirer un produit du panier
   void removeItem(int productId) {
     _items.removeWhere((item) => item.product.id == productId);
-    _saveCart();
+    unawaited(_saveCart());
     notifyListeners();
   }
 
@@ -124,7 +127,7 @@ class CartService extends ChangeNotifier {
     final index = _items.indexWhere((item) => item.product.id == productId);
     if (index >= 0) {
       _items[index].quantity++;
-      _saveCart();
+      unawaited(_saveCart());
       notifyListeners();
     }
   }
@@ -138,7 +141,7 @@ class CartService extends ChangeNotifier {
       } else {
         _items.removeAt(index);
       }
-      _saveCart();
+      unawaited(_saveCart());
       notifyListeners();
     }
   }
@@ -146,7 +149,7 @@ class CartService extends ChangeNotifier {
   // Vider le panier
   void clear() {
     _items.clear();
-    _saveCart();
+    unawaited(_saveCart());
     notifyListeners();
   }
 
@@ -159,7 +162,8 @@ class CartService extends ChangeNotifier {
   int getQuantity(int productId) {
     final item = _items.firstWhere(
       (item) => item.product.id == productId,
-      orElse: () => CartItem(product: ProductModel(id: 0, sku: '', nom: '', prix: 0)),
+      orElse: () =>
+          CartItem(product: ProductModel(id: 0, sku: '', nom: '', prix: 0)),
     );
     return item.product.id != 0 ? item.quantity : 0;
   }

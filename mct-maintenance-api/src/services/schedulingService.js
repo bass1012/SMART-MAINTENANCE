@@ -39,13 +39,13 @@ class SchedulingService {
       const [intervention] = await sequelize.query(`
         SELECT 
           i.*,
-          c.id as customer_id,
-          c.first_name as customer_first_name,
-          c.last_name as customer_last_name,
-          c.latitude as customer_latitude,
-          c.longitude as customer_longitude
+          cp.id as customer_id,
+          cp.first_name as customer_first_name,
+          cp.last_name as customer_last_name,
+          cp.latitude as customer_latitude,
+          cp.longitude as customer_longitude
         FROM interventions i
-        LEFT JOIN users c ON i.customer_id = c.id
+        LEFT JOIN customer_profiles cp ON i.customer_id = cp.id
         WHERE i.id = ?
       `, {
         replacements: [interventionId],
@@ -63,16 +63,17 @@ class SchedulingService {
       // 2. Récupérer tous les techniciens actifs avec coordonnées (SQL directe)
       const technicians = await sequelize.query(`
         SELECT 
-          id, 
-          first_name, 
-          last_name, 
-          email, 
-          phone, 
-          profile_image,
-          latitude,
-          longitude
-        FROM users
-        WHERE role = 'technician' AND status = 'active'
+          u.id, 
+          u.first_name, 
+          u.last_name, 
+          u.email, 
+          u.phone, 
+          u.profile_image,
+          tp.current_location_lat AS latitude,
+          tp.current_location_lng AS longitude
+        FROM users u
+        LEFT JOIN technician_profiles tp ON tp.user_id = u.id
+        WHERE u.role = 'technician' AND u.status = 'active'
       `, {
         type: sequelize.QueryTypes.SELECT
       });
