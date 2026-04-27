@@ -19,6 +19,7 @@ class FCMService {
   final ApiService _apiService = ApiService();
   String? _fcmToken;
   bool _initialized = false;
+  int? _currentUserId;
 
   // Stream pour notifier quand une notification est cliquée
   final StreamController<Map<String, dynamic>> _notificationTapController =
@@ -169,12 +170,39 @@ class FCMService {
     }
   }
 
+  /// Mettre à jour l'ID de l'utilisateur courant (appelé après login/logout)
+  void setCurrentUserId(int? userId) {
+    _currentUserId = userId;
+  }
+
+  /// Vérifier si une notification est destinée à l'utilisateur courant
+  /// Retourne true si la notification est valide (doit être affichée)
+  bool _isNotificationForCurrentUser(Map<String, dynamic> data) {
+    final String? targetUserId = data['target_user_id'];
+
+    // Si pas de target_user_id (anciennes notifs), on accepte
+    if (targetUserId == null || targetUserId.isEmpty) return true;
+
+    // Si on ne connaît pas l'utilisateur courant, on accepte
+    if (_currentUserId == null) return true;
+
+    final bool isForMe = targetUserId == _currentUserId.toString();
+    if (!isForMe) {
+      print(
+          '⚠️ [FCM] Notification ignorée: destinée à user $targetUserId, utilisateur courant: $_currentUserId');
+    }
+    return isForMe;
+  }
+
   /// Gérer les notifications quand l'app est au premier plan
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     print('🔔 Notification reçue (foreground)');
     print('   Titre: ${message.notification?.title}');
     print('   Message: ${message.notification?.body}');
     print('   Data: ${message.data}');
+
+    // Vérifier que la notification est destinée à l'utilisateur courant
+    if (!_isNotificationForCurrentUser(message.data)) return;
 
     // Afficher une notification locale pour les types importants
     final String? type = message.data['type'];
@@ -293,6 +321,9 @@ class FCMService {
   void _handleNotificationTap(RemoteMessage message) {
     print('👆 Notification cliquée (FCM)');
     print('   Data: ${message.data}');
+
+    // Vérifier que la notification est destinée à l'utilisateur courant
+    if (!_isNotificationForCurrentUser(message.data)) return;
 
     // Convertir les données en Map<String, dynamic>
     final Map<String, dynamic> notificationData =
@@ -423,6 +454,22 @@ class FCMService {
       print('📍 [FCM] Stack: $stackTrace');
       return false;
     }
+  }
+
+  /// Nettoyer les données FCM lors de la déconnexion
+  /// Supprime le token Firebase et efface l'ID utilisateur courant
+  Future<void> clearOnLogout() async {
+    try {
+      // Supprimer le token Firebase pour forcer sa régénération au prochain login
+      await _firebaseMessaging.deleteToken();
+      print('🔕 [FCM] Token Firebase supprimé (logout)');
+    } catch (e) {
+      print('⚠️  [FCM] Erreur suppression token Firebase: $e');
+    }
+    _fcmToken = null;
+    _currentUserId = null;
+    _initialized = false; // Forcer la réinitialisation au prochain login
+    print('🔕 [FCM] État FCM réinitialisé (logout)');
   }
 }
 

@@ -74,6 +74,16 @@ class _SplashScreenState extends State<SplashScreen>
           await FCMService().initialize();
           print('✅ FCM initialisé avec succès');
 
+          // Charger l'ID utilisateur courant pour filtrer les notifications
+          final storedUser = await _apiService.loadUserData();
+          if (storedUser != null) {
+            final userId = storedUser['id'];
+            if (userId != null) {
+              FCMService().setCurrentUserId(
+                  userId is int ? userId : int.tryParse(userId.toString()));
+            }
+          }
+
           // Toujours rafraîchir le token au démarrage pour s'assurer qu'il est à jour
           final fcmSuccess = await FCMService().refreshToken();
           if (fcmSuccess) {

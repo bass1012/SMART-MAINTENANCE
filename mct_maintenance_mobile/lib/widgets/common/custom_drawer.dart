@@ -7,6 +7,7 @@ import 'package:mct_maintenance_mobile/screens/customer/profile_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/settings_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/history_screen.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/services/fcm_service.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
 
 class CustomDrawer extends StatefulWidget {
@@ -347,7 +348,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
 
           if (shouldLogout == true && mounted) {
             try {
-              // Appeler la méthode de déconnexion de l'API
+              await FCMService().clearOnLogout();
               await _apiService.logout();
             } catch (e) {
               // Ignorer les erreurs de déconnexion

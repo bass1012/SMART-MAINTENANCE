@@ -97,6 +97,13 @@ class _LoginFormState extends State<LoginForm> {
             await FCMService().initialize();
             debugPrint('✅ FCM initialisé avec succès après login');
 
+            // Enregistrer l'ID utilisateur courant pour filtrer les notifications
+            final userId = user['id'];
+            if (userId != null) {
+              FCMService().setCurrentUserId(
+                  userId is int ? userId : int.tryParse(userId.toString()));
+            }
+
             // Toujours rafraîchir le token après login (même si déjà initialisé)
             fcmSuccess = await FCMService().refreshToken();
             if (fcmSuccess) {

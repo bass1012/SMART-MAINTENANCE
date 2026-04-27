@@ -8,6 +8,7 @@ import 'package:mct_maintenance_mobile/screens/customer/invoices_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/support_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/settings_screen.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/services/fcm_service.dart';
 
 class ModernProfileMenu {
   final BuildContext context;
@@ -250,6 +251,7 @@ class ModernProfileMenu {
 
                 if (shouldLogout == true && context.mounted) {
                   try {
+                    await FCMService().clearOnLogout();
                     await apiService.logout();
                   } catch (e) {
                     // Ignorer les erreurs

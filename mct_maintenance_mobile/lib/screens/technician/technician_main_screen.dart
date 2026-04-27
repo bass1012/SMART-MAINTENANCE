@@ -417,6 +417,7 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
 
                 if (shouldLogout == true) {
                   try {
+                    await FCMService().clearOnLogout();
                     await _apiService.logout();
                   } catch (e) {
                     // Ignorer les erreurs de déconnexion
