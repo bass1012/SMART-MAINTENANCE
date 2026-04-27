@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
 import '../../utils/snackbar_helper.dart';
@@ -91,7 +92,7 @@ class _HistoryScreenState extends State<HistoryScreen>
         });
       }
     } catch (e) {
-      print('Erreur de chargement de l\'historique: $e');
+      if (kDebugMode) debugPrint('Erreur de chargement de l\'historique: $e');
       if (mounted) {
         setState(() {
           // En cas d'erreur, utiliser les données de démo
@@ -130,7 +131,8 @@ class _HistoryScreenState extends State<HistoryScreen>
         );
       }).toList();
     } catch (e) {
-      print('Erreur lors du parsing des interventions: $e');
+      if (kDebugMode)
+        debugPrint('Erreur lors du parsing des interventions: $e');
       return [];
     }
   }
@@ -205,7 +207,7 @@ class _HistoryScreenState extends State<HistoryScreen>
         );
       }).toList();
     } catch (e) {
-      print('Erreur lors du parsing des devis: $e');
+      if (kDebugMode) debugPrint('Erreur lors du parsing des devis: $e');
       return [];
     }
   }
@@ -231,7 +233,15 @@ class _HistoryScreenState extends State<HistoryScreen>
       if (data == null || data is! List) return [];
       final List<dynamic> ordersData = data;
 
-      return ordersData.map((orderJson) {
+      // Exclure les commandes liées à un devis (paiements d'intervention)
+      // Elles sont déjà visibles dans l'onglet "Devis"
+      final shopOrders = ordersData
+          .where(
+            (o) => o['quoteId'] == null && o['quote_id'] == null,
+          )
+          .toList();
+
+      return shopOrders.map((orderJson) {
         // Parser le montant avec plusieurs tentatives
         double amount = 0.0;
         if (orderJson['totalAmount'] != null) {
@@ -260,7 +270,7 @@ class _HistoryScreenState extends State<HistoryScreen>
         );
       }).toList();
     } catch (e) {
-      print('Erreur lors du parsing des commandes: $e');
+      if (kDebugMode) debugPrint('Erreur lors du parsing des commandes: $e');
       return [];
     }
   }

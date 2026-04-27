@@ -1,4 +1,5 @@
 import '../../utils/snackbar_helper.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/common/loading_indicator.dart';
 import 'package:provider/provider.dart';
@@ -29,13 +30,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _isValidatingPromo = false;
   Map<String, dynamic>? _appliedPromo;
   double _discount = 0.0;
+  final ApiService _apiService = ApiService();
   late final PaymentService _paymentService;
 
   @override
   void initState() {
     super.initState();
-    final apiService = ApiService();
-    _paymentService = PaymentService(apiService);
+    _paymentService = PaymentService(_apiService);
   }
 
   @override
@@ -58,9 +59,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     try {
       final cart = Provider.of<CartService>(context, listen: false);
-      final api = ApiService(); // Créer une instance directement
 
-      final response = await api.post('/promotions/validate', {
+      final response = await _apiService.post('/promotions/validate', {
         'code': code,
         'orderAmount': cart.totalAmount,
       });
@@ -94,7 +94,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             context, response['message'] ?? 'Code promo invalide');
       }
     } catch (e) {
-      print('❌ Erreur validation promo: $e');
+      if (kDebugMode) debugPrint('❌ Erreur validation promo: $e');
       SnackBarHelper.showError(
         context,
         'Erreur lors de la validation du code promo: ${e.toString()}',
@@ -216,7 +216,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     try {
       final cart = Provider.of<CartService>(context, listen: false);
-      final apiService = ApiService();
 
       // Préparer les données de la commande
       final orderData = {
@@ -241,7 +240,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       };
 
       // Créer la commande
-      final response = await apiService.post('/orders', orderData);
+      final response = await _apiService.post('/orders', orderData);
       final orderId = response['data']['id'];
       final totalAmount = response['data']['totalAmount'];
       final reference = response['data']['reference'];
@@ -258,7 +257,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           Navigator.of(context).popUntil((route) => route.isFirst);
         } else {
           // Pour FineoPay, initialiser le paiement
-          print('💳 Initialisation paiement FineoPay pour commande #$orderId');
+          if (kDebugMode)
+            debugPrint(
+                '💳 Initialisation paiement FineoPay pour commande #$orderId');
           final paymentData = await _paymentService.initializeOrderPayment(
             orderId,
             totalAmount.toDouble(),
@@ -266,11 +267,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           );
 
           final paymentUrl = paymentData['paymentUrl'];
-          print('🔗 URL de paiement reçue: $paymentUrl');
+          if (kDebugMode) debugPrint('🔗 URL de paiement reçue: $paymentUrl');
 
           if (paymentUrl != null && paymentUrl.toString().isNotEmpty) {
             try {
-              print('📱 Ouverture du WebView pour le paiement...');
+              if (kDebugMode)
+                debugPrint('📱 Ouverture du WebView pour le paiement...');
 
               // Ouvrir le paiement dans un WebView intégré
               final paymentResult = await Navigator.push<bool>(
@@ -288,7 +290,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 if (paymentResult == true) {
                   // Paiement réussi - vider le panier
                   cart.clear();
-                  print('✅ Paiement réussi via WebView');
+                  if (kDebugMode) debugPrint('✅ Paiement réussi via WebView');
                   Navigator.of(context).pushReplacement(
                     MaterialPageRoute(
                       builder: (context) => PaymentStatusScreen(
@@ -298,8 +300,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                   );
                 } else {
-                  // Paiement annulé ou échoué - garder le panier intact
-                  print('❌ Paiement annulé ou échoué - panier conservé');
+                  // Paiement annulé ou échoué — supprimer la commande orpheline
+                  try {
+                    await _apiService.delete('/orders/$orderId');
+                    if (kDebugMode)
+                      debugPrint('🗑️ Commande orpheline $orderId supprimée');
+                  } catch (deleteErr) {
+                    if (kDebugMode)
+                      debugPrint(
+                          '⚠️ Impossible de supprimer la commande orpheline: $deleteErr');
+                  }
                   SnackBarHelper.showInfo(
                     context,
                     'Paiement annulé. Votre panier est conservé.',
@@ -308,7 +318,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 }
               }
             } catch (e) {
-              print('❌ Erreur lors du paiement: $e');
+              if (kDebugMode) debugPrint('❌ Erreur lors du paiement: $e');
               if (mounted) {
                 SnackBarHelper.showError(
                   context,
@@ -317,7 +327,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               }
             }
           } else {
-            print('❌ URL de paiement manquante dans la réponse');
+            if (kDebugMode)
+              debugPrint('❌ URL de paiement manquante dans la réponse');
             if (mounted) {
               SnackBarHelper.showError(
                 context,
@@ -328,7 +339,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         }
       }
     } catch (e) {
-      print('❌ Erreur traitement commande: $e');
+      if (kDebugMode) debugPrint('❌ Erreur traitement commande: $e');
       if (mounted) {
         SnackBarHelper.showError(context, 'Erreur: ${e.toString()}');
       }

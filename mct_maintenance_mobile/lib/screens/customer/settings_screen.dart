@@ -1,6 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/painting.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
@@ -22,12 +26,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _pushNotifications = true;
   String _language = 'fr';
   String _theme = 'light';
+  String _appVersion = '';
   final ApiService _apiService = ApiService();
 
   @override
   void initState() {
     super.initState();
     _loadPreferences();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = '${info.version}+${info.buildNumber}';
+      });
+    }
   }
 
   Future<void> _loadPreferences() async {
@@ -448,7 +463,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       subtitle: Text(
-                        '1.0.0',
+                        _appVersion.isEmpty ? '...' : _appVersion,
                         style: GoogleFonts.poppins(fontSize: 12),
                       ),
                     ),
@@ -959,7 +974,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
+      builder: (ctx) => const AlertDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -972,38 +987,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     try {
-      // Simuler le téléchargement des données
-      await Future.delayed(const Duration(seconds: 2));
+      final bytes = await _apiService.getBytes('/customer/export-data');
 
-      if (mounted) {
-        Navigator.pop(context);
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Données prêtes'),
-            content: const Text(
-              'Vos données ont été préparées.\n\n'
-              'Elles incluent :\n'
-              '• Vos informations de profil\n'
-              '• Historique des interventions\n'
-              '• Devis et contrats\n'
-              '• Factures\n'
-              '• Réclamations\n\n'
-              'Un email avec un lien de téléchargement vous sera envoyé sous 24h.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
+      if (!mounted) return;
+      Navigator.pop(context); // fermer le loader
+
+      final dir = await getTemporaryDirectory();
+      final now = DateTime.now();
+      final filename =
+          'mct_donnees_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.pdf';
+      final file = File('${dir.path}/$filename');
+      await file.writeAsBytes(bytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        subject: 'Mes données MCT Maintenance',
+        text:
+            'Export de mes données personnelles MCT Maintenance — ${now.day}/${now.month}/${now.year}',
+      );
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        SnackBarHelper.showError(context, 'Erreur: $e');
+        SnackBarHelper.showError(context, 'Erreur lors de l\'export : $e');
       }
     }
   }

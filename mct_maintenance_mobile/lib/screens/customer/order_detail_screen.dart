@@ -659,9 +659,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       final orderId = int.parse(widget.order['id'].toString());
 
       // Initialiser le paiement
+      final rawAmount =
+          widget.order['totalAmount'] ?? widget.order['total_amount'];
+      final orderAmount = (rawAmount as num?)?.toDouble() ?? 0.0;
       final paymentData = await _paymentService.initializeOrderPayment(
         orderId,
-        widget.order['totalAmount'].toDouble(),
+        orderAmount,
         widget.order['reference'],
       );
       final paymentUrl = paymentData['paymentUrl'] as String;

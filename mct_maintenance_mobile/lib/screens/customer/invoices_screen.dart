@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/services/api_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'payment_screen.dart';
 
 class InvoicesScreen extends StatefulWidget {
@@ -21,6 +20,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   bool _isLoading = true;
   List<Invoice> _invoices = [];
   String _filterStatus = 'all';
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -44,8 +44,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          // En cas d'erreur, utiliser les données de démo
-          _invoices = _getDemoInvoices();
+          _invoices = [];
+          _errorMessage = e.toString();
           _isLoading = false;
         });
         SnackBarHelper.showError(context, 'Erreur de chargement: $e');
@@ -55,70 +55,45 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   List<Invoice> _parseInvoices(Map<String, dynamic> response) {
     try {
-      final List<dynamic> ordersData = response['data'] ?? [];
+      final List<dynamic> data = response['data'] ?? [];
 
-      print('🔍 DEBUG Invoices - Nombre de commandes: ${ordersData.length}');
+      return data.map((item) {
+        final itemId = item['id']?.toString() ?? '';
+        final date = DateTime.tryParse(item['date']?.toString() ??
+                item['createdAt']?.toString() ??
+                '') ??
+            DateTime.now();
 
-      return ordersData.map((orderJson) {
-        // DEBUG: Afficher tous les champs de la première commande
-        if (ordersData.indexOf(orderJson) == 0) {
-          print('📦 DEBUG - Premier objet commande:');
-          print('   Keys disponibles: ${orderJson.keys.toList()}');
-          print('   payment_status: ${orderJson['payment_status']}');
-          print('   paymentStatus: ${orderJson['paymentStatus']}');
-          print('   status: ${orderJson['status']}');
-          print('   statut: ${orderJson['statut']}');
-        }
-
-        // Convertir les commandes en factures
-        final orderId = orderJson['id'].toString();
-        final createdAt = DateTime.parse(orderJson['created_at'] ??
-            orderJson['createdAt'] ??
-            DateTime.now().toIso8601String());
-
-        // Parser le montant avec plusieurs tentatives
         double amount = 0.0;
-        if (orderJson['totalAmount'] != null) {
-          amount = double.tryParse(orderJson['totalAmount'].toString()) ?? 0.0;
-        } else if (orderJson['total_amount'] != null) {
-          amount = double.tryParse(orderJson['total_amount'].toString()) ?? 0.0;
-        } else if (orderJson['montant_total'] != null) {
-          amount =
-              double.tryParse(orderJson['montant_total'].toString()) ?? 0.0;
-        } else if (orderJson['total'] != null) {
-          amount = double.tryParse(orderJson['total'].toString()) ?? 0.0;
-        } else if (orderJson['amount'] != null) {
-          amount = double.tryParse(orderJson['amount'].toString()) ?? 0.0;
+        if (item['amount'] != null) {
+          amount = double.tryParse(item['amount'].toString()) ?? 0.0;
         }
 
-        // Récupérer le statut de paiement
-        // L'API renvoie paymentStatus en camelCase (pas payment_status)
-        String paymentStatus = orderJson['paymentStatus']?.toString() ??
-            orderJson['payment_status']?.toString() ??
-            orderJson['statut_paiement']?.toString() ??
-            'pending';
+        final String type = item['type']?.toString() ?? 'order';
+        final String rawStatus = item['status']?.toString() ?? 'pending';
+        final String status = _mapInvoiceStatus(rawStatus, date);
 
-        print('💳 Commande #$orderId - Payment Status brut: $paymentStatus');
-
-        final mappedStatus = _mapInvoiceStatus(paymentStatus, createdAt);
-        print('   ➡️ Status mappé: $mappedStatus');
+        // Déterminer le numéro de facture selon le type
+        String invoiceNumber;
+        if (type == 'quote_second_payment') {
+          invoiceNumber = 'SOL-${item['reference'] ?? itemId}';
+        } else if (type.startsWith('quote')) {
+          invoiceNumber = 'DEV-${item['reference'] ?? itemId}';
+        } else {
+          invoiceNumber = 'CMD-${item['reference'] ?? itemId}';
+        }
 
         return Invoice(
-          id: orderId,
-          number: 'FACT-${DateTime.now().year}-${orderId.padLeft(3, '0')}',
-          date: createdAt,
-          dueDate:
-              createdAt.add(const Duration(days: 30)), // Échéance à 30 jours
+          id: itemId,
+          number: invoiceNumber,
+          date: date,
+          dueDate: date.add(const Duration(days: 30)),
           amount: amount,
-          status: mappedStatus,
-          description: orderJson['notes'] ??
-              orderJson['adresse_livraison'] ??
-              orderJson['shipping_address'] ??
-              'Commande #$orderId',
+          status: status,
+          description: item['description']?.toString() ?? 'Paiement #$itemId',
         );
       }).toList();
     } catch (e) {
-      print('❌ Erreur lors du parsing des factures: $e');
       return [];
     }
   }
@@ -142,47 +117,6 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       default:
         return 'pending';
     }
-  }
-
-  List<Invoice> _getDemoInvoices() {
-    return [
-      Invoice(
-        id: '1',
-        number: 'FACT-2025-001',
-        date: DateTime.now().subtract(const Duration(days: 5)),
-        dueDate: DateTime.now().add(const Duration(days: 25)),
-        amount: 1250.00,
-        status: 'paid',
-        description: 'Maintenance préventive chaudière',
-      ),
-      Invoice(
-        id: '2',
-        number: 'FACT-2025-002',
-        date: DateTime.now().subtract(const Duration(days: 15)),
-        dueDate: DateTime.now().add(const Duration(days: 15)),
-        amount: 850.00,
-        status: 'pending',
-        description: 'Dépannage pompe à chaleur',
-      ),
-      Invoice(
-        id: '3',
-        number: 'FACT-2024-089',
-        date: DateTime.now().subtract(const Duration(days: 45)),
-        dueDate: DateTime.now().subtract(const Duration(days: 15)),
-        amount: 2500.00,
-        status: 'overdue',
-        description: 'Installation thermostat connecté',
-      ),
-      Invoice(
-        id: '4',
-        number: 'FACT-2024-078',
-        date: DateTime.now().subtract(const Duration(days: 90)),
-        dueDate: DateTime.now().subtract(const Duration(days: 60)),
-        amount: 450.00,
-        status: 'paid',
-        description: 'Entretien annuel',
-      ),
-    ];
   }
 
   List<Invoice> get _filteredInvoices {
@@ -331,7 +265,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : _filteredInvoices.isEmpty
+                    : _errorMessage != null
                         ? Center(
                             child: Container(
                               margin: const EdgeInsets.all(24),
@@ -350,31 +284,78 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.receipt_outlined,
-                                      size: 64,
-                                      color: const Color(0xFF0a543d)
-                                          .withOpacity(0.6)),
+                                  Icon(Icons.wifi_off_outlined,
+                                      size: 64, color: Colors.red.shade300),
                                   const SizedBox(height: 16),
                                   Text(
-                                    'Aucune facture',
+                                    'Impossible de charger les factures',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.grey.shade700,
                                     ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        _errorMessage = null;
+                                      });
+                                      _loadInvoices();
+                                    },
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Réessayer'),
                                   ),
                                 ],
                               ),
                             ),
                           )
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: _filteredInvoices.length,
-                            itemBuilder: (context, index) {
-                              final invoice = _filteredInvoices[index];
-                              return _buildInvoiceCard(invoice);
-                            },
-                          ),
+                        : _filteredInvoices.isEmpty
+                            ? Center(
+                                child: Container(
+                                  margin: const EdgeInsets.all(24),
+                                  padding: const EdgeInsets.all(32),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.9),
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.receipt_outlined,
+                                          size: 64,
+                                          color: const Color(0xFF0a543d)
+                                              .withOpacity(0.6)),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Aucune facture',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                itemCount: _filteredInvoices.length,
+                                itemBuilder: (context, index) {
+                                  final invoice = _filteredInvoices[index];
+                                  return _buildInvoiceCard(invoice);
+                                },
+                              ),
               ),
             ],
           ),
@@ -730,13 +711,17 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  invoice.number,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                Flexible(
+                  child: Text(
+                    invoice.number,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 8),
                 _buildStatusBadge(invoice.status),
               ],
             ),

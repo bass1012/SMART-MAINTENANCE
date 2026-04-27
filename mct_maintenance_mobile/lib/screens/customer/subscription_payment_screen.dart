@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../widgets/common/loading_indicator.dart';
@@ -29,106 +31,103 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
   bool _isPolling = false;
   int _pollCount = 0;
   static const int _maxPolls = 60; // 5 minutes max (60 x 5s)
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
   }
 
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    if (mounted) setState(() => _isPolling = false);
+  }
+
   void _startPaymentPolling() {
+    if (_pollTimer != null) return; // déjà en cours
     setState(() {
       _isPolling = true;
       _pollCount = 0;
     });
 
-    // Afficher le dialog de polling
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          // Lancer le polling
-          _pollPaymentStatus(dialogContext, setDialogState);
-
-          return AlertDialog(
-            icon: const SizedBox(
-              width: 64,
-              height: 64,
-              child: CircularProgressIndicator(
-                color: Colors.orange,
-                strokeWidth: 4,
-              ),
-            ),
-            title: const Text('Vérification en cours...'),
-            content: Text(
-              'Complétez le paiement sur FineoPay.\n\n'
-              'L\'application vérifie automatiquement votre paiement.',
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  setState(() => _isPolling = false);
-                  Navigator.pop(dialogContext);
-                  Navigator.pop(context, false);
-                },
-                child: const Text('Annuler'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  // Vérification manuelle
-                  await _checkPaymentManually(dialogContext);
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                child: const Text('Vérifier maintenant'),
-              ),
-            ],
-          );
-        },
+      builder: (dialogContext) => AlertDialog(
+        icon: const SizedBox(
+          width: 64,
+          height: 64,
+          child: CircularProgressIndicator(
+            color: Colors.orange,
+            strokeWidth: 4,
+          ),
+        ),
+        title: const Text('Vérification en cours...'),
+        content: const Text(
+          'Complétez le paiement sur FineoPay.\n\n'
+          'L\'application vérifie automatiquement votre paiement.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _stopPolling();
+              Navigator.pop(dialogContext);
+              Navigator.pop(context, false);
+            },
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => _checkPaymentManually(dialogContext),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Vérifier maintenant'),
+          ),
+        ],
       ),
     );
-  }
 
-  Future<void> _pollPaymentStatus(
-      BuildContext dialogContext, StateSetter setDialogState) async {
-    while (_isPolling && _pollCount < _maxPolls && mounted) {
-      await Future.delayed(const Duration(seconds: 5));
-
-      if (!_isPolling || !mounted) break;
-
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       _pollCount++;
-      print(
-          '🔍 Polling paiement souscription #${widget.subscriptionId} (${_pollCount}/$_maxPolls)');
+      if (kDebugMode)
+        debugPrint(
+            '🔍 Polling souscription #${widget.subscriptionId} ($_pollCount/$_maxPolls)');
+
+      if (_pollCount >= _maxPolls) {
+        _stopPolling();
+        if (mounted && Navigator.of(context).canPop())
+          Navigator.of(context).pop();
+        _showTimeoutDialog();
+        return;
+      }
 
       try {
         final response = await _apiService.get(
           '/fineopay/verify-subscription-payment/${widget.subscriptionId}',
         );
-
         final paymentStatus = response['data']?['payment_status'];
-        print('📊 Statut: $paymentStatus');
+        if (kDebugMode) debugPrint('📊 Statut: $paymentStatus');
 
         if (paymentStatus == 'paid') {
-          _isPolling = false;
-          if (mounted && Navigator.of(dialogContext).canPop()) {
-            Navigator.pop(dialogContext);
-          }
+          _stopPolling();
+          if (mounted && Navigator.of(context).canPop())
+            Navigator.of(context).pop();
           _showPaymentSuccess();
-          return;
         }
       } catch (e) {
-        print('❌ Erreur polling: $e');
+        if (kDebugMode) debugPrint('❌ Erreur polling: $e');
       }
-    }
-
-    // Temps écoulé
-    if (_pollCount >= _maxPolls && mounted) {
-      _isPolling = false;
-      if (Navigator.of(dialogContext).canPop()) {
-        Navigator.pop(dialogContext);
-      }
-      _showTimeoutDialog();
-    }
+    });
   }
 
   Future<void> _checkPaymentManually(BuildContext dialogContext) async {
@@ -136,25 +135,21 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
       final response = await _apiService.get(
         '/fineopay/verify-subscription-payment/${widget.subscriptionId}',
       );
-
       final paymentStatus = response['data']?['payment_status'];
 
       if (paymentStatus == 'paid') {
-        _isPolling = false;
-        if (mounted && Navigator.of(dialogContext).canPop()) {
+        _stopPolling();
+        if (mounted && Navigator.of(dialogContext).canPop())
           Navigator.pop(dialogContext);
-        }
         _showPaymentSuccess();
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Paiement pas encore reçu. Réessayez dans quelques instants.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Paiement pas encore reçu. Réessayez dans quelques instants.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -178,7 +173,8 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
       );
 
       final paymentStatus = response['data']?['payment_status'];
-      print('📊 Vérification statut paiement: $paymentStatus');
+      if (kDebugMode)
+        debugPrint('📊 Vérification statut paiement: $paymentStatus');
 
       if (paymentStatus == 'paid') {
         _showPaymentSuccess();
@@ -189,7 +185,7 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
         }
       }
     } catch (e) {
-      print('❌ Erreur vérification paiement: $e');
+      if (kDebugMode) debugPrint('❌ Erreur vérification paiement: $e');
       // En cas d'erreur, démarrer le polling quand même
       if (mounted) {
         _startPaymentPolling();
@@ -280,8 +276,7 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Paiement Souscription'),
-        backgroundColor:
-            const Color.from(alpha: 1, red: 0.933, green: 0.741, blue: 0.106),
+        backgroundColor: const Color(0xFFEEBD1B),
         foregroundColor: Colors.white,
       ),
       body: Container(
@@ -567,8 +562,9 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
     setState(() => _isProcessing = true);
 
     try {
-      print(
-          '💳 Initialisation paiement FineoPay pour souscription #${widget.subscriptionId}');
+      if (kDebugMode)
+        debugPrint(
+            '💳 Initialisation paiement FineoPay pour souscription #${widget.subscriptionId}');
 
       // Envoyer les données avec le provider FineoPay
       final paymentData = {
@@ -585,7 +581,8 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
         final checkoutUrl = response['data']?['checkoutUrl'];
 
         if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
-          print('🔗 Ouverture du paiement WebView: $checkoutUrl');
+          if (kDebugMode)
+            debugPrint('🔗 Ouverture du paiement WebView: $checkoutUrl');
 
           // Ouvrir le paiement dans un WebView intégré
           final paymentResult = await Navigator.push<bool>(
@@ -611,36 +608,8 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
             }
           }
         } else {
-          // Pas de checkoutUrl, afficher un message de succès simple
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              icon: const Icon(
-                Icons.check_circle,
-                color: Colors.orange,
-                size: 64,
-              ),
-              title: const Text('Paiement initié'),
-              content: Text(
-                'Votre souscription à "${widget.subscriptionName}" est en cours de traitement.\n\n'
-                'Vous recevrez une confirmation par email.',
-                textAlign: TextAlign.center,
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context); // Fermer le dialog
-                    Navigator.pop(context, true); // Retourner avec succès
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                  ),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
+          throw Exception(
+              'Aucun lien de paiement reçu du serveur. Veuillez réessayer.');
         }
       }
     } catch (e) {

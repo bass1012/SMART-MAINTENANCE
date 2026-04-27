@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../services/api_service.dart';
@@ -55,8 +56,8 @@ class _PaymentStatusScreenState extends State<PaymentStatusScreen> {
   Future<void> _checkPaymentStatus() async {
     try {
       _checkCount++;
-      print(
-          '🔍 Vérification ACTIVE statut paiement (${_checkCount}/$_maxChecks)...');
+      if (kDebugMode)
+        debugPrint('🔍 Vérification paiement (${_checkCount}/$_maxChecks)...');
 
       final response = await _apiService.get(
         '/fineopay/verify-payment/${widget.orderId}',
@@ -64,7 +65,7 @@ class _PaymentStatusScreenState extends State<PaymentStatusScreen> {
 
       if (response['success'] == true) {
         final status = response['data']['paymentStatus'];
-        print('💳 Statut: $status');
+        if (kDebugMode) debugPrint('💳 Statut: $status');
 
         setState(() {
           _paymentStatus = status;
@@ -91,7 +92,7 @@ class _PaymentStatusScreenState extends State<PaymentStatusScreen> {
         }
       }
     } catch (e) {
-      print('❌ Erreur vérification statut: $e');
+      if (kDebugMode) debugPrint('❌ Erreur vérification statut: $e');
     }
   }
 

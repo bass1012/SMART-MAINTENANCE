@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:http_parser/http_parser.dart' as http_parser;
@@ -30,16 +32,22 @@ class ApiService {
   final LocalCacheService _cacheService = LocalCacheService();
   final ConnectivityService _connectivityService = ConnectivityService();
 
-  // Clés pour SharedPreferences
+  // Stockage sécurisé pour le token JWT
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  // Clés de stockage
   static const String _tokenKey = 'auth_token';
   static const String _userDataKey = 'user_data';
 
   // Constructeur privé
   ApiService._internal() {
-    final httpClient = HttpClient()
-      ..connectionTimeout = ApiConfig.timeout
-      ..badCertificateCallback =
-          (cert, host, port) => true; // Pour le développement seulement
+    final httpClient = HttpClient()..connectionTimeout = ApiConfig.timeout;
+    if (kDebugMode) {
+      // ignore: invalid_use_of_protected_member
+      httpClient.badCertificateCallback = (cert, host, port) => true;
+    }
     _client = IOClient(httpClient);
   }
 
@@ -49,12 +57,11 @@ class ApiService {
   // Mettre à jour le token et le sauvegarder
   Future<void> setAuthToken(String? token) async {
     _authToken = token;
+    _accessToken = token; // Synchroniser les deux références
     if (token != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_tokenKey, token);
+      await _secureStorage.write(key: _tokenKey, value: token);
     } else {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_tokenKey);
+      await _secureStorage.delete(key: _tokenKey);
     }
     if (ApiConfig.debugLogs) {
       debugPrint(
@@ -68,10 +75,11 @@ class ApiService {
 
   // Charger le token sauvegardé
   Future<void> loadSavedToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    _authToken = prefs.getString(_tokenKey);
+    _authToken = await _secureStorage.read(key: _tokenKey);
+    // Synchroniser les deux références de token
+    _accessToken = _authToken;
     if (_authToken != null && ApiConfig.debugLogs) {
-      debugPrint('🔑 Token chargé depuis le stockage');
+      debugPrint('🔑 Token chargé depuis le stockage sécurisé');
     }
   }
 
@@ -106,15 +114,11 @@ class ApiService {
   Map<String, String> get _headers {
     final headers = {
       ...ApiConfig.defaultHeaders,
-      // Note: Les headers CORS ne doivent pas être envoyés par le client
     };
     if (_authToken != null) {
       headers['Authorization'] = 'Bearer $_authToken';
-      // Token masqué pour sécurité - ne jamais logger le token complet
-      debugPrint('📤 Authorization header: Bearer ***TOKEN_PRESENT***');
     }
     if (ApiConfig.debugLogs) {
-      // Copie des headers sans le token pour le log
       final safeHeaders = Map<String, String>.from(headers);
       if (safeHeaders.containsKey('Authorization')) {
         safeHeaders['Authorization'] = 'Bearer ***REDACTED***';
@@ -333,8 +337,40 @@ class ApiService {
       body: {
         'email': email.trim(),
         'code': code.trim(),
-        'newPassword': newPassword.trim(),
+        'newPassword': newPassword,
       },
+      skipAuth: true,
+    );
+  }
+
+  /// Vérifier le code de vérification (email ou SMS) après inscription
+  Future<Map<String, dynamic>> verifyEmailCode(
+      String emailOrPhone, String code) async {
+    final isEmail = emailOrPhone.contains('@');
+    final body = isEmail
+        ? {'email': emailOrPhone, 'code': code}
+        : {'phone': emailOrPhone, 'code': code};
+    return _handleRequest(
+      'POST',
+      '/api/auth/verify-email-code',
+      body: body,
+      skipAuth: true,
+    );
+  }
+
+  /// Renvoyer le code de vérification
+  Future<Map<String, dynamic>> resendVerificationCode(
+    String emailOrPhone, {
+    String verificationMethod = 'auto',
+  }) async {
+    final isEmail = emailOrPhone.contains('@');
+    final body = isEmail
+        ? {'email': emailOrPhone, 'method': verificationMethod}
+        : {'phone': emailOrPhone, 'method': verificationMethod};
+    return _handleRequest(
+      'POST',
+      '/api/auth/resend-verification-code',
+      body: body,
       skipAuth: true,
     );
   }
@@ -632,10 +668,7 @@ class ApiService {
   }) async {
     // Utiliser les en-têtes avec ou sans authentification selon le paramètre
     final headers = skipAuth
-        ? {
-            ...ApiConfig.defaultHeaders,
-            ...ApiConfig.corsHeaders,
-          }
+        ? {...ApiConfig.defaultHeaders}
         : _authHeaders; // Utiliser _authHeaders au lieu de _headers
 
     if (ApiConfig.debugLogs) {
@@ -659,10 +692,11 @@ class ApiService {
         }
         return responseBody;
       } else if (response.statusCode == 401) {
-        // Token expiré ou invalide
-        debugPrint('🔴 Token invalide ou expiré - Status 401');
-        final errorMessage =
-            responseBody['message'] ?? 'Token invalide ou expiré';
+        // Token expiré ou invalide — on le supprime pour forcer la reconnexion
+        debugPrint('🔴 Token invalide ou expiré - Status 401, déconnexion');
+        await setAuthToken(null);
+        final errorMessage = responseBody['message'] ??
+            'Session expirée. Veuillez vous reconnecter.';
         throw Exception('AUTH_ERROR: $errorMessage');
       } else {
         final errorMessage = responseBody['message'] ?? 'Erreur inconnue';
@@ -903,6 +937,22 @@ class ApiService {
     );
   }
 
+  /// Télécharge un endpoint en binaire (ex: PDF) et retourne les bytes bruts.
+  /// N'utilise PAS _request() pour éviter la conversion UTF-8 du body.
+  Future<Uint8List> getBytes(String endpoint) async {
+    final cleanEndpoint =
+        endpoint.startsWith('/') ? endpoint.substring(1) : endpoint;
+    final uri = Uri.parse('$baseUrl/api/$cleanEndpoint');
+    final request = http.Request('GET', uri);
+    request.headers.addAll(_headers);
+    final streamed = await _client.send(request).timeout(ApiConfig.timeout);
+    final bytes = await streamed.stream.toBytes();
+    if (streamed.statusCode >= 200 && streamed.statusCode < 300) {
+      return bytes;
+    }
+    throw Exception('Erreur ${streamed.statusCode}');
+  }
+
   // Méthode générique POST
   Future<Map<String, dynamic>> post(
       String endpoint, Map<String, dynamic> data) async {
@@ -910,6 +960,13 @@ class ApiService {
       'POST',
       '/api$endpoint',
       body: data,
+    );
+  }
+
+  Future<Map<String, dynamic>> delete(String endpoint) async {
+    return await _handleRequest(
+      'DELETE',
+      '/api$endpoint',
     );
   }
 
@@ -957,7 +1014,7 @@ class ApiService {
   Future<Map<String, dynamic>> getOrders() async {
     return await _handleRequest(
       'GET',
-      '/api/orders',
+      '/api/customer/orders',
     );
   }
 
@@ -980,7 +1037,7 @@ class ApiService {
   Future<Map<String, dynamic>> getInvoices() async {
     return await _handleRequest(
       'GET',
-      '/api/orders', // Les factures sont liées aux commandes
+      '/api/customer/payments/history',
     );
   }
 
@@ -992,9 +1049,9 @@ class ApiService {
       _authToken = null;
       _accessToken = null;
 
-      // Supprimer les données sauvegardées
+      // Supprimer le token du stockage sécurisé et les données utilisateur
+      await _secureStorage.delete(key: _tokenKey);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_tokenKey);
       await prefs.remove(_userDataKey);
 
       if (ApiConfig.debugLogs) {

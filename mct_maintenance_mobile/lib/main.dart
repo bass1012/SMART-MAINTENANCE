@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -84,9 +85,14 @@ void _setupApp() {
   };
 
   // Gestion des erreurs asynchrones non capturées
-  ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
-    return ErrorWidget(errorDetails.exception);
-  };
+  if (kReleaseMode) {
+    ErrorWidget.builder =
+        (_) => const Center(child: Text("Une erreur s'est produite"));
+  } else {
+    ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
+      return ErrorWidget(errorDetails.exception);
+    };
+  }
 }
 
 // Classe pour gérer les erreurs de l'application

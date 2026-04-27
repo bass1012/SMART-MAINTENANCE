@@ -331,6 +331,104 @@ router.post('/quotes/:id/reject', async (req, res) => {
 });
 
 // Liste des devis du client
+// Historique complet des paiements (boutique + devis 1er et 2ème versement)
+router.get('/payments/history', authenticate, async (req, res) => {
+  try {
+    const { Order, Quote, CustomerProfile } = require('../models');
+    const { Op } = require('sequelize');
+    const userId = req.user.id;
+
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    if (!customerProfile) {
+      return res.status(404).json({ success: false, message: 'Profil client non trouvé' });
+    }
+    const customerId = customerProfile.id;
+
+    // 1. Commandes boutique
+    const orders = await Order.findAll({
+      where: { customerId: userId },
+      order: [['created_at', 'DESC']],
+    });
+
+    // 2. Devis avec paiement (split ou full)
+    const quotes = await Quote.findAll({
+      where: {
+        customerId: customerId,
+        payment_status: { [Op.not]: null },
+      },
+      order: [['created_at', 'DESC']],
+    });
+
+    const payments = [];
+
+    // Ajouter les commandes boutique
+    for (const order of orders) {
+      payments.push({
+        id: `order-${order.id}`,
+        type: 'order',
+        reference: order.reference || `ORD-${String(order.id).padStart(4, '0')}`,
+        description: order.notes || `Commande boutique #${order.id}`,
+        amount: parseFloat(order.totalAmount) || 0,
+        status: order.paymentStatus || order.status || 'pending',
+        date: order.createdAt,
+        orderId: order.id,
+      });
+    }
+
+    // Ajouter les paiements de devis
+    for (const quote of quotes) {
+      const total = parseFloat(quote.total) || 0;
+      const isSplit = quote.payment_type === 'split';
+      const firstAmount = isSplit
+        ? parseFloat(quote.first_payment_amount) || Math.floor(total / 2)
+        : total;
+      const secondAmount = isSplit
+        ? parseFloat(quote.second_payment_amount) || (total - firstAmount)
+        : null;
+
+      // Premier versement (ou paiement complet)
+      if (quote.payment_status && quote.payment_status !== 'deferred') {
+        payments.push({
+          id: `quote-${quote.id}-step1`,
+          type: isSplit ? 'quote_first_payment' : 'quote_full_payment',
+          reference: quote.reference || `DEV-${String(quote.id).padStart(4, '0')}`,
+          description: isSplit
+            ? `1er versement (50%) - Devis #${quote.reference || quote.id}`
+            : `Paiement complet - Devis #${quote.reference || quote.id}`,
+          amount: firstAmount,
+          status: quote.payment_status,
+          date: quote.created_at || quote.createdAt,
+          quoteId: quote.id,
+          step: 1,
+        });
+      }
+
+      // Second versement (uniquement pour les paiements en 2 fois)
+      if (isSplit && secondAmount) {
+        payments.push({
+          id: `quote-${quote.id}-step2`,
+          type: 'quote_second_payment',
+          reference: quote.reference || `DEV-${String(quote.id).padStart(4, '0')}`,
+          description: `2ème versement (50% solde) - Devis #${quote.reference || quote.id}`,
+          amount: secondAmount,
+          status: quote.second_payment_status || 'pending',
+          date: quote.created_at || quote.createdAt,
+          quoteId: quote.id,
+          step: 2,
+        });
+      }
+    }
+
+    // Trier par date décroissante
+    payments.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.json({ success: true, data: payments });
+  } catch (error) {
+    console.error('❌ Erreur historique paiements:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
 router.get('/quotes', async (req, res) => {
   try {
     const { Quote, QuoteItem, CustomerProfile } = require('../models');
@@ -2411,6 +2509,209 @@ router.post('/complaints/:id/notes', async (req, res) => {
  *         $ref: '#/components/responses/Forbidden'
  */
 router.get('/', authorize('admin', 'manager'), listCustomers);
+
+// Export des données personnelles du client connecté — DOIT être avant /:id
+router.get('/export-data', authenticate, async (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const { Order, Quote, CustomerProfile, Intervention, Complaint, Subscription } = require('../models');
+    const userId = req.user.id;
+
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    if (!customerProfile) {
+      return res.status(404).json({ success: false, message: 'Profil client non trouvé' });
+    }
+    const customerId = customerProfile.id;
+
+    const [orders, quotes, interventions, complaints, subscriptions] = await Promise.all([
+      Order.findAll({
+        where: { customerId: userId },
+        attributes: ['id', 'reference', 'status', 'totalAmount', 'created_at'],
+        order: [['created_at', 'DESC']],
+      }),
+      Quote.findAll({
+        where: { customerId },
+        attributes: ['id', 'reference', 'status', 'total', 'payment_type', 'first_payment_status', 'second_payment_status', 'created_at'],
+        order: [['created_at', 'DESC']],
+      }),
+      Intervention.findAll({
+        where: { customer_id: customerId },
+        attributes: ['id', 'intervention_type', 'status', 'scheduled_date', 'created_at'],
+        order: [['created_at', 'DESC']],
+      }),
+      Complaint.findAll({
+        where: { customerId },
+        attributes: ['id', 'reference', 'subject', 'status', 'created_at'],
+        order: [['created_at', 'DESC']],
+      }).catch(() => []),
+      Subscription.findAll({
+        where: { customer_id: customerId },
+        attributes: ['id', 'status', 'start_date', 'end_date', 'created_at'],
+        order: [['created_at', 'DESC']],
+      }).catch(() => []),
+    ]);
+
+    const exportDate = new Date();
+    const fmt = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : 'N/A';
+    const fmtMoney = (v) => v != null ? `${parseFloat(v).toLocaleString('fr-FR')} FCFA` : 'N/A';
+    const fullName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Client';
+
+    // -------- Build PDF --------
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    const filename = `mct_donnees_${fullName.replace(/\s+/g, '_')}_${exportDate.toISOString().slice(0,10)}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    doc.pipe(res);
+
+    // ---- Helpers ----
+    const GREEN = '#0a543d';
+    const LIGHT_GREEN = '#e8f4f0';
+    const GRAY = '#666666';
+    const LINE = '#cccccc';
+    const PAGE_W = doc.page.width - 100; // usable width
+
+    const sectionTitle = (title) => {
+      doc.moveDown(0.8);
+      doc.rect(50, doc.y, PAGE_W, 24).fill(GREEN);
+      doc.fillColor('white').fontSize(12).font('Helvetica-Bold')
+        .text(title, 58, doc.y - 20, { width: PAGE_W - 16 });
+      doc.fillColor('black').font('Helvetica').fontSize(10);
+      doc.moveDown(0.5);
+    };
+
+    const row = (label, value) => {
+      const y = doc.y;
+      doc.fillColor(GRAY).fontSize(9).text(label, 58, y, { width: 160, continued: false });
+      doc.fillColor('black').fontSize(10).text(value || 'N/A', 230, y, { width: PAGE_W - 180 });
+      doc.moveDown(0.3);
+    };
+
+    const tableRow = (cols, widths, isHeader = false) => {
+      const startX = 58;
+      let x = startX;
+      const y = doc.y;
+      const rowH = 18;
+      if (isHeader) {
+        doc.rect(startX, y, PAGE_W, rowH).fill(LIGHT_GREEN);
+      }
+      cols.forEach((col, i) => {
+        doc.fillColor(isHeader ? GREEN : 'black')
+          .font(isHeader ? 'Helvetica-Bold' : 'Helvetica')
+          .fontSize(9)
+          .text(col, x + 4, y + 4, { width: widths[i] - 8, lineBreak: false });
+        x += widths[i];
+      });
+      doc.rect(startX, y, PAGE_W, rowH).stroke(LINE);
+      doc.y = y + rowH + 2;
+      doc.font('Helvetica').fillColor('black');
+    };
+
+    // ---- HEADER ----
+    doc.rect(50, 50, PAGE_W, 70).fill(GREEN);
+    doc.fillColor('white').fontSize(20).font('Helvetica-Bold')
+      .text('Mes Données Personnelles', 65, 65, { width: PAGE_W - 20 });
+    doc.fontSize(11).font('Helvetica')
+      .text(`MCT Maintenance  —  Export du ${exportDate.toLocaleDateString('fr-FR')}`, 65, 95);
+    doc.fillColor('black').y = 140;
+    doc.moveDown(1.2);
+
+    // ---- PROFIL ----
+    sectionTitle('Profil');
+    row('Nom complet', fullName);
+    row('Email', req.user.email || 'N/A');
+    row('Téléphone', req.user.phone || 'N/A');
+    row('ID client', String(customerProfile.id));
+
+    // ---- COMMANDES BOUTIQUE ----
+    sectionTitle(`Commandes boutique (${orders.length})`);
+    if (orders.length === 0) {
+      doc.fillColor(GRAY).fontSize(10).text('Aucune commande.', 58).fillColor('black');
+    } else {
+      const w = [80, 130, 100, PAGE_W - 310];
+      tableRow(['Référence', 'Date', 'Montant', 'Statut'], w, true);
+      orders.forEach(o => tableRow([
+        o.reference || `#${o.id}`,
+        fmt(o.created_at),
+        fmtMoney(o.totalAmount),
+        o.status || 'N/A',
+      ], w));
+    }
+
+    // ---- DEVIS ----
+    sectionTitle(`Devis (${quotes.length})`);
+    if (quotes.length === 0) {
+      doc.fillColor(GRAY).fontSize(10).text('Aucun devis.', 58).fillColor('black');
+    } else {
+      const w = [80, 90, 90, 90, PAGE_W - 350];
+      tableRow(['Référence', 'Date', 'Total', 'Paiement', 'Statut'], w, true);
+      quotes.forEach(q => tableRow([
+        q.reference || `#${q.id}`,
+        fmt(q.created_at),
+        fmtMoney(q.total),
+        q.payment_type === 'split' ? 'En 2x' : 'Complet',
+        q.status || 'N/A',
+      ], w));
+    }
+
+    // ---- INTERVENTIONS ----
+    sectionTitle(`Interventions (${interventions.length})`);
+    if (interventions.length === 0) {
+      doc.fillColor(GRAY).fontSize(10).text('Aucune intervention.', 58).fillColor('black');
+    } else {
+      const w = [130, 100, 100, PAGE_W - 330];
+      tableRow(['Type', 'Date planifiée', 'Créée le', 'Statut'], w, true);
+      interventions.forEach(i => tableRow([
+        i.intervention_type || 'N/A',
+        fmt(i.scheduled_date),
+        fmt(i.created_at),
+        i.status || 'N/A',
+      ], w));
+    }
+
+    // ---- RECLAMATIONS ----
+    sectionTitle(`Réclamations (${complaints.length})`);
+    if (complaints.length === 0) {
+      doc.fillColor(GRAY).fontSize(10).text('Aucune réclamation.', 58).fillColor('black');
+    } else {
+      const w = [80, 180, 80, PAGE_W - 340];
+      tableRow(['Référence', 'Objet', 'Date', 'Statut'], w, true);
+      complaints.forEach(c => tableRow([
+        c.reference || `#${c.id}`,
+        c.subject || 'N/A',
+        fmt(c.created_at),
+        c.status || 'N/A',
+      ], w));
+    }
+
+    // ---- ABONNEMENTS ----
+    sectionTitle(`Abonnements (${subscriptions.length})`);
+    if (subscriptions.length === 0) {
+      doc.fillColor(GRAY).fontSize(10).text('Aucun abonnement.', 58).fillColor('black');
+    } else {
+      const w = [80, 90, 90, PAGE_W - 260];
+      tableRow(['ID', 'Début', 'Fin', 'Statut'], w, true);
+      subscriptions.forEach(s => tableRow([
+        String(s.id),
+        fmt(s.start_date),
+        fmt(s.end_date),
+        s.status || 'N/A',
+      ], w));
+    }
+
+    // ---- FOOTER ----
+    doc.moveDown(1.5);
+    doc.fontSize(8).fillColor(GRAY)
+      .text(`Document généré le ${exportDate.toLocaleString('fr-FR')} — MCT Maintenance`, 50, doc.y, { align: 'center', width: PAGE_W });
+
+    doc.end();
+  } catch (error) {
+    console.error('Export données client:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: 'Erreur lors de l\'export des données' });
+    }
+  }
+});
 
 /**
  * @swagger

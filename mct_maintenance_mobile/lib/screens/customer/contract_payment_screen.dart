@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../services/api_service.dart';
@@ -49,6 +50,11 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
   // Détermine la phase de paiement actuelle
   int get _currentPaymentPhase {
     if (widget.paymentPhase != null) return widget.paymentPhase!;
+    // Si les deux paiements sont effectués, phase 0 = tout payé
+    if (widget.firstPaymentStatus == 'paid' &&
+        widget.secondPaymentStatus == 'paid') {
+      return 0;
+    }
     // Par défaut, si premier paiement pas fait, c'est phase 1
     if (widget.firstPaymentStatus == null ||
         widget.firstPaymentStatus == 'pending') {
@@ -103,8 +109,9 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed && _isWaitingForPayment) {
-      print(
-          '📱 Application revenue au premier plan - Vérification du paiement...');
+      if (kDebugMode)
+        debugPrint(
+            '📱 Application revenue au premier plan - Vérification du paiement...');
       _checkPaymentStatus();
     }
   }
@@ -140,11 +147,43 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
                   _buildPaymentInfo(),
                   const SizedBox(height: 32),
 
+                  // Message si tous les paiements sont effectués
+                  if (_currentPaymentPhase == 0) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle,
+                              color: Colors.green.shade600),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Tous les paiements ont été effectués pour ce contrat.',
+                              style: TextStyle(
+                                color: Colors.green.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Bouton paiement FineoPay
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _isProcessing ? null : _processPayment,
+                      onPressed: (_isProcessing || _currentPaymentPhase == 0)
+                          ? null
+                          : _processPayment,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange,
                         foregroundColor: Colors.white,
@@ -769,8 +808,9 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
     setState(() => _isProcessing = true);
 
     try {
-      print(
-          '💳 Initialisation paiement FineoPay pour contrat #${widget.subscriptionId} - Phase $_currentPaymentPhase');
+      if (kDebugMode)
+        debugPrint(
+            '💳 Initialisation paiement FineoPay pour contrat #${widget.subscriptionId} - Phase $_currentPaymentPhase');
 
       // Initialiser le paiement FineoPay avec le montant 50%
       final paymentData = await _paymentService.initializeSubscriptionPayment(
@@ -781,8 +821,9 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
       );
       final paymentUrl = paymentData['paymentUrl'] as String;
 
-      print(
-          '✅ URL de paiement reçue: $paymentUrl (Montant: $_amountToPay FCFA)');
+      if (kDebugMode)
+        debugPrint(
+            '✅ URL de paiement reçue: $paymentUrl (Montant: $_amountToPay FCFA)');
 
       setState(() {
         _isWaitingForPayment = true;
@@ -854,7 +895,8 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
   }
 
   void _startPolling() {
-    print('🔄 Démarrage du polling pour vérifier le paiement...');
+    if (kDebugMode)
+      debugPrint('🔄 Démarrage du polling pour vérifier le paiement...');
 
     _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (!_isWaitingForPayment) {
@@ -866,7 +908,7 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
   }
 
   void _stopPolling() {
-    print('⏹️ Arrêt du polling');
+    if (kDebugMode) debugPrint('⏹️ Arrêt du polling');
     _pollingTimer?.cancel();
     _pollingTimer = null;
     setState(() {
@@ -876,8 +918,9 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
 
   Future<void> _checkPaymentStatus() async {
     try {
-      print(
-          '🔍 Vérification statut paiement pour contrat #${widget.subscriptionId} (Phase: $_currentPaymentPhase)');
+      if (kDebugMode)
+        debugPrint(
+            '🔍 Vérification statut paiement pour contrat #${widget.subscriptionId} (Phase: $_currentPaymentPhase)');
 
       // Vérifier le statut via le backend
       final response = await _apiService.get(
@@ -891,8 +934,9 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
         final firstPaymentStatus = response['data']?['first_payment_status'];
         final secondPaymentStatus = response['data']?['second_payment_status'];
 
-        print(
-            '📊 Statut: $subscriptionStatus, 1er paiement: $firstPaymentStatus, 2ème paiement: $secondPaymentStatus');
+        if (kDebugMode)
+          debugPrint(
+              '📊 Statut: $subscriptionStatus, 1er paiement: $firstPaymentStatus, 2ème paiement: $secondPaymentStatus');
 
         // Vérifier selon la phase de paiement
         if (_currentPaymentPhase == 2) {
@@ -1035,7 +1079,7 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
         }
       }
     } catch (e) {
-      print('❌ Erreur vérification statut: $e');
+      if (kDebugMode) debugPrint('❌ Erreur vérification statut: $e');
     }
   }
 

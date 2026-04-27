@@ -570,7 +570,8 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
     final id = intervention['id'] is int
         ? intervention['id']
         : int.parse(intervention['id'].toString());
-    final diagnosticFee = (intervention['diagnostic_fee'] ?? 4000).toDouble();
+    final diagnosticFee =
+        double.parse((intervention['diagnostic_fee'] ?? 4000).toString());
 
     final result = await Navigator.push(
       context,

@@ -458,11 +458,21 @@ exports.exportToPDF = async (req, res) => {
 exports.getChartData = async (req, res) => {
   try {
     const { chartType } = req.params;
-    const { period = 6 } = req.query;
+    const { period = 6, startDate: startDateParam, endDate: endDateParam } = req.query;
 
     const monthsAgo = parseInt(period);
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - monthsAgo);
+    const startDate = startDateParam ? new Date(startDateParam) : new Date();
+    if (!startDateParam) {
+      startDate.setMonth(startDate.getMonth() - monthsAgo);
+    }
+    const endDate = endDateParam ? new Date(endDateParam) : null;
+    if (endDate) {
+      endDate.setHours(23, 59, 59, 999);
+    }
+
+    const createdAtFilter = endDate
+      ? { [Op.between]: [startDate, endDate] }
+      : { [Op.gte]: startDate };
 
     let chartData = {};
 
@@ -475,7 +485,7 @@ exports.getChartData = async (req, res) => {
             [sequelize.fn('COUNT', sequelize.col('id')), 'count']
           ],
           where: {
-            created_at: { [Op.gte]: startDate }
+            created_at: createdAtFilter
           },
           group: [sequelize.fn('DATE', sequelize.col('created_at'))],
           order: [[sequelize.fn('DATE', sequelize.col('created_at')), 'ASC']]
@@ -491,7 +501,7 @@ exports.getChartData = async (req, res) => {
           ],
           where: {
             payment_status: 'paid',
-            created_at: { [Op.gte]: startDate }
+            created_at: createdAtFilter
           },
           group: [sequelize.fn('DATE', sequelize.col('created_at'))],
           order: [[sequelize.fn('DATE', sequelize.col('created_at')), 'ASC']]
@@ -506,7 +516,7 @@ exports.getChartData = async (req, res) => {
             [sequelize.fn('COUNT', sequelize.col('id')), 'count']
           ],
           where: {
-            created_at: { [Op.gte]: startDate }
+            created_at: createdAtFilter
           },
           group: ['intervention_type']
         });
@@ -525,11 +535,12 @@ exports.getChartData = async (req, res) => {
           INNER JOIN orders o ON oi.order_id = o.id
           WHERE o.payment_status = 'paid'
           AND o.created_at >= ?
+          ${endDate ? 'AND o.created_at <= ?' : ''}
           GROUP BY p.id, p.nom
           ORDER BY total_sold DESC
           LIMIT 10
         `, {
-          replacements: [startDate],
+          replacements: endDate ? [startDate, endDate] : [startDate],
           type: sequelize.QueryTypes.SELECT
         });
         chartData = topProducts;
@@ -545,7 +556,7 @@ exports.getChartData = async (req, res) => {
           ],
           where: {
             rating: { [Op.ne]: null },
-            created_at: { [Op.gte]: startDate }
+            created_at: createdAtFilter
           },
           group: [sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM')],
           order: [[sequelize.fn('to_char', sequelize.col('created_at'), 'YYYY-MM'), 'ASC']]

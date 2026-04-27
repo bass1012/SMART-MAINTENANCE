@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../services/api_service.dart';
@@ -31,6 +32,8 @@ class _PaymentScreenState extends State<PaymentScreen>
   bool _isWaitingForPayment = false;
   Timer? _pollingTimer;
   int? _currentOrderId;
+  int _pollCount = 0;
+  static const int _maxPolls = 60; // 5 minutes max (60 × 5s)
 
   @override
   void initState() {
@@ -53,8 +56,9 @@ class _PaymentScreenState extends State<PaymentScreen>
     if (state == AppLifecycleState.resumed &&
         _isWaitingForPayment &&
         _currentOrderId != null) {
-      print(
-          '📱 Application revenue au premier plan - Vérification du paiement...');
+      if (kDebugMode)
+        debugPrint(
+            '📱 Application revenue au premier plan - Vérification du paiement...');
       _checkPaymentStatus();
     }
   }
@@ -417,11 +421,16 @@ class _PaymentScreenState extends State<PaymentScreen>
 
     try {
       // Convertir invoiceId en int (c'est en fait un orderId)
-      final orderId = int.parse(widget.invoiceId);
+      final orderId = int.tryParse(widget.invoiceId);
+      if (orderId == null) {
+        throw Exception(
+            'Identifiant de commande invalide : ${widget.invoiceId}');
+      }
       _currentOrderId = orderId;
 
-      print(
-          '💳 Initialisation paiement FineoPay pour commande #$orderId (étape ${widget.paymentStep})');
+      if (kDebugMode)
+        debugPrint(
+            '💳 Initialisation paiement FineoPay pour commande #$orderId (étape ${widget.paymentStep})');
 
       // Initialiser le paiement FineoPay
       final paymentData = await _paymentService.initializeOrderPayment(
@@ -432,7 +441,7 @@ class _PaymentScreenState extends State<PaymentScreen>
       );
       final paymentUrl = paymentData['paymentUrl'] as String;
 
-      print('✅ URL de paiement reçue: $paymentUrl');
+      if (kDebugMode) debugPrint('✅ URL de paiement reçue: $paymentUrl');
 
       setState(() {
         _isWaitingForPayment = true;
@@ -505,11 +514,29 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   void _startPolling() {
-    print('🔄 Démarrage du polling pour vérifier le paiement...');
+    if (kDebugMode)
+      debugPrint('🔄 Démarrage du polling pour vérifier le paiement...');
+    _pollCount = 0;
 
     _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (!_isWaitingForPayment || _currentOrderId == null) {
         timer.cancel();
+        return;
+      }
+      _pollCount++;
+      if (_pollCount >= _maxPolls) {
+        timer.cancel();
+        _stopPolling();
+        if (mounted) {
+          setState(() {});
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Délai de vérification dépassé. Vérifiez vos commandes.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
         return;
       }
       _checkPaymentStatus();
@@ -517,7 +544,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   void _stopPolling() {
-    print('⏹️ Arrêt du polling');
+    if (kDebugMode) debugPrint('⏹️ Arrêt du polling');
     _pollingTimer?.cancel();
     _pollingTimer = null;
     setState(() {
@@ -530,8 +557,9 @@ class _PaymentScreenState extends State<PaymentScreen>
     if (_currentOrderId == null) return;
 
     try {
-      print(
-          '🔍 Vérification ACTIVE du statut de paiement pour commande #$_currentOrderId');
+      if (kDebugMode)
+        debugPrint(
+            '🔍 Vérification ACTIVE du statut de paiement pour commande #$_currentOrderId');
 
       // Utiliser le nouvel endpoint qui vérifie directement auprès de FineoPay
       final response =
@@ -541,7 +569,7 @@ class _PaymentScreenState extends State<PaymentScreen>
         final order = response['data'];
         final paymentStatus = order['paymentStatus']; // Noter: camelCase
 
-        print('📊 Statut du paiement: $paymentStatus');
+        if (kDebugMode) debugPrint('📊 Statut du paiement: $paymentStatus');
 
         if (paymentStatus == 'paid') {
           // Paiement réussi !
@@ -616,7 +644,7 @@ class _PaymentScreenState extends State<PaymentScreen>
         }
       }
     } catch (e) {
-      print('❌ Erreur vérification statut: $e');
+      if (kDebugMode) debugPrint('❌ Erreur vérification statut: $e');
     }
   }
 

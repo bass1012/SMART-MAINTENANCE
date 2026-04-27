@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../services/payment_service.dart';
@@ -367,15 +368,20 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
     setState(() => _isProcessing = true);
 
     try {
-      print(
-          '💳 Initialisation paiement diagnostic pour intervention #${widget.interventionId}');
+      if (kDebugMode)
+        debugPrint(
+            '💳 Initialisation paiement diagnostic pour intervention #${widget.interventionId}');
 
       // Initialiser le paiement FineoPay
       final paymentData = await _paymentService
           .initializeDiagnosticPayment(widget.interventionId);
-      final paymentUrl = paymentData['payment_url'] as String;
+      final paymentUrl =
+          (paymentData['paymentUrl'] ?? paymentData['payment_url']) as String?;
+      if (paymentUrl == null || paymentUrl.isEmpty) {
+        throw Exception('URL de paiement manquante dans la réponse');
+      }
 
-      print('✅ URL de paiement reçue: $paymentUrl');
+      if (kDebugMode) debugPrint('✅ URL de paiement reçue: $paymentUrl');
 
       // Ouvrir le paiement dans un WebView intégré
       if (mounted) {
@@ -500,8 +506,9 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
 
       _pollCount++;
       setDialogState(() {});
-      print(
-          '🔍 Polling paiement diagnostic #${widget.interventionId} (${_pollCount}/$_maxPolls)');
+      if (kDebugMode)
+        debugPrint(
+            '🔍 Polling paiement diagnostic #${widget.interventionId} (${_pollCount}/$_maxPolls)');
 
       try {
         final response = await _apiService.get(
@@ -509,7 +516,8 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         );
 
         final diagnosticPaid = response['data']?['diagnostic_paid'] == true;
-        print('📊 Statut diagnostic_paid: $diagnosticPaid');
+        if (kDebugMode)
+          debugPrint('📊 Statut diagnostic_paid: $diagnosticPaid');
 
         if (diagnosticPaid) {
           _isPolling = false;
@@ -520,7 +528,7 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
           return;
         }
       } catch (e) {
-        print('❌ Erreur polling: $e');
+        if (kDebugMode) debugPrint('❌ Erreur polling: $e');
       }
     }
 
