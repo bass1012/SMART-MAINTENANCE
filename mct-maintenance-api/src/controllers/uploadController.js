@@ -1,8 +1,22 @@
 const path = require('path');
+const fs = require('fs');
 const { processImage, generateThumbnail, deleteFile } = require('../services/uploadService');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const Equipment = require('../models/Equipment');
+
+/**
+ * Lit un fichier image compressé et retourne un data URL base64.
+ * Supprime le fichier après lecture.
+ */
+const fileToBase64DataUrl = async (filePath) => {
+  const buffer = fs.readFileSync(filePath);
+  const ext = path.extname(filePath).toLowerCase().replace('.', '');
+  const mime = ext === 'jpg' ? 'jpeg' : ext; // jpg → jpeg
+  const dataUrl = `data:image/${mime};base64,${buffer.toString('base64')}`;
+  await deleteFile(filePath);
+  return dataUrl;
+};
 
 // Upload avatar utilisateur
 const uploadAvatar = async (req, res) => {
@@ -24,40 +38,27 @@ const uploadAvatar = async (req, res) => {
       fit: 'cover'
     });
 
-    // Génération du thumbnail
-    const thumbnailPath = path.join(
-      path.dirname(outputPath),
-      `thumb-${filename}`
-    );
-    await generateThumbnail(outputPath, thumbnailPath, 150);
+    // Supprimer le fichier temporaire d'entrée
+    await deleteFile(inputPath);
+
+    // Convertir l'image compressée en base64 data URL puis supprimer le fichier
+    const dataUrl = await fileToBase64DataUrl(outputPath);
 
     // Mise à jour de l'utilisateur
     const user = await User.findByPk(userId);
     if (!user) {
-      await deleteFile(outputPath);
-      await deleteFile(thumbnailPath);
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
 
-    // Supprimer l'ancien avatar si existant
-    if (user.profile_image) {
-      const oldAvatarPath = path.join(__dirname, '../../uploads/avatars', user.profile_image);
-      const oldThumbPath = path.join(__dirname, '../../uploads/avatars', `thumb-${user.profile_image}`);
-      await deleteFile(oldAvatarPath);
-      await deleteFile(oldThumbPath);
-    }
-
-    user.profile_image = filename;
+    user.profile_image = dataUrl;
     await user.save();
-    
-    console.log(`✅ Avatar sauvegardé en DB pour userId ${userId}: ${filename}`);
+
+    console.log(`✅ Avatar sauvegardé en DB (base64) pour userId ${userId}`);
 
     res.json({
       message: 'Avatar uploadé avec succès',
-      avatar: filename,
-      thumbnail: `thumb-${filename}`,
-      url: `/uploads/avatars/${filename}`,
-      thumbnailUrl: `/uploads/avatars/thumb-${filename}`
+      url: dataUrl,
+      thumbnailUrl: dataUrl
     });
   } catch (error) {
     console.error('Erreur upload avatar:', error);
@@ -73,7 +74,6 @@ const uploadProductImage = async (req, res) => {
     }
 
     const { productId } = req.body;
-    
     const inputPath = req.file.path;
     const filename = `product-${productId || 'new'}-${Date.now()}.jpg`;
     const outputPath = path.join(path.dirname(inputPath), filename);
@@ -86,26 +86,20 @@ const uploadProductImage = async (req, res) => {
       fit: 'inside'
     });
 
-    // Génération du thumbnail
-    const thumbnailPath = path.join(
-      path.dirname(outputPath),
-      `thumb-${filename}`
-    );
-    await generateThumbnail(outputPath, thumbnailPath, 200);
+    // Supprimer le fichier temporaire d'entrée
+    await deleteFile(inputPath);
+
+    // Convertir en base64 data URL puis supprimer le fichier
+    const dataUrl = await fileToBase64DataUrl(outputPath);
 
     // Si un productId est fourni, mettre à jour le produit
     if (productId) {
       const product = await Product.findByPk(productId);
       if (product) {
-        // Supprimer l'ancienne image si existante
-        if (product.imageUrl) {
-          const oldImagePath = path.join(__dirname, '../../uploads/products', product.imageUrl);
-          const oldThumbPath = path.join(__dirname, '../../uploads/products', `thumb-${product.imageUrl}`);
-          await deleteFile(oldImagePath);
-          await deleteFile(oldThumbPath);
-        }
-
-        product.imageUrl = filename;
+        // Ajouter l'image à la liste JSON
+        const images = Array.isArray(product.images) ? product.images : [];
+        images.push(dataUrl);
+        product.images = images;
         await product.save();
       }
     }
@@ -113,10 +107,8 @@ const uploadProductImage = async (req, res) => {
     res.json({
       success: true,
       message: 'Image produit uploadée avec succès',
-      image: filename,
-      thumbnail: `thumb-${filename}`,
-      url: `/uploads/products/${filename}`,
-      thumbnailUrl: `/uploads/products/thumb-${filename}`,
+      url: dataUrl,
+      thumbnailUrl: dataUrl,
       filename: filename
     });
   } catch (error) {
@@ -150,38 +142,27 @@ const uploadEquipmentImage = async (req, res) => {
       fit: 'inside'
     });
 
-    // Génération du thumbnail
-    const thumbnailPath = path.join(
-      path.dirname(outputPath),
-      `thumb-${filename}`
-    );
-    await generateThumbnail(outputPath, thumbnailPath, 200);
+    // Supprimer le fichier temporaire d'entrée
+    await deleteFile(inputPath);
+
+    // Convertir en base64 data URL puis supprimer le fichier
+    const dataUrl = await fileToBase64DataUrl(outputPath);
 
     // Mise à jour de l'équipement
     const equipment = await Equipment.findByPk(equipmentId);
     if (!equipment) {
-      await deleteFile(outputPath);
-      await deleteFile(thumbnailPath);
       return res.status(404).json({ error: 'Équipement non trouvé' });
     }
 
-    // Supprimer l'ancienne image si existante
-    if (equipment.imageUrl) {
-      const oldImagePath = path.join(__dirname, '../../uploads/equipments', equipment.imageUrl);
-      const oldThumbPath = path.join(__dirname, '../../uploads/equipments', `thumb-${equipment.imageUrl}`);
-      await deleteFile(oldImagePath);
-      await deleteFile(oldThumbPath);
-    }
-
-    equipment.imageUrl = filename;
+    equipment.imageUrl = dataUrl;
     await equipment.save();
+
+    console.log(`✅ Image équipement ${equipmentId} sauvegardée en DB (base64)`);
 
     res.json({
       message: 'Image équipement uploadée avec succès',
-      image: filename,
-      thumbnail: `thumb-${filename}`,
-      url: `/uploads/equipments/${filename}`,
-      thumbnailUrl: `/uploads/equipments/thumb-${filename}`
+      url: dataUrl,
+      thumbnailUrl: dataUrl
     });
   } catch (error) {
     console.error('Erreur upload image équipement:', error);

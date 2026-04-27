@@ -78,6 +78,13 @@
 
 [2026-04-22] | POST upload retournait 500 ENOENT car les sous-dossiers `uploads/` n'existaient pas sur le serveur après déploiement | Toujours créer les sous-dossiers d'upload sur le serveur lors de chaque déploiement : `mkdir -p uploads/{products,avatars,equipments,documents,interventions}`
 
+[2026-04-27] | Avatar 404 car `CircleAvatar.backgroundImage` n'a pas de fallback sur `child` quand l'image échoue | Toujours utiliser `foregroundImage` (pas `backgroundImage`) dans CircleAvatar quand un child de fallback (initiales) est prévu — Flutter bascule sur `child` automatiquement si foregroundImage échoue
+
+[2026-04-27] | `equipment.imageUrl = filename; equipment.save()` ne persistait rien en DB car le champ `imageUrl` n'était pas dans le modèle Sequelize Equipment | Avant tout `instance.someField = value`, vérifier que le champ est déclaré dans le modèle Sequelize. Sinon, Sequelize l'ignore silencieusement au moment du save()
+
+[2026-04-27] | Images disparaissent après reboot/redeploy car stockées uniquement sur filesystem sous `uploads/` dans le dossier app | Pour les images critiques (avatars, équipements), convertir en base64 après compression et stocker le data URL directement en DB (TEXT). Pas de dépendance au filesystem. Taille acceptable pour avatars 400×400@85% (~30-60KB → ~80KB base64)
+
+
 [2026-04-22] | Prévisualisation image dashboard pointait vers le domaine du dashboard au lieu de l'API — chemin relatif `/uploads/products/xxx.jpg` résolu par le navigateur contre le mauvais domaine | Toujours wrapper les chemins d'upload stockés en base avec `getImageUrl()` (qui préfixe `API_BASE_URL`) lors du chargement depuis `initialValues` — ne jamais supposer qu'un chemin relatif est résolvable dans le contexte navigateur courant
 
 [2026-04-22] | Route spécifique `/export-data` capturée par le catch-all `/:id` avec `authorize('admin')` → 403 | En Express, toujours déclarer les routes spécifiques AVANT les routes `/:param` génériques dans le même fichier

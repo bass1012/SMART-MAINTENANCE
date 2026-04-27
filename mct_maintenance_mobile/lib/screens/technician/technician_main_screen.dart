@@ -170,24 +170,20 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: const Color(0xFF0a543d).withOpacity(0.1),
-                    backgroundImage: AvatarHelper.hasAvatar(_user?.profileImage)
-                        ? NetworkImage(
-                            AvatarHelper.buildAvatarUrl(_user!.profileImage))
+                    foregroundImage: AvatarHelper.hasAvatar(_user?.profileImage)
+                        ? AvatarHelper.buildImageProvider(_user!.profileImage)
                         : null,
-                    child: _user?.profileImage == null ||
-                            _user!.profileImage!.isEmpty
-                        ? Text(
-                            (_user?.firstName?.isNotEmpty == true
-                                    ? _user!.firstName![0]
-                                    : 'T')
-                                .toUpperCase(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF0a543d),
-                            ),
-                          )
-                        : null,
+                    child: Text(
+                      (_user?.firstName?.isNotEmpty == true
+                              ? _user!.firstName![0]
+                              : 'T')
+                          .toUpperCase(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0a543d),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -554,24 +550,20 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
               child: CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.white,
-                backgroundImage: AvatarHelper.hasAvatar(_user?.profileImage)
-                    ? NetworkImage(
-                        AvatarHelper.buildAvatarUrl(_user!.profileImage))
+                foregroundImage: AvatarHelper.hasAvatar(_user?.profileImage)
+                    ? AvatarHelper.buildImageProvider(_user!.profileImage)
                     : null,
-                child:
-                    _user?.profileImage == null || _user!.profileImage!.isEmpty
-                        ? Text(
-                            (_user?.firstName?.isNotEmpty == true
-                                    ? _user!.firstName![0]
-                                    : 'T')
-                                .toUpperCase(),
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF0a543d),
-                            ),
-                          )
-                        : null,
+                child: Text(
+                  (_user?.firstName?.isNotEmpty == true
+                          ? _user!.firstName![0]
+                          : 'T')
+                      .toUpperCase(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF0a543d),
+                  ),
+                ),
               ),
             ),
           ),

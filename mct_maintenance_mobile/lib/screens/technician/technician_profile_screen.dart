@@ -200,26 +200,22 @@ class _TechnicianProfileScreenState extends State<TechnicianProfileScreen> {
                               CircleAvatar(
                                 radius: 60,
                                 backgroundColor: Colors.white24,
-                                backgroundImage:
+                                foregroundImage:
                                     AvatarHelper.hasAvatar(_user?.profileImage)
-                                        ? NetworkImage(
-                                            AvatarHelper.buildAvatarUrl(
-                                                _user!.profileImage))
+                                        ? AvatarHelper.buildImageProvider(
+                                            _user!.profileImage)
                                         : null,
-                                child: _user?.profileImage == null ||
-                                        _user!.profileImage!.isEmpty
-                                    ? Text(
-                                        (_user?.firstName?.isNotEmpty == true
-                                                ? _user!.firstName![0]
-                                                : 'T')
-                                            .toUpperCase(),
-                                        style: const TextStyle(
-                                          fontSize: 48,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : null,
+                                child: Text(
+                                  (_user?.firstName?.isNotEmpty == true
+                                          ? _user!.firstName![0]
+                                          : 'T')
+                                      .toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 48,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                               if (_isUploading)
                                 Positioned.fill(

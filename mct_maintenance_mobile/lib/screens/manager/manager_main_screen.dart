@@ -14,6 +14,7 @@ import 'package:mct_maintenance_mobile/services/fcm_service.dart';
 import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/utils/responsive_helper.dart';
+import 'package:mct_maintenance_mobile/utils/avatar_helper.dart';
 import '../../utils/snackbar_helper.dart';
 
 class ManagerMainScreen extends StatefulWidget {
@@ -611,21 +612,19 @@ class _ManagerMainScreenState extends State<ManagerMainScreen> {
       child: CircleAvatar(
         radius: 18,
         backgroundColor: Colors.white.withOpacity(0.2),
-        backgroundImage: _user?.profileImage != null
-            ? NetworkImage(_user!.profileImage!)
+        foregroundImage: _user?.profileImage != null
+            ? AvatarHelper.buildImageProvider(_user!.profileImage)
             : null,
-        child: _user?.profileImage == null
-            ? Text(
-                (_user?.firstName?.isNotEmpty == true
-                        ? _user!.firstName![0]
-                        : 'M')
-                    .toUpperCase(),
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              )
-            : null,
+        child: Text(
+          (_user?.firstName?.isNotEmpty == true
+                  ? _user!.firstName![0]
+                  : 'M')
+              .toUpperCase(),
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }

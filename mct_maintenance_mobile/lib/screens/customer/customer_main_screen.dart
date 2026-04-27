@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
 import 'package:mct_maintenance_mobile/models/dashboard_stats_model.dart';
 import 'package:mct_maintenance_mobile/utils/responsive_helper.dart';
+import 'package:mct_maintenance_mobile/utils/avatar_helper.dart';
 import 'package:mct_maintenance_mobile/screens/customer/complaints_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/maintenance_offers_screen.dart';
 import 'package:mct_maintenance_mobile/screens/customer/maintenance_reports_screen.dart';
@@ -45,6 +46,7 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
   UserModel? _user;
   DashboardStats? _stats;
   int _unreadNotifications = 0;
+  bool _avatarError = false;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
@@ -1612,11 +1614,9 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
   // Bouton de profil moderne dans l'AppBar
   Widget _buildProfileButton() {
     final hasAvatar =
-        _user?.profileImage != null && _user!.profileImage!.isNotEmpty;
-    final avatarUrl = hasAvatar
-        ? (_user!.profileImage!.startsWith('http')
-            ? _user!.profileImage!
-            : '${_apiService.baseUrl}/uploads/avatars/${_user!.profileImage}')
+        _user?.profileImage != null && _user!.profileImage!.isNotEmpty && !_avatarError;
+    final imageProvider = hasAvatar
+        ? AvatarHelper.buildImageProvider(_user!.profileImage)
         : null;
 
     return GestureDetector(
@@ -1626,20 +1626,23 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
         height: 40,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: hasAvatar
+          gradient: (hasAvatar && imageProvider != null)
               ? null
               : const LinearGradient(
                   colors: [Colors.white24, Colors.white12],
                 ),
           border: Border.all(color: Colors.white30, width: 2),
-          image: hasAvatar && avatarUrl != null
+          image: (hasAvatar && imageProvider != null)
               ? DecorationImage(
-                  image: NetworkImage(avatarUrl),
+                  image: imageProvider,
                   fit: BoxFit.cover,
+                  onError: (exception, stackTrace) {
+                    if (mounted) setState(() => _avatarError = true);
+                  },
                 )
               : null,
         ),
-        child: hasAvatar
+        child: (hasAvatar && imageProvider != null)
             ? null
             : Center(
                 child: Text(
@@ -1693,8 +1696,7 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                     height: 60,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: _user?.profileImage != null &&
-                              _user!.profileImage!.isNotEmpty
+                      gradient: AvatarHelper.hasAvatar(_user?.profileImage) && !_avatarError
                           ? null
                           : const LinearGradient(
                               colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
@@ -1706,20 +1708,17 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                           offset: const Offset(0, 4),
                         ),
                       ],
-                      image: _user?.profileImage != null &&
-                              _user!.profileImage!.isNotEmpty
+                      image: AvatarHelper.hasAvatar(_user?.profileImage) && !_avatarError
                           ? DecorationImage(
-                              image: NetworkImage(
-                                _user!.profileImage!.startsWith('http')
-                                    ? _user!.profileImage!
-                                    : '${_apiService.baseUrl}/uploads/avatars/${_user!.profileImage}',
-                              ),
+                              image: AvatarHelper.buildImageProvider(_user!.profileImage)!,
                               fit: BoxFit.cover,
+                              onError: (exception, stackTrace) {
+                                if (mounted) setState(() => _avatarError = true);
+                              },
                             )
                           : null,
                     ),
-                    child: _user?.profileImage != null &&
-                            _user!.profileImage!.isNotEmpty
+                    child: AvatarHelper.hasAvatar(_user?.profileImage) && !_avatarError
                         ? null
                         : Center(
                             child: Text(
