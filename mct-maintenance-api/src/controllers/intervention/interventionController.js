@@ -1,4 +1,4 @@
-const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage, MaintenanceOffer, RepairService, InstallationService, Subscription, DiagnosticReport, Quote, SystemConfig, Order } = require('../../models');
+const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage, MaintenanceOffer, RepairService, InstallationService, Subscription, DiagnosticReport, Quote, SystemConfig, Order, TechnicianProfile } = require('../../models');
 const { Op, sequelize } = require('sequelize');
 const { sequelize: db } = require('../../config/database');
 const { 
@@ -1916,6 +1916,42 @@ const rateIntervention = async (req, res) => {
     });
 
     console.log('✅ Évaluation enregistrée avec succès');
+
+    // Recalculer le rating moyen du technicien si un technicien est assigné
+    if (intervention.technician_id) {
+      try {
+        // Trouver le TechnicianProfile associé à cet utilisateur technicien
+        const techProfile = await TechnicianProfile.findOne({
+          where: { user_id: intervention.technician_id }
+        });
+
+        if (techProfile) {
+          // Calculer la moyenne depuis toutes les interventions notées de ce technicien
+          const ratedInterventions = await Intervention.findAll({
+            where: {
+              technician_id: intervention.technician_id,
+              rating: { [Op.not]: null }
+            },
+            attributes: ['rating']
+          });
+
+          const totalReviews = ratedInterventions.length;
+          const sumRatings = ratedInterventions.reduce((sum, i) => sum + i.rating, 0);
+          const avgRating = totalReviews > 0
+            ? Math.round((sumRatings / totalReviews) * 100) / 100
+            : 0;
+
+          await techProfile.update({
+            rating: avgRating,
+            total_reviews: totalReviews
+          });
+
+          console.log(`⭐ TechnicianProfile mis à jour: rating=${avgRating}, total_reviews=${totalReviews}`);
+        }
+      } catch (ratingUpdateError) {
+        console.error('⚠️ Erreur mise à jour rating technicien:', ratingUpdateError.message);
+      }
+    }
 
     // Envoyer les notifications (ne pas faire échouer la requête si ça échoue)
     try {

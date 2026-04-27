@@ -1,6 +1,33 @@
-# TODO - Session 7-8 avril 2026
+# TODO - Session 27 avril 2026
 
-## Problèmes résolus
+## En cours / À faire
+
+### 1. ⬜ Stocker les images en base de données (base64)
+**Problème** : Les images (avatars, équipements, produits) sont sur le filesystem → disparaissent après reboot/redeploy
+**Bug supplémentaire** : `equipment.imageUrl` n'existe pas dans le modèle Sequelize → les images d'équipements n'ont jamais été sauvées en DB
+**Solution** : Convertir en base64 après compression → stocker en DB → plus de dépendance filesystem
+**Fichiers à modifier** :
+- `mct-maintenance-api/src/models/User.js` → `profile_image` : STRING(255) → TEXT
+- `mct-maintenance-api/src/models/Equipment.js` → ajouter colonne `imageUrl TEXT`
+- `mct-maintenance-api/src/controllers/uploadController.js` → convertir en base64 après `processImage`, supprimer le fichier disque, stocker data URL en DB
+- Migration SQL sur le VPS
+- `mct_maintenance_mobile/lib/utils/avatar_helper.dart` → détecter les data URLs base64
+- Mettre à jour tous les widgets d'affichage d'image pour utiliser `MemoryImage` si base64
+
+### 2. ⬜ Recalculer le rating moyen du technicien après chaque évaluation d'intervention
+**Problème** : `TechnicianProfile.rating` et `total_reviews` ne sont jamais mis à jour quand un client évalue une intervention
+**Solution** : Après `intervention.update({ rating, review })`, recalculer la moyenne depuis toutes les interventions notées du technicien et mettre à jour `TechnicianProfile`
+**Fichier à modifier** :
+- `mct-maintenance-api/src/controllers/intervention/interventionController.js`
+
+## Terminé dans cette session
+
+### ✅ Fix avatar 404 côté Flutter (27 avril 2026)
+- Utilisation de `foregroundImage` au lieu de `backgroundImage` dans `CircleAvatar` → Flutter affiche les initiales si 404
+- `DecorationImage.onError` + `_avatarError` flag dans customer_main_screen
+- Fichiers : `technician_main_screen.dart`, `technician_profile_screen.dart`, `manager_main_screen.dart`, `customer_main_screen.dart`
+
+
 
 ### 1. ✅ Notifications de paiement en attente envoyées plusieurs fois
 - **Cause racine** : Aucune vérification si une notification avait déjà été envoyée aujourd'hui

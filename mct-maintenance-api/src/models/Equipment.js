@@ -68,6 +68,11 @@ const Equipment = sequelize.define('Equipment', {
   notes: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  imageUrl: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Data URL base64 de l image (data:image/jpeg;base64,...) ou URL relative'
   }
 }, {
   tableName: 'equipments',

@@ -93,8 +93,9 @@ const User = sequelize.define('User', {
     defaultValue: false
   },
   profile_image: {
-    type: DataTypes.STRING(255),
-    allowNull: true
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Peut contenir un nom de fichier ou un data URL base64 (data:image/jpeg;base64,...)'
   },
   fcm_token: {
     type: DataTypes.STRING(255),
