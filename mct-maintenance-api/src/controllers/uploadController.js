@@ -28,7 +28,7 @@ const uploadAvatar = async (req, res) => {
     const userId = req.user.id;
     const inputPath = req.file.path;
     const filename = `avatar-${userId}-${Date.now()}.jpg`;
-    const outputPath = path.join(path.dirname(inputPath), filename);
+    const outputPath = path.join(path.dirname(inputPath), filename); // nosemgrep: path-join-resolve-traversal - filename généré en interne, inputPath vient de multer
 
     // Compression et redimensionnement
     await processImage(inputPath, outputPath, {
@@ -38,27 +38,30 @@ const uploadAvatar = async (req, res) => {
       fit: 'cover'
     });
 
-    // Supprimer le fichier temporaire d'entrée
-    await deleteFile(inputPath);
+    // Supprimer le fichier temporaire d'entrée (multer)
+    if (inputPath !== outputPath) {
+      await deleteFile(inputPath);
+    }
 
-    // Convertir l'image compressée en base64 data URL puis supprimer le fichier
-    const dataUrl = await fileToBase64DataUrl(outputPath);
+    // Le chemin relatif pour l'accès web
+    const fileUrl = `/uploads/avatars/${filename}`;
 
-    // Mise à jour de l'utilisateur
+    // Mise à jour de l'utilisateur avec le NOM DU FICHIER (plus base64)
     const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
 
-    user.profile_image = dataUrl;
+    user.profile_image = filename;
     await user.save();
 
-    console.log(`✅ Avatar sauvegardé en DB (base64) pour userId ${userId}`);
+    console.log(`✅ Avatar sauvegardé sous forme de fichier (${filename}) pour userId ${userId}`);
 
     res.json({
       message: 'Avatar uploadé avec succès',
-      url: dataUrl,
-      thumbnailUrl: dataUrl
+      url: fileUrl,
+      thumbnailUrl: fileUrl,
+      filename: filename
     });
   } catch (error) {
     console.error('Erreur upload avatar:', error);
@@ -76,7 +79,7 @@ const uploadProductImage = async (req, res) => {
     const { productId } = req.body;
     const inputPath = req.file.path;
     const filename = `product-${productId || 'new'}-${Date.now()}.jpg`;
-    const outputPath = path.join(path.dirname(inputPath), filename);
+    const outputPath = path.join(path.dirname(inputPath), filename); // nosemgrep: path-join-resolve-traversal,express-path-join-resolve-traversal - filename généré en interne, inputPath vient de multer
 
     // Compression et redimensionnement
     await processImage(inputPath, outputPath, {
@@ -87,10 +90,11 @@ const uploadProductImage = async (req, res) => {
     });
 
     // Supprimer le fichier temporaire d'entrée
-    await deleteFile(inputPath);
+    if (inputPath !== outputPath) {
+      await deleteFile(inputPath);
+    }
 
-    // Convertir en base64 data URL puis supprimer le fichier
-    const dataUrl = await fileToBase64DataUrl(outputPath);
+    const fileUrl = `/uploads/products/${filename}`;
 
     // Si un productId est fourni, mettre à jour le produit
     if (productId) {
@@ -98,7 +102,7 @@ const uploadProductImage = async (req, res) => {
       if (product) {
         // Ajouter l'image à la liste JSON
         const images = Array.isArray(product.images) ? product.images : [];
-        images.push(dataUrl);
+        images.push(filename); // On stocke le nom du fichier
         product.images = images;
         await product.save();
       }
@@ -107,8 +111,8 @@ const uploadProductImage = async (req, res) => {
     res.json({
       success: true,
       message: 'Image produit uploadée avec succès',
-      url: dataUrl,
-      thumbnailUrl: dataUrl,
+      url: fileUrl,
+      thumbnailUrl: fileUrl,
       filename: filename
     });
   } catch (error) {
@@ -132,7 +136,7 @@ const uploadEquipmentImage = async (req, res) => {
 
     const inputPath = req.file.path;
     const filename = `equipment-${equipmentId}-${Date.now()}.jpg`;
-    const outputPath = path.join(path.dirname(inputPath), filename);
+    const outputPath = path.join(path.dirname(inputPath), filename); // nosemgrep: path-join-resolve-traversal,express-path-join-resolve-traversal - filename généré en interne, inputPath vient de multer
 
     // Compression et redimensionnement
     await processImage(inputPath, outputPath, {
@@ -143,10 +147,11 @@ const uploadEquipmentImage = async (req, res) => {
     });
 
     // Supprimer le fichier temporaire d'entrée
-    await deleteFile(inputPath);
+    if (inputPath !== outputPath) {
+      await deleteFile(inputPath);
+    }
 
-    // Convertir en base64 data URL puis supprimer le fichier
-    const dataUrl = await fileToBase64DataUrl(outputPath);
+    const fileUrl = `/uploads/equipments/${filename}`;
 
     // Mise à jour de l'équipement
     const equipment = await Equipment.findByPk(equipmentId);
@@ -154,15 +159,16 @@ const uploadEquipmentImage = async (req, res) => {
       return res.status(404).json({ error: 'Équipement non trouvé' });
     }
 
-    equipment.imageUrl = dataUrl;
+    equipment.imageUrl = filename; // On stocke le nom du fichier
     await equipment.save();
 
-    console.log(`✅ Image équipement ${equipmentId} sauvegardée en DB (base64)`);
+    console.log(`✅ Image équipement ${equipmentId} sauvegardée sous forme de fichier (${filename})`);
 
     res.json({
       message: 'Image équipement uploadée avec succès',
-      url: dataUrl,
-      thumbnailUrl: dataUrl
+      url: fileUrl,
+      thumbnailUrl: fileUrl,
+      filename: filename
     });
   } catch (error) {
     console.error('Erreur upload image équipement:', error);
@@ -196,27 +202,48 @@ const uploadDocument = async (req, res) => {
 // Supprimer un fichier
 const deleteUploadedFile = async (req, res) => {
   try {
-    const { filename } = req.params;
+    const rawFilename = req.params.filename;
+    const filename = path.basename(rawFilename);
+    // Refuser les noms de fichiers contenant des chemins relatifs ou des caractères suspects
+    if (filename !== rawFilename || filename.includes('..')) {
+      return res.status(400).json({ error: 'Nom de fichier invalide' });
+    }
+
+    const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!safeFilename || safeFilename !== filename) {
+      return res.status(400).json({ error: 'Nom de fichier invalide' });
+    }
+
     // Normaliser : accepter 'products'/'product', 'equipments'/'equipment', 'avatars'/'avatar'
     const rawType = req.params.type;
     const type = rawType.replace(/s$/, ''); // strip trailing 's'
     
     let filePath;
+    let allowedDir;
     switch (type) {
       case 'avatar':
-        filePath = path.join(__dirname, '../../uploads/avatars', filename);
+        allowedDir = path.resolve(__dirname, '../../uploads/avatars');
+        filePath = path.resolve(allowedDir, safeFilename);
         break;
       case 'product':
-        filePath = path.join(__dirname, '../../uploads/products', filename);
+        allowedDir = path.resolve(__dirname, '../../uploads/products');
+        filePath = path.resolve(allowedDir, safeFilename);
         break;
       case 'equipment':
-        filePath = path.join(__dirname, '../../uploads/equipments', filename);
+        allowedDir = path.resolve(__dirname, '../../uploads/equipments');
+        filePath = path.resolve(allowedDir, safeFilename);
         break;
       case 'document':
-        filePath = path.join(__dirname, '../../uploads/documents', filename);
+        allowedDir = path.resolve(__dirname, '../../uploads/documents');
+        filePath = path.resolve(allowedDir, safeFilename);
         break;
       default:
         return res.status(400).json({ error: 'Type de fichier invalide' });
+    }
+
+    // Validation path traversal : le fichier doit rester dans le dossier autorisé
+    if (!filePath.startsWith(allowedDir)) {
+      return res.status(400).json({ error: 'Chemin de fichier non autorisé' });
     }
 
     const deleted = await deleteFile(filePath);

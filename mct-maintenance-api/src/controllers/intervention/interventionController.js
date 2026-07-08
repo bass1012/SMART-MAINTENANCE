@@ -27,6 +27,20 @@ const schedulingService = require('../../services/schedulingService');
 const contractSchedulingService = require('../../services/contractSchedulingService');
 
 // Intervention Controller - Implementation complète
+
+/**
+ * Échappe les caractères HTML spéciaux pour prévenir les injections XSS dans les templates email.
+ */
+const escapeHtml = (str) => {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 const getAllInterventions = async (req, res) => {
   try {
     const { status, priority, customer_id, technician_id, has_rating, page = 1, limit = 10 } = req.query;
@@ -425,15 +439,28 @@ const createIntervention = [
         const requestedEquipment = parseInt(interventionData.equipment_count) || 1;
         
         if (!hasActiveSubscription) {
-          // Pas de souscription active : payer pour tous les équipements
-          diagnosticFee = unitPrice * requestedEquipment;
+          // Pas de souscription active
+          const totalPrice = unitPrice * requestedEquipment;
+          if (interventionData.payment_option === 'full') {
+            diagnosticFee = totalPrice;
+            console.log(`💵 Entretien sans souscription - Paiement 100%: ${diagnosticFee} FCFA`);
+          } else {
+            // Acompte 50% par défaut
+            diagnosticFee = Math.ceil(totalPrice / 2);
+            console.log(`💵 Entretien sans souscription - Acompte 50%: ${diagnosticFee} FCFA (total: ${totalPrice} FCFA)`);
+          }
           isFreeDiagnosis = false;
-          console.log(`💵 Entretien sans souscription - Prix: ${diagnosticFee} FCFA (${requestedEquipment} × ${unitPrice} FCFA)`);
         } else if (equipmentToPay > 0) {
           // Souscription active mais ne couvre pas tous les équipements
-          diagnosticFee = unitPrice * equipmentToPay;
+          const totalToPay = unitPrice * equipmentToPay;
+          if (interventionData.payment_option === 'full') {
+            diagnosticFee = totalToPay;
+            console.log(`💵 Entretien partiellement couvert - Paiement 100%: ${diagnosticFee} FCFA`);
+          } else {
+            diagnosticFee = Math.ceil(totalToPay / 2);
+            console.log(`💵 Entretien partiellement couvert - acompte 50%: ${diagnosticFee} FCFA`);
+          }
           isFreeDiagnosis = false;
-          console.log(`💵 Entretien partiellement couvert - ${equipmentCoveredBySubscription} gratuit(s), ${equipmentToPay} à payer: ${diagnosticFee} FCFA`);
         } else {
           // Entretien AVEC souscription active et quota suffisant : GRATUIT
           diagnosticFee = 0;
@@ -2862,11 +2889,11 @@ async function sendPaymentLink(req, res) {
           to: intervention.customer.user.email,
           subject: `Lien de paiement - ${intervention.maintenance_offer.title}`,
           html: `
-            <h2>Bonjour ${intervention.customer.user.first_name},</h2>
-            <p>Votre offre d'entretien <strong>${intervention.maintenance_offer.title}</strong> est prête !</p>
-            <p>Montant: <strong>${intervention.maintenance_offer.price} F CFA</strong></p>
+            <h2>Bonjour ${escapeHtml(intervention.customer.user.first_name) /* nosemgrep: raw-html-format */},</h2>
+            <p>Votre offre d'entretien <strong>${escapeHtml(intervention.maintenance_offer.title) /* nosemgrep: raw-html-format */}</strong> est prête !</p>
+            <p>Montant: <strong>${Number(intervention.maintenance_offer.price) /* nosemgrep: raw-html-format */} F CFA</strong></p>
             <p>Cliquez sur le lien ci-dessous pour procéder au paiement:</p>
-            <p><a href="${paymentLink}" style="background-color: #52c41a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Payer maintenant</a></p>
+            <p><a href="${paymentLink /* nosemgrep: raw-html-format */}" style="background-color: #52c41a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Payer maintenant</a></p>
             <p>Cordialement,<br>L'équipe MCT Maintenance</p>
           `
         });

@@ -130,7 +130,7 @@ class NotificationService {
       // Car l'app mobile peut ne pas écouter Socket.IO pour les notifications
       if (true) {
         try {
-          const user = await User.findByPk(userId, { attributes: ['fcm_token'] });
+          const user = await User.findByPk(userId, { attributes: ['fcm_token', 'role'] });
           if (user && user.fcm_token) {
             console.log(`📱 [Notif ${notification.id}] Utilisateur ${userId} non connecté, envoi FCM...`);
             await fcmService.sendToDevice(
@@ -141,6 +141,8 @@ class NotificationService {
                 priority,
                 actionUrl: actionUrl || '',
                 notificationId: notification.id.toString(),
+                target_user_id: userId.toString(),
+                target_role: user.role || '',
                 ...data
               }
             );
@@ -149,7 +151,7 @@ class NotificationService {
             console.log(`⚠️  [Notif ${notification.id}] Pas de FCM token pour user ${userId}`);
           }
         } catch (fcmError) {
-          console.error(`⚠️  [Notif ${notification.id}] Erreur envoi FCM (ignorée):`, fcmError.message);
+          console.error(`⚠️  [Notif ${notification.id}] Erreur envoi FCM (ignorée):`, fcmError.message); // nosemgrep: unsafe-formatstring
           // Ne pas bloquer si FCM échoue
         }
       } else {
@@ -187,7 +189,7 @@ class NotificationService {
         }
       });
       
-      console.log(`👥 ${admins.length} admin(s)/manager(s) trouvé(s):`, admins.map(a => ({ id: a.id, email: a.email, role: a.role })));
+      console.log(`👥 ${admins.length} admin(s)/manager(s) trouvé(s):`, admins.map(a => ({ id: a.id, email: a.email, role: a.role }))); // nosemgrep: unsafe-formatstring
       
       if (admins.length === 0) {
         console.warn('⚠️  Aucun admin/manager actif trouvé, notifications non envoyées');

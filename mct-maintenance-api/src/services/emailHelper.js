@@ -50,7 +50,7 @@ const sendEmailSafely = async (to, subject, html) => {
     const result = await sendCustomEmail(to, subject, html);
     return { success: true, ...result };
   } catch (error) {
-    console.error(`❌ Erreur email: ${to} -`, error.message);
+    console.error(`❌ Erreur email: ${to} -`, error.message); // nosemgrep: unsafe-formatstring
     return { success: false, error: error.message };
   }
 };

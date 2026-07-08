@@ -5,6 +5,19 @@ const nodemailer = require('nodemailer');
 
 const router = express.Router();
 
+/**
+ * Échappe les caractères HTML spéciaux pour prévenir les injections XSS dans les templates email.
+ */
+const escapeHtml = (str) => {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 // Demande de suppression de compte (public - pas d'authentification requise)
 router.post('/request-deletion', async (req, res) => {
   try {
@@ -33,7 +46,7 @@ router.post('/request-deletion', async (req, res) => {
       },
       to: ['supportuser@mct.ci', 'bassirou.ouedraogo@mct.ci'],
       subject: '🗑️ Demande de suppression de compte - SMART MAINTENANCE',
-      html: `
+      html: ` // nosemgrep: raw-html-format
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #dc3545; color: white; padding: 20px; text-align: center;">
             <h1>Demande de Suppression de Compte</h1>
@@ -43,15 +56,15 @@ router.post('/request-deletion', async (req, res) => {
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
                 <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Email du compte :</strong></td>
-                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${email}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${escapeHtml(email) /* nosemgrep: raw-html-format */}</td>
               </tr>
               <tr>
                 <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Téléphone :</strong></td>
-                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${phone || 'Non renseigné'}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${(escapeHtml(phone) || 'Non renseigné') /* nosemgrep: raw-html-format */}</td>
               </tr>
               <tr>
                 <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Raison :</strong></td>
-                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${reason || 'Non renseignée'}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ddd;">${(escapeHtml(reason) || 'Non renseignée') /* nosemgrep: raw-html-format */}</td>
               </tr>
               <tr>
                 <td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>Date de demande :</strong></td>

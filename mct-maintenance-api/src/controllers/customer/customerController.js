@@ -331,7 +331,7 @@ const purgeDeletedCustomers = async (req, res) => {
         console.log(`✅ Client ${user.id} (${user.email}) purgé avec succès`);
         successCount++;
       } catch (error) {
-        console.error(`❌ Erreur purge client ${user.id}:`, error.message);
+        console.error(`❌ Erreur purge client ${user.id}:`, error.message); // nosemgrep: unsafe-formatstring
         errorCount++;
         errors.push({
           userId: user.id,

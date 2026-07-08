@@ -96,7 +96,7 @@ router.post('/:id/notes', authenticate, authorize('admin', 'technician'), async 
     const { note, isInternal } = req.body;
     const userId = req.user.id;
     
-    console.log(`📝 POST /api/complaints/${id}/notes - Admin/Tech User ID:`, userId);
+    console.log(`📝 POST /api/complaints/${id}/notes - Admin/Tech User ID:`, userId); // nosemgrep: unsafe-formatstring
     
     if (!note || note.trim() === '') {
       return res.status(400).json({

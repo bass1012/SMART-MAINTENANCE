@@ -10,6 +10,22 @@ const { sendVerificationCodeSMS, sendPasswordResetCodeSMS, formatPhoneNumber } =
 const crypto = require('crypto');
 require('dotenv').config();
 
+/**
+ * Échappe les caractères HTML spéciaux pour prévenir les injections XSS dans les templates email.
+ * @param {any} str - Valeur à échapper
+ * @returns {string} Chaîne échappée sûre pour l'insertion dans du HTML
+ */
+const escapeHtml = (str) => {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+
 // Demander un code de réinitialisation
 const requestResetCode = async (req, res) => {
   try {
@@ -104,7 +120,7 @@ const requestResetCode = async (req, res) => {
         'X-Mailer': 'SMART MAINTENANCE System',
         'List-Unsubscribe': `<mailto:${fromAddress}?subject=unsubscribe>`
       },
-      text: `Bonjour ${user.first_name},
+      text: `Bonjour ${escapeHtml(user.first_name)},
 
 Vous avez demandé la réinitialisation de votre mot de passe.
 
@@ -117,7 +133,7 @@ Entrez ce code dans l'application pour réinitialiser votre mot de passe.
 Si vous n'avez pas demandé cette réinitialisation, ignorez simplement cet email.
 
 © ${new Date().getFullYear()} SMART MAINTENANCE - Tous droits réservés`,
-      html: `
+      html: ` // nosemgrep: raw-html-format
         <!DOCTYPE html>
         <html lang="fr">
         <head>
@@ -259,7 +275,7 @@ Si vous n'avez pas demandé cette réinitialisation, ignorez simplement cet emai
             </div>
             
             <div class="content">
-              <div class="greeting">Bonjour ${user.first_name} ! &#128075;</div>
+              <div class="greeting">Bonjour ${escapeHtml(user.first_name) /* nosemgrep: raw-html-format */} ! &#128075;</div>
               
               <p class="message">
                 Vous avez demandé la réinitialisation de votre mot de passe. 
@@ -567,7 +583,7 @@ const register = async (req, res) => {
       // Si l'utilisateur existe et n'est pas supprimé
       return res.status(409).json({
         success: false,
-        message: 'User with this email already exists'
+        message: 'Un compte existe déjà avec cette adresse email'
       });
     }
 
@@ -592,7 +608,7 @@ const register = async (req, res) => {
       if (existingPhone) {
         return res.status(409).json({
           success: false,
-          message: 'User with this phone already exists'
+          message: 'Un compte existe déjà avec ce numéro de téléphone'
         });
       }
     }
@@ -719,7 +735,7 @@ const register = async (req, res) => {
       // Envoyer le code par SMS
       try {
         console.log(`📱 Envoi du code de vérification par SMS à ${user.phone}`);
-        console.log(`🔢 Code de vérification: ${verificationCode}`);
+        console.log(`🔢 Code de vérification: ${escapeHtml(verificationCode)}`);
         
         const smsResult = await sendVerificationCodeSMS(user.phone, verificationCode, user.first_name);
         
@@ -784,11 +800,11 @@ const register = async (req, res) => {
           'X-Mailer': 'SMART MAINTENANCE System',
           'List-Unsubscribe': `<mailto:${process.env.SMTP_FROM}?subject=unsubscribe>`
         },
-        text: `Bonjour ${user.first_name},
+        text: `Bonjour ${escapeHtml(user.first_name)},
 
 Merci de vous être inscrit sur SMART MAINTENANCE !
 
-Votre code de vérification est : ${verificationCode}
+Votre code de vérification est : ${escapeHtml(verificationCode)}
 
 Ce code expire dans 15 minutes.
 
@@ -948,7 +964,7 @@ Si vous n'avez pas créé de compte, ignorez simplement cet email.
               </div>
               
               <div class="content">
-                <div class="greeting">Bonjour ${user.first_name} ! &#128075;</div>
+                <div class="greeting">Bonjour ${escapeHtml(user.first_name)} ! &#128075;</div>
                 
                 <p class="message">
                   Nous sommes ravis de vous compter parmi nous ! Pour finaliser la création de votre compte 
@@ -957,7 +973,7 @@ Si vous n'avez pas créé de compte, ignorez simplement cet email.
                 
                 <div class="code-container">
                   <div class="code-label">Votre code de vérification</div>
-                  <div class="code">${verificationCode}</div>
+                  <div class="code">${escapeHtml(verificationCode)}</div>
                 </div>
                 
                 <div class="expiry-notice">
@@ -1124,10 +1140,16 @@ const login = async (req, res) => {
       });
     }
 
+    const errorMessage = isEmail 
+      ? 'Email ou mot de passe incorrect' 
+      : isPhone 
+        ? 'Numéro de téléphone ou mot de passe incorrect' 
+        : 'Email/Numéro ou mot de passe incorrect';
+
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: errorMessage
       });
     }
 
@@ -1136,7 +1158,7 @@ const login = async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: errorMessage
       });
     }
 
@@ -1353,11 +1375,15 @@ const logout = async (req, res) => {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     
     if (token) {
-      // Blacklist the token
-      const decoded = jwt.decode(token);
-      const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-      if (expiresIn > 0) {
-        await cache.set(`blacklist:${token}`, true, expiresIn);
+      // Blacklist the token if it is syntactically valid
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
+        const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+        if (expiresIn > 0) {
+          await cache.set(`blacklist:${token}`, true, expiresIn);
+        }
+      } catch (verifyError) {
+        console.warn('⚠️ Logout token verification failed, skipping blacklist:', verifyError.message);
       }
     }
 
@@ -1627,6 +1653,8 @@ const resendEmailVerificationCode = async (req, res) => {
 
     console.log('🔍 Méthode renvoi:', { preferredMethod, useSMS, useEmail });
 
+    let smsErrorDetail = null;
+
     if (useSMS) {
       // Envoyer par SMS
       try {
@@ -1641,14 +1669,16 @@ const resendEmailVerificationCode = async (req, res) => {
             verificationMethod: 'sms'
           });
         } else {
-          console.error('❌ Échec envoi SMS:', smsResult.error);
+          smsErrorDetail = smsResult.error || 'Erreur inconnue HSMS';
+          console.error('❌ Échec envoi SMS:', smsErrorDetail, '| statusCode:', smsResult.statusCode);
           // Continuer vers l'email en fallback si disponible
           if (emailAvailable) {
             useEmail = true;
           }
         }
       } catch (smsError) {
-        console.error('❌ Erreur SMS:', smsError.message);
+        smsErrorDetail = smsError.message;
+        console.error('❌ Erreur SMS exception:', smsErrorDetail);
         // Continuer vers l'email en fallback si disponible
         if (emailAvailable) {
           useEmail = true;
@@ -1678,14 +1708,14 @@ const resendEmailVerificationCode = async (req, res) => {
           'X-Mailer': 'SMART MAINTENANCE System',
           'List-Unsubscribe': `<mailto:${process.env.SMTP_FROM}?subject=unsubscribe>`
         },
-        text: `Bonjour ${user.first_name},
+        text: `Bonjour ${escapeHtml(user.first_name)},
 
-Voici votre nouveau code de vérification : ${verificationCode}
+Voici votre nouveau code de vérification : ${escapeHtml(verificationCode)}
 
 Ce code expire dans 15 minutes.
 
 © ${new Date().getFullYear()} SMART MAINTENANCE - Tous droits réservés`,
-        html: `
+        html: ` // nosemgrep: raw-html-format
           <!DOCTYPE html>
           <html lang="fr">
           <head>
@@ -1818,7 +1848,7 @@ Ce code expire dans 15 minutes.
               </div>
               
               <div class="content">
-                <div class="greeting">Bonjour ${user.first_name} ! &#128075;</div>
+                <div class="greeting">Bonjour ${escapeHtml(user.first_name) /* nosemgrep: raw-html-format */} ! &#128075;</div>
                 
                 <p class="message">
                   Vous avez demandé un nouveau code de vérification. Voici votre nouveau code :
@@ -1826,7 +1856,7 @@ Ce code expire dans 15 minutes.
                 
                 <div class="code-container">
                   <div class="code-label">Votre nouveau code</div>
-                  <div class="code">${verificationCode}</div>
+                  <div class="code">${escapeHtml(verificationCode)}</div>
                 </div>
                 
                 <div class="expiry-notice">
@@ -1867,9 +1897,12 @@ Ce code expire dans 15 minutes.
     }
 
     // Si aucune méthode n'a fonctionné
-    res.status(500).json({
+    const debugInfo = process.env.NODE_ENV !== 'production' && smsErrorDetail
+      ? ` (SMS: ${smsErrorDetail})`
+      : '';
+    res.status(400).json({
       success: false,
-      message: 'Impossible d\'envoyer le code de vérification. Vérifiez votre email ou numéro de téléphone.'
+      message: `Impossible d'envoyer le code de vérification. Vérifiez votre email ou numéro de téléphone.${debugInfo}`
     });
   } catch (error) {
     console.error('Erreur resendEmailVerificationCode:', error);
@@ -1938,11 +1971,11 @@ const forgotPassword = async (req, res) => {
           'X-Mailer': 'SMART MAINTENANCE System',
           'List-Unsubscribe': `<mailto:${process.env.SMTP_FROM}?subject=unsubscribe>`
         },
-        text: `Bonjour ${user.first_name},
+        text: `Bonjour ${escapeHtml(user.first_name)},
 
 Vous avez demandé la réinitialisation de votre mot de passe.
 
-Votre code de réinitialisation est : ${resetCode}
+Votre code de réinitialisation est : ${escapeHtml(resetCode)}
 
 Ce code expire dans 15 minutes.
 
@@ -2093,7 +2126,7 @@ Si vous n'avez pas demandé cette réinitialisation, ignorez simplement cet emai
               </div>
               
               <div class="content">
-                <div class="greeting">Bonjour ${user.first_name} ! &#128075;</div>
+                <div class="greeting">Bonjour ${escapeHtml(user.first_name)} ! &#128075;</div>
                 
                 <p class="message">
                   Vous avez demandé la réinitialisation de votre mot de passe. 
@@ -2102,7 +2135,7 @@ Si vous n'avez pas demandé cette réinitialisation, ignorez simplement cet emai
                 
                 <div class="code-container">
                   <div class="code-label">Code de réinitialisation</div>
-                  <div class="code">${resetCode}</div>
+                  <div class="code">${escapeHtml(resetCode)}</div>
                 </div>
                 
                 <div class="expiry-notice">

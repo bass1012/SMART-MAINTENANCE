@@ -200,20 +200,28 @@ const logout = async (req, res, next) => {
     const refreshToken = req.body.refreshToken;
 
     if (token) {
-      // Blacklist access token
-      const decoded = jwt.decode(token);
-      const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-      if (expiresIn > 0) {
-        await cache.set(`blacklist:${token}`, true, expiresIn);
+      // Blacklist access token if valid; ignore expiration for logout semantics
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
+        const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+        if (expiresIn > 0) {
+          await cache.set(`blacklist:${token}`, true, expiresIn);
+        }
+      } catch (verifyError) {
+        console.warn('⚠️ Logout token verification failed, skipping blacklist:', verifyError.message);
       }
     }
 
     if (refreshToken) {
-      // Blacklist refresh token
-      const decoded = jwt.decode(refreshToken);
-      const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-      if (expiresIn > 0) {
-        await cache.set(`blacklist:${refreshToken}`, true, expiresIn);
+      // Blacklist refresh token if valid; ignore expiration for logout semantics
+      try {
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, { ignoreExpiration: true });
+        const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+        if (expiresIn > 0) {
+          await cache.set(`blacklist:${refreshToken}`, true, expiresIn);
+        }
+      } catch (verifyError) {
+        console.warn('⚠️ Logout refresh token verification failed, skipping blacklist:', verifyError.message);
       }
     }
 

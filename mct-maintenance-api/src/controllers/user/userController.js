@@ -87,7 +87,7 @@ exports.updateUser = async (req, res, next) => {
     
   const allowed = ['email', 'phone', 'role', 'status', 'preferences', 'first_name', 'last_name', 'profile_image'];
     for (const key of allowed) {
-      if (req.body[key] !== undefined) user[key] = req.body[key];
+      if (req.body[key] !== undefined) user[key] = req.body[key]; // nosemgrep: remote-property-injection - clé validée par whitelist `allowed` ci-dessus
     }
     
     // Gérer le mot de passe séparément (hashage nécessaire)

@@ -6,7 +6,7 @@ require('dotenv').config();
 const { sequelize } = require('../src/config/database');
 const { User } = require('../src/models');
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'supportuser@mct.ci';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'bassirou.ouedraogo@mct.ci';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Keep0ut@2023!';
 
 (async () => {

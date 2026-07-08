@@ -90,13 +90,13 @@ const createSplit = async (req, res) => {
 const generateQRCode = async (splitCode, splitId) => {
   try {
     // Créer le dossier s'il n'existe pas
-    const qrCodeDir = path.join(__dirname, '../../../uploads/qrcodes');
+    const qrCodeDir = path.resolve(__dirname, '../../../uploads/qrcodes'); // nosemgrep: path-join-resolve-traversal - chemin statique
     if (!fs.existsSync(qrCodeDir)) {
       fs.mkdirSync(qrCodeDir, { recursive: true });
     }
 
     const filename = `split_${splitId}_${splitCode}.png`;
-    const filePath = path.join(qrCodeDir, filename);
+    const filePath = path.resolve(qrCodeDir, filename); // nosemgrep: path-join-resolve-traversal - filename généré depuis des IDs BD
 
     // Données à encoder dans le QR code (JSON avec le code split)
     const qrData = JSON.stringify({
@@ -424,11 +424,21 @@ const updateSplit = async (req, res) => {
       });
     }
 
-    // Empêcher la modification du split_code
-    delete updateData.split_code;
-    delete updateData.id;
+    // Whitelist des champs modifiables (protection prototype pollution)
+    const allowedFields = [
+      'brand', 'model', 'serial_number', 'power', 'power_type',
+      'location', 'floor', 'installation_date', 'warranty_end_date',
+      'last_maintenance_date', 'next_maintenance_date', 'status',
+      'notes', 'photo_url', 'customer_id'
+    ];
+    const safeUpdateData = {};
+    for (const field of allowedFields) {
+      if (updateData[field] !== undefined) {
+        safeUpdateData[field] = updateData[field];
+      }
+    }
 
-    await split.update(updateData);
+    await split.update(safeUpdateData);
 
     console.log(`✅ Split mis à jour: ${split.split_code}`);
 
@@ -479,8 +489,10 @@ const deleteSplit = async (req, res) => {
 
     // Supprimer le QR code si existant
     if (split.qr_code_url) {
-      const qrPath = path.join(__dirname, '../../../', split.qr_code_url);
-      if (fs.existsSync(qrPath)) {
+      const qrCodeName = path.basename(split.qr_code_url);
+      const qrDir = path.resolve(__dirname, '../../../uploads/qrcodes');
+      const qrPath = path.resolve(qrDir, qrCodeName); // nosemgrep: path-join-resolve-traversal,express-path-join-resolve-traversal - qrCodeName extrait par path.basename(), startsWith() validé ci-dessous
+      if (qrPath.startsWith(qrDir) && fs.existsSync(qrPath)) {
         fs.unlinkSync(qrPath);
       }
     }
@@ -590,8 +602,11 @@ const regenerateQRCode = async (req, res) => {
 
     // Supprimer l'ancien QR code si existant
     if (split.qr_code_url) {
-      const oldPath = path.join(__dirname, '../../../', split.qr_code_url);
-      if (fs.existsSync(oldPath)) {
+      const qrCodeName = path.basename(split.qr_code_url);
+      const qrDir = path.resolve(__dirname, '../../../uploads/qrcodes');
+      const oldPath = path.resolve(qrDir, qrCodeName); // nosemgrep: path-join-resolve-traversal,express-path-join-resolve-traversal - qrCodeName extrait par path.basename(), startsWith() validé ci-dessous
+      // Validation path traversal : le fichier doit rester dans le dossier autorisé
+      if (oldPath.startsWith(qrDir) && fs.existsSync(oldPath)) {
         fs.unlinkSync(oldPath);
       }
     }

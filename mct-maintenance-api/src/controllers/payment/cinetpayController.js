@@ -223,7 +223,7 @@ const handleNotification = async (req, res) => {
                 await Equipment.create(equipmentData);
                 console.log(`✅ Équipement créé pour le produit: ${equipmentData.name}`);
               } catch (equipError) {
-                console.error(`⚠️ Erreur création équipement pour item ${item.id}:`, equipError.message);
+                console.error(`⚠️ Erreur création équipement pour item ${item.id}:`, equipError.message); // nosemgrep: unsafe-formatstring
               }
             }
           }

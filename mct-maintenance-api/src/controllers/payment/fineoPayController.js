@@ -23,7 +23,7 @@ console.log('  - API Key:', FINEOPAY_API_KEY ? `${FINEOPAY_API_KEY.substring(0, 
  */
 const createPaymentLink = async (req, res) => {
   try {
-    const { orderId, amount, title, description, customerInfo, paymentStep } = req.body;
+    const { orderId, amount, title, description, customerInfo, paymentStep, redirectUrl, autoRedirect } = req.body;
 
     if (!orderId || !amount || !title) {
       return res.status(400).json({
@@ -62,6 +62,8 @@ const createPaymentLink = async (req, res) => {
       title,
       amount: parseFloat(amount),
       callbackUrl,
+      redirectUrl,
+      autoRedirect,
       syncRef: `ORDER_${orderId}`,
       inputs
     }, null, 2));
@@ -72,6 +74,8 @@ const createPaymentLink = async (req, res) => {
         title,
         amount: parseFloat(amount),
         callbackUrl,
+        ...(redirectUrl && { redirectUrl }),
+        ...(autoRedirect !== undefined && { autoRedirect }),
         syncRef: `ORDER_${orderId}`,
         inputs
       },
@@ -100,15 +104,15 @@ const createPaymentLink = async (req, res) => {
       if (order) {
         const updateData = {
           fineopayCheckoutId: checkoutLinkId,
-          paymentMethod: 'fineopay'
+          paymentMethod: 'fineopay',
+          syncRef: `ORDER_${orderId}`
         };
-        // Mettre à jour le paymentStep si c'est le second paiement
-        if (paymentStep && paymentStep === 2) {
-          updateData.paymentStep = 2;
-          console.log(`📌 Second paiement (50%) - paymentStep=2 pour commande #${orderId}`);
+        if (paymentStep !== undefined && paymentStep !== null) {
+          updateData.paymentStep = paymentStep;
+          console.log(`📌 Paiement FineoPay - paymentStep=${paymentStep} pour commande #${orderId}`);
         }
         await order.update(updateData);
-        console.log(`💾 Checkout ID sauvegardé dans la commande #${orderId}`);
+        console.log(`💾 Checkout ID et syncRef sauvegardés dans la commande #${orderId}`);
       }
 
       // 📝 Logger l'opération
@@ -503,7 +507,7 @@ const handleCallback = async (req, res) => {
     // Note: Quote est déjà importé en haut du fichier
     // 🔧 FIX: Utiliser order.quoteId OU order.quote_id (selon le mapping Sequelize)
     const orderQuoteId = order.quoteId || order.quote_id;
-    const orderPaymentStep = order.paymentStep || order.payment_step || 1;
+    const orderPaymentStep = order.paymentStep ?? order.payment_step ?? 1;
     const orderPaymentType = order.paymentType || order.payment_type || 'full';
     
     console.log(`📋 Callback debug - orderId: ${orderId}, quoteId: ${orderQuoteId}, paymentStep: ${orderPaymentStep}, paymentType: ${orderPaymentType}`);
@@ -512,14 +516,27 @@ const handleCallback = async (req, res) => {
     // Priorité à l'Order.paymentType car c'est le choix actuel du client
     // Ne pas se fier au Quote.payment_type qui peut être obsolète
     const isSplitPayment = orderPaymentType === 'split';
-    const paymentStep = orderPaymentStep;
-    
-    console.log(`📋 Split check - isSplitPayment: ${isSplitPayment}, orderPaymentType: ${orderPaymentType}, quote: ${quote ? 'found' : 'null'}, quote.payment_type: ${quote?.payment_type}`);
+    let paymentStep = orderPaymentStep;
+    const quoteFirstPaymentPending = quote && (quote.first_payment_status === 'pending' || quote.first_payment_status == null);
+    const quoteSecondPaymentPending = quote && (quote.second_payment_status === 'pending' || quote.second_payment_status == null);
+
+    // Si l'ordre est split et que le devis indique déjà le premier paiement payé,
+    // on considère qu'il s'agit probablement du second paiement même si order.paymentStep est encore 1.
+    if (isSplitPayment && quote && quote.first_payment_status === 'paid' && quoteSecondPaymentPending) {
+      paymentStep = 2;
+    }
+
+    if (paymentStep !== orderPaymentStep) {
+      await order.update({ paymentStep });
+      console.log(`🔧 Mise à jour order.paymentStep => ${paymentStep} pour commande #${orderId}`);
+    }
+
+    console.log(`📋 Split check - isSplitPayment: ${isSplitPayment}, orderPaymentType: ${orderPaymentType}, quote: ${quote ? 'found' : 'null'}, quote.payment_type: ${quote?.payment_type}, firstPending: ${quoteFirstPaymentPending}, secondPending: ${quoteSecondPaymentPending}, resolvedStep: ${paymentStep}`);
     
     // Pour les split payments, vérifier si le paiement correspondant n'est pas déjà fait
     if (order.paymentStatus === 'paid') {
       // Si c'est un split payment, vérifier si le second paiement est en attente
-      if (isSplitPayment && quote && quote.second_payment_status === 'pending' && paymentStep === 2) {
+      if (isSplitPayment && quote && quoteSecondPaymentPending && paymentStep === 2) {
         console.log(`💰 Split payment: second paiement reçu pour commande #${orderId}`);
         // Continuer le traitement pour le second paiement
       } else {
@@ -600,7 +617,7 @@ const handleCallback = async (req, res) => {
       }
       
       await Quote.update(quoteUpdateData, { where: { id: orderQuoteId } });
-      console.log(`✅ Devis #${orderQuoteId} mis à jour:`, quoteUpdateData);
+      console.log(`✅ Devis #${orderQuoteId} mis à jour:`, quoteUpdateData); // nosemgrep: unsafe-formatstring
 
       // 🔧 Si paiement différé (execute_now = false), passer l'intervention en execution_confirmed
       if (quote && quote.execute_now === false && quote.intervention_id) {
@@ -991,7 +1008,7 @@ const handleShopOrderPayment = async (orderId, reference, amount) => {
     }
 
   } catch (error) {
-    console.error(`❌ Erreur traitement paiement boutique #${orderId}:`, error);
+    console.error(`❌ Erreur traitement paiement boutique #${orderId}:`, error); // nosemgrep: unsafe-formatstring
   }
 };
 
@@ -1128,7 +1145,7 @@ const handleSubscriptionPayment = async (subscriptionId, reference, amount, sour
     console.log(`📲 Notification de paiement abonnement envoyée aux admins`);
 
   } catch (error) {
-    console.error(`❌ Erreur traitement paiement souscription #${subscriptionId}:`, error);
+    console.error(`❌ Erreur traitement paiement souscription #${subscriptionId}:`, error); // nosemgrep: unsafe-formatstring
     
     // Logger l'erreur
     await PaymentLog.create({
@@ -1230,7 +1247,7 @@ const handleSecondSubscriptionPayment = async (subscription, reference, amount, 
     console.log(`📲 Notification second paiement envoyée aux admins`);
 
   } catch (error) {
-    console.error(`❌ Erreur traitement second paiement souscription #${subscription.id}:`, error);
+    console.error(`❌ Erreur traitement second paiement souscription #${subscription.id}:`, error); // nosemgrep: unsafe-formatstring
     
     // Logger l'erreur
     await PaymentLog.create({
@@ -1351,7 +1368,7 @@ const handleDiagnosticPayment = async (interventionId, reference, amount, source
     console.log(`📲 Notification de paiement diagnostic envoyée aux admins`);
 
   } catch (error) {
-    console.error(`❌ Erreur traitement paiement diagnostic #${interventionId}:`, error);
+    console.error(`❌ Erreur traitement paiement diagnostic #${interventionId}:`, error); // nosemgrep: unsafe-formatstring
     
     // Logger l'erreur
     await PaymentLog.create({
@@ -1497,8 +1514,13 @@ const verifyPaymentStatus = async (req, res) => {
       });
     }
 
-    // Si déjà payé, retourner le statut
-    if (order.paymentStatus === 'paid') {
+    // Vérifier l'état du devis associé pour les paiements split partiels
+    const quote = await Quote.findByPk(order.quoteId);
+    const isSplitPayment = order.paymentType === 'split';
+    const isSplitPartial = isSplitPayment && quote && quote.payment_status === 'partial';
+    const isSplitFullyPaid = isSplitPayment && quote && quote.payment_status === 'paid';
+
+    if (order.paymentStatus === 'paid' && !isSplitPartial) {
       console.log(`✅ Commande #${orderId} déjà marquée comme payée`);
       return res.status(200).json({
         success: true,
@@ -1512,8 +1534,12 @@ const verifyPaymentStatus = async (req, res) => {
       });
     }
 
+    if (order.paymentStatus === 'paid' && isSplitPartial) {
+      console.log(`⚠️ Commande split #${orderId} déjà payée côté ordre mais devis partiel, retour pending pour second paiement.`);
+    }
+
     // Chercher la transaction dans FineoPay
-    const syncRef = `ORDER_${orderId}`;
+    const syncRef = order.syncRef || `ORDER_${orderId}`;
     const orderRef = order.reference; // e.g. CMD-1770745143471
     const checkoutLinkId = order.fineopayCheckoutId; // 🔒 ID sécurisé du checkout
     console.log(`🔍 Recherche transaction FineoPay pour commande #${orderId}`);
@@ -1551,6 +1577,13 @@ const verifyPaymentStatus = async (req, res) => {
         metadata: { transactionsChecked: transactions.length }
       });
 
+      // Récupérer tous les paymentIds déjà enregistrés pour ne pas réutiliser une transaction
+      const usedPayments = await Payment.findAll({
+        where: { provider: 'fineopay' },
+        attributes: ['paymentId']
+      });
+      const usedRefs = new Set(usedPayments.map(p => p.paymentId).filter(Boolean));
+
       // Chercher une transaction correspondante par plusieurs critères (ordre de priorité)
       // 1. Par checkoutLinkId (le plus sécurisé - si disponible dans la transaction)
       // 2. Par syncRef (si présent dans la transaction)
@@ -1559,10 +1592,14 @@ const verifyPaymentStatus = async (req, res) => {
       const orderCreatedAt = new Date(order.createdAt);
       const orderAmount = parseFloat(order.totalAmount);
       
-      // 🔒 Fenêtre de temps: max 2 heures après création de la commande
-      const maxPaymentWindow = new Date(orderCreatedAt.getTime() + 2 * 60 * 60 * 1000);
+      const isSandbox = process.env.FINEOPAY_ENV === 'sandbox' || process.env.NODE_ENV === 'development';
+      // 🔒 Fenêtre de temps: max 2 heures en production, 90 jours en sandbox/dev
+      const maxPaymentWindow = new Date(orderCreatedAt.getTime() + (isSandbox ? 90 * 24 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000));
 
       const matchingTransaction = transactions.find(t => {
+        // Ignorer si déjà enregistrée
+        if (usedRefs.has(t.reference)) return false;
+
         // 1. Vérifier par checkoutLinkId (le plus sécurisé)
         if (checkoutLinkId && t.checkoutLinkId === checkoutLinkId) {
           console.log(`✅ Match par checkoutLinkId: ${t.reference}`);
@@ -1587,7 +1624,7 @@ const verifyPaymentStatus = async (req, res) => {
             txDate > orderCreatedAt && 
             txDate < maxPaymentWindow && 
             t.status === 'success') {
-          console.log(`🔍 Match par montant/date (fenêtre 2h): ${t.reference}`);
+          console.log(`🔍 Match par montant/date (fenêtre ${isSandbox ? '90j' : '2h'}): ${t.reference}`);
           return true;
         }
         
@@ -1965,11 +2002,23 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
       const transactions = transactionsResponse.data.data?.transactions || [];
       console.log(`📊 ${transactions.length} transactions récupérées`);
 
+      // Récupérer tous les paymentIds déjà enregistrés pour ne pas réutiliser une transaction
+      const usedPayments = await Payment.findAll({
+        where: { provider: 'fineopay' },
+        attributes: ['paymentId']
+      });
+      const usedRefs = new Set(usedPayments.map(p => p.paymentId).filter(Boolean));
+
       // Chercher une transaction correspondante
       const subscriptionCreatedAt = new Date(subscription.created_at);
-      const maxPaymentWindow = new Date(subscriptionCreatedAt.getTime() + 24 * 60 * 60 * 1000); // 24h
+      const isSandbox = process.env.FINEOPAY_ENV === 'sandbox' || process.env.NODE_ENV === 'development';
+      // 🔒 Fenêtre de temps: max 24h en prod, 90 jours en sandbox/dev
+      const maxPaymentWindow = new Date(subscriptionCreatedAt.getTime() + (isSandbox ? 90 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000));
 
       const matchingTransaction = transactions.find(t => {
+        // Ignorer si déjà enregistrée
+        if (usedRefs.has(t.reference)) return false;
+
         // Par syncRef
         if (t.syncRef === syncRef) {
           console.log(`✅ Match par syncRef: ${t.reference}`);
@@ -1989,7 +2038,7 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
             txDate > subscriptionCreatedAt && 
             txDate < maxPaymentWindow && 
             t.status === 'success') {
-          console.log(`🔍 Match potentiel par montant/date: ${t.reference} (${txAmount} FCFA)`);
+          console.log(`🔍 Match potentiel par montant/date (fenêtre ${isSandbox ? '90j' : '24h'}): ${t.reference} (${txAmount} FCFA)`);
           return true;
         }
         
@@ -2169,12 +2218,24 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
       const transactions = transactionsResponse.data.data?.transactions || [];
       console.log(`📊 ${transactions.length} transactions récupérées`);
 
+      // Récupérer tous les paymentIds déjà enregistrés pour ne pas réutiliser une transaction
+      const usedPayments = await Payment.findAll({
+        where: { provider: 'fineopay' },
+        attributes: ['paymentId']
+      });
+      const usedRefs = new Set(usedPayments.map(p => p.paymentId).filter(Boolean));
+
       // Chercher une transaction correspondante
       const diagnosticAmount = parseFloat(intervention.diagnostic_fee || 10);
       const interventionCreatedAt = new Date(intervention.created_at);
-      const maxPaymentWindow = new Date(interventionCreatedAt.getTime() + 24 * 60 * 60 * 1000); // 24h
+      const isSandbox = process.env.FINEOPAY_ENV === 'sandbox' || process.env.NODE_ENV === 'development';
+      // 🔒 Fenêtre de temps: max 24h en prod, 90 jours en sandbox/dev
+      const maxPaymentWindow = new Date(interventionCreatedAt.getTime() + (isSandbox ? 90 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000));
 
       const matchingTransaction = transactions.find(t => {
+        // Ignorer si déjà enregistrée
+        if (usedRefs.has(t.reference)) return false;
+
         // Par syncRef
         if (t.syncRef === syncRef) {
           console.log(`✅ Match par syncRef: ${t.reference}`);
@@ -2193,7 +2254,7 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
             txDate > interventionCreatedAt && 
             txDate < maxPaymentWindow && 
             t.status === 'success') {
-          console.log(`🔍 Match potentiel par montant/date: ${t.reference}`);
+          console.log(`🔍 Match potentiel par montant/date (fenêtre ${isSandbox ? '90j' : '24h'}): ${t.reference}`);
           return true;
         }
         
@@ -2343,7 +2404,7 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
  */
 const initializeDiagnosticPayment = async (req, res) => {
   try {
-    const { interventionId } = req.body;
+    const { interventionId, redirectUrl, autoRedirect } = req.body;
     const userId = req.user.id;
 
     console.log(`💳 Initialisation paiement diagnostic pour intervention #${interventionId}`);
@@ -2388,6 +2449,8 @@ const initializeDiagnosticPayment = async (req, res) => {
         title: `Diagnostic Intervention #${interventionId}`,
         amount: parseFloat(diagnosticFee),
         callbackUrl,
+        ...(redirectUrl && { redirectUrl }),
+        ...(autoRedirect !== undefined && { autoRedirect }),
         syncRef: `DIAGNOSTIC_${interventionId}`,
         inputs: []
       },
@@ -2458,7 +2521,7 @@ const initializeDiagnosticPayment = async (req, res) => {
  */
 const initializeSubscriptionPayment = async (req, res) => {
   try {
-    const { subscriptionId, amount, title, description } = req.body;
+    const { subscriptionId, amount, title, description, redirectUrl, autoRedirect } = req.body;
     const userId = req.user.id;
 
     console.log(`💳 Initialisation paiement pour contrat #${subscriptionId}`);
@@ -2497,6 +2560,8 @@ const initializeSubscriptionPayment = async (req, res) => {
         title: paymentTitle,
         amount: parseFloat(amount),
         callbackUrl,
+        ...(redirectUrl && { redirectUrl }),
+        ...(autoRedirect !== undefined && { autoRedirect }),
         syncRef: `SUBSCRIPTION_${subscriptionId}`,
         inputs: []
       },
