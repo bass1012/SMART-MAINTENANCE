@@ -34,6 +34,8 @@ router.get('/fineopay/status/:reference', authenticate, fineoPayController.check
 router.post('/fineopay/initialize-diagnostic', authenticate, fineoPayController.initializeDiagnosticPayment);
 router.post('/fineopay/initialize-subscription', authenticate, fineoPayController.initializeSubscriptionPayment);
 router.get('/fineopay/verify-subscription-payment/:subscriptionId', authenticate, fineoPayController.verifySubscriptionPaymentStatus);
+router.get('/fineopay/verify-payment/:orderId', authenticate, fineoPayController.verifyPaymentStatus);
+router.get('/fineopay/verify-diagnostic-payment/:interventionId', authenticate, fineoPayController.verifyDiagnosticPaymentStatus);
 
 // Routes pour les paiements de souscriptions
 router.post('/subscription/initiate', authenticate, paymentController.initiateSubscriptionPayment);

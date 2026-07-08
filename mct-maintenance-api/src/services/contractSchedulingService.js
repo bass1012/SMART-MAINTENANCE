@@ -177,10 +177,17 @@ class ContractSchedulingService {
       address: hasAddress ? customerProfile.address : 'Adresse à compléter'
     });
 
+    const price = parseFloat(subscription.price || 0);
+    const firstPaymentAmount = subscription.first_payment_amount || Math.ceil(price / 2);
+    const secondPaymentAmount = subscription.second_payment_amount || Math.floor(price / 2);
+
     // Mettre à jour le statut du contrat
     await subscription.update({
       status: 'active',
-      payment_status: 'paid',
+      payment_status: 'partial',
+      first_payment_status: 'paid',
+      first_payment_amount: firstPaymentAmount,
+      second_payment_amount: secondPaymentAmount,
       payment_reference: paymentReference,
       payment_date: new Date()
     });

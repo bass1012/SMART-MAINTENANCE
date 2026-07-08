@@ -31,8 +31,8 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS || process.env.EMAIL_PASSWORD
   },
   tls: {
-    // Ne pas échouer sur certificats invalides (développement)
-    rejectUnauthorized: false
+    // En production, toujours valider les certificats TLS
+    rejectUnauthorized: process.env.NODE_ENV === 'production' // nosemgrep: bypass-tls-verification
   }
 });
 

@@ -14,6 +14,7 @@ Quote.init({
   taxAmount: { type: DataTypes.FLOAT, allowNull: false, field: 'taxAmount' },
   discountAmount: { type: DataTypes.FLOAT, allowNull: false, field: 'discountAmount' },
   total: { type: DataTypes.FLOAT, allowNull: false },
+  objet: { type: DataTypes.STRING, allowNull: true, defaultValue: 'Devis d\'entretien de climatisation', field: 'objet' },
   notes: { type: DataTypes.TEXT },
   termsAndConditions: { type: DataTypes.TEXT, field: 'termsAndConditions' },
   rejection_reason: { type: DataTypes.TEXT, field: 'rejection_reason' },

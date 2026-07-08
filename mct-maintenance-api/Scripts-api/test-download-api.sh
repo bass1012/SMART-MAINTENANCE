@@ -5,14 +5,10 @@
 echo "🧪 Test de téléchargement de PDF via l'API"
 echo ""
 
-# Demander le token
-echo "📝 Collez votre token JWT (ou appuyez sur Entrée pour utiliser le token admin par défaut):"
-read TOKEN
-
+TOKEN="${TOKEN:-}"
 if [ -z "$TOKEN" ]; then
-  # Token admin par défaut (à remplacer par un vrai token)
-  TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NiwiZW1haWwiOiJhZG1pbkBtY3QtbWFpbnRlbmFuY2UuY29tIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzYwNjg1MzYxLCJleHAiOjE3NjEyOTAxNjF9.RBCTildhTue6s1mNo4QF1TpDy8qawJ5GGIngbHyVoMo"
-  echo "⚠️  Utilisation du token par défaut"
+  echo "❌ TOKEN JWT requis. Exportez TOKEN avant d'exécuter ce script."
+  exit 1
 fi
 
 echo ""

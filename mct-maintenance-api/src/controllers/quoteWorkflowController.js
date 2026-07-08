@@ -20,7 +20,8 @@ exports.createQuoteFromReport = async (req, res) => {
       total,
       notes,
       termsAndConditions,
-      expiryDays = 7 // Validité du devis en jours
+      expiryDays = 7, // Validité du devis en jours
+      objet
     } = req.body;
 
     // Récupérer le rapport de diagnostic
@@ -70,6 +71,7 @@ exports.createQuoteFromReport = async (req, res) => {
       total: totalAmount,
       notes,
       termsAndConditions,
+      objet: objet || "Devis d'entretien de climatisation",
       intervention_id: intervention.id,
       diagnostic_report_id: report.id,
       line_items: JSON.stringify(line_items || []),

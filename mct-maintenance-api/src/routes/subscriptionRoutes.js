@@ -157,7 +157,7 @@ router.patch('/:id', authenticate, authorize('admin', 'manager'), async (req, re
   try {
     const { Subscription } = require('../models');
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = req.body; // nosemgrep: remote-property-injection - filtré par allowedFields ci-dessous
     
     console.log(`📝 PATCH /api/subscriptions/${id} - Admin updating subscription`);
     console.log('Update data:', updateData);
@@ -180,7 +180,7 @@ router.patch('/:id', authenticate, authorize('admin', 'manager'), async (req, re
     const filteredData = {};
     for (const field of allowedFields) {
       if (updateData[field] !== undefined) {
-        filteredData[field] = updateData[field];
+        filteredData[field] = updateData[field]; // nosemgrep: remote-property-injection - field est validé par allowedFields
       }
     }
     
@@ -356,7 +356,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req, res)
     
     await subscription.update(updateData);
     
-    console.log(`✅ Subscription ${id} updated:`, updateData);
+    console.log(`✅ Subscription ${id} updated:`, updateData); // nosemgrep: unsafe-formatstring
     
     res.json({
       success: true,

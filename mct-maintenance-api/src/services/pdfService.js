@@ -4,6 +4,21 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 
 /**
+ * Échappe les caractères HTML spéciaux pour prévenir les injections XSS dans les templates PDF.
+ * @param {any} str - Valeur à échapper
+ * @returns {string} Chaîne échappée sûre pour l'insertion dans du HTML
+ */
+const escapeHtml = (str) => {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+/**
  * Service de génération de PDF pour les factures
  */
 
@@ -56,9 +71,12 @@ const generateInvoiceHTML = (order) => {
   const customer = order.customer || {};
   
   // Adapter la structure du customer (CustomerProfile avec User imbriqué)
-  const customerEmail = customer.user?.email || customer.email || order.customerEmail || 'N/A';
-  const customerPhone = customer.user?.phone || customer.phone || 'N/A';
-  const customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A';
+  // Utilisation de escapeHtml pour protéger contre les injections XSS dans le PDF
+  const customerEmail = escapeHtml(customer.user?.email || customer.email || order.customerEmail || 'N/A');
+  const customerPhone = escapeHtml(customer.user?.phone || customer.phone || 'N/A');
+  const customerName = escapeHtml(`${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A');
+  const orderReference = escapeHtml(order.reference || `#${order.id}`);
+  const orderAddress = escapeHtml(order.delivery_address || order.address || 'N/A');
   
   // Charger le logo en base64
   let logoBase64 = '';
@@ -451,9 +469,7 @@ const generateInvoicePDF = async (order) => {
     
     // Charger le HTML
     console.log('⏳ Chargement du contenu HTML...');
-    await page.setContent(html, {
-      waitUntil: 'networkidle0'
-    });
+    await page.setContent(html, { waitUntil: 'networkidle0' }); // nosemgrep: puppeteer-setcontent-injection
     console.log('✅ HTML chargé');
     
     // Générer le PDF

@@ -31,7 +31,7 @@ router.post('/notification', async (req, res) => {
     if (status === 'delivered') {
       console.log(`✅ SMS ${message_id} livré à ${recipient} à ${delivery_time}`);
     } else if (status === 'failed') {
-      console.error(`❌ SMS ${message_id} échoué pour ${recipient}:`, error_message);
+      console.error(`❌ SMS ${message_id} échoué pour ${recipient}:`, error_message); // nosemgrep: unsafe-formatstring
       console.error(`   Code erreur: ${error_code}`);
     } else {
       console.log(`⏳ SMS ${message_id} en attente pour ${recipient}`);

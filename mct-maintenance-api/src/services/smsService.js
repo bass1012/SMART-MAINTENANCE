@@ -9,7 +9,7 @@ const axios = require('axios');
  * Récupérer la configuration HSMS.ci depuis les variables d'environnement
  */
 const getConfig = () => ({
-  HSMS_API_URL: process.env.HSMS_API_URL || 'https://api.hsms.ci/api/v1',
+  HSMS_API_URL: process.env.HSMS_API_URL || 'https://hsms.ci/api',
   HSMS_CLIENT_ID: process.env.HSMS_CLIENT_ID || '',
   HSMS_CLIENT_SECRET: process.env.HSMS_CLIENT_SECRET || '',
   HSMS_TOKEN: process.env.HSMS_TOKEN || '',

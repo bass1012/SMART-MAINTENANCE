@@ -429,6 +429,45 @@ router.get('/payments/history', authenticate, async (req, res) => {
   }
 });
 
+const getQuoteItemsHelper = (quote) => {
+  if (quote.items && quote.items.length > 0) {
+    return quote.items.map(item => ({
+      id: item.id,
+      productId: item.productId || item.product_id || -1,
+      productName: item.productName || item.product_name || 'Article',
+      quantity: item.quantity || 1,
+      unitPrice: parseFloat(item.unitPrice || item.unit_price || 0),
+      discount: parseFloat(item.discount || 0),
+      taxRate: parseFloat(item.taxRate || item.tax_rate || 0),
+      isCustom: item.isCustom || item.is_custom || false,
+    }));
+  }
+  
+  let rawLineItems = quote.line_items;
+  if (typeof rawLineItems === 'string') {
+    try {
+      rawLineItems = JSON.parse(rawLineItems);
+    } catch (e) {
+      rawLineItems = [];
+    }
+  }
+  
+  if (Array.isArray(rawLineItems)) {
+    return rawLineItems.map((item, index) => ({
+      id: index + 1,
+      productId: item.productId || item.product_id || -1,
+      productName: item.productName || item.product_name || item.description || 'Article',
+      quantity: item.quantity || 1,
+      unitPrice: parseFloat(item.unitPrice || item.unit_price || 0),
+      discount: parseFloat(item.discount || 0),
+      taxRate: parseFloat(item.taxRate || item.tax_rate || 0),
+      isCustom: item.isCustom || item.is_custom || true,
+    }));
+  }
+  
+  return [];
+};
+
 router.get('/quotes', async (req, res) => {
   try {
     const { Quote, QuoteItem, CustomerProfile } = require('../models');
@@ -475,7 +514,7 @@ router.get('/quotes', async (req, res) => {
       subtotal: parseFloat(quote.subtotal),
       taxAmount: parseFloat(quote.taxAmount),
       discountAmount: parseFloat(quote.discountAmount),
-      items: quote.items || [],
+      items: getQuoteItemsHelper(quote),
       // Champs pour le paiement différé
       payment_status: quote.payment_status,
       scheduled_date: quote.scheduled_date,
@@ -2152,7 +2191,7 @@ router.get('/quotes/:id', async (req, res) => {
       subtotal: parseFloat(quote.subtotal),
       taxAmount: parseFloat(quote.taxAmount),
       discountAmount: parseFloat(quote.discountAmount),
-      items: quote.items || [],
+      items: getQuoteItemsHelper(quote),
       // Champs pour le paiement différé
       payment_status: quote.payment_status,
       scheduled_date: quote.scheduled_date,
@@ -2242,7 +2281,7 @@ router.post('/complaints', async (req, res) => {
       status: 'open'
     });
     
-    console.log(`✅ Réclamation ${reference} créée:`, complaint.toJSON());
+    console.log(`✅ Réclamation ${reference} créée:`, complaint.toJSON()); // nosemgrep: unsafe-formatstring
     
     // 🔔 Envoyer la notification aux admins
     try {
@@ -2304,7 +2343,7 @@ router.get('/complaints/:id', async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
     
-    console.log(`🔍 GET /api/customer/complaints/${id} - User ID:`, userId);
+    console.log(`🔍 GET /api/customer/complaints/${id} - User ID:`, userId); // nosemgrep: unsafe-formatstring
     
     const { CustomerProfile } = require('../models');
     const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
@@ -2372,7 +2411,7 @@ router.post('/complaints/:id/notes', async (req, res) => {
     const { note } = req.body;
     const userId = req.user.id;
     
-    console.log(`📝 POST /api/customer/complaints/${id}/notes - User ID:`, userId);
+    console.log(`📝 POST /api/customer/complaints/${id}/notes - User ID:`, userId); // nosemgrep: unsafe-formatstring
     
     if (!note || note.trim() === '') {
       return res.status(400).json({

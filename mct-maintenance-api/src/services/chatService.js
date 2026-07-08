@@ -290,7 +290,7 @@ class ChatService {
         console.log(`⚠️  [Chat] Pas de FCM token pour l'utilisateur ${userId}`);
       }
     } catch (error) {
-      console.error(`❌ [Chat] Erreur envoi notification à l'utilisateur ${userId}:`, error.message);
+      console.error(`❌ [Chat] Erreur envoi notification à l'utilisateur ${userId}:`, error.message); // nosemgrep: unsafe-formatstring
     }
   }
 

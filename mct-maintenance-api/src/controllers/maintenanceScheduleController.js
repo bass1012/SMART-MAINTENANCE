@@ -97,8 +97,14 @@ const updateSchedule = async (req, res) => {
     const schedule = await MaintenanceSchedule.findByPk(req.params.id);
     if (!schedule) return res.status(404).json({ success: false, message: 'Planning non trouvé' });
     
+    // Whitelist des champs modifiables (protection contre la pollution de prototype)
     const { equipment_id, technician_id, scheduled_date, type, status, notes } = req.body;
-    Object.assign(schedule, { equipment_id, technician_id, scheduled_date, type, status, notes });
+    if (equipment_id !== undefined) schedule.equipment_id = equipment_id;
+    if (technician_id !== undefined) schedule.technician_id = technician_id;
+    if (scheduled_date !== undefined) schedule.scheduled_date = scheduled_date;
+    if (type !== undefined) schedule.type = type;
+    if (status !== undefined) schedule.status = status;
+    if (notes !== undefined) schedule.notes = notes;
     await schedule.save();
     
     console.log('✅ Schedule updated successfully:', schedule.id);

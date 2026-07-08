@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { authenticate } = require('../middleware/auth');
 const {
   uploadAvatar,
@@ -11,22 +12,35 @@ const {
   deleteUploadedFile
 } = require('../controllers/uploadController');
 
+// Base uploads directory (absolute path)
+const BASE_UPLOADS = path.join(__dirname, '../../uploads');
+
+// Assurer que tous les sous-dossiers existent au démarrage
+['avatars', 'products', 'equipments', 'documents'].forEach(dir => {
+  const fullPath = path.join(BASE_UPLOADS, dir); // nosemgrep: path-join-resolve-traversal - dir est un string codé en dur
+  if (!fs.existsSync(fullPath)) {
+    fs.mkdirSync(fullPath, { recursive: true });
+    console.log(`📁 Dossier uploads/${dir} créé`);
+  }
+});
+
 // Configuration de multer pour différents types d'uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    let uploadPath = 'uploads/';
+    let subDir = '';
     
     // Déterminer le dossier selon le type d'upload
     if (req.path.includes('avatar')) {
-      uploadPath += 'avatars/';
+      subDir = 'avatars';
     } else if (req.path.includes('product')) {
-      uploadPath += 'products/';
+      subDir = 'products';
     } else if (req.path.includes('equipment')) {
-      uploadPath += 'equipments/';
+      subDir = 'equipments';
     } else if (req.path.includes('document')) {
-      uploadPath += 'documents/';
+      subDir = 'documents';
     }
     
+    const uploadPath = path.join(BASE_UPLOADS, subDir);
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
