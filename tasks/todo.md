@@ -1,6 +1,33 @@
 # TODO - Session 7-8 juillet 2026 - Affichage PDF Inline, TVA Devis, Résolution Devis Diagnostic & Fixes de Paiements
 
-## Terminé dans cette session (7-8 juillet 2026)
+## Terminé dans cette session (7-9 juillet 2026)
+
+### ✅ Interdiction de suppression de son propre compte (Admin/Manager)
+- **Modifications Backend** :
+  - Mise à jour de `userController.js` pour empêcher la suppression de l'utilisateur connecté (`currentUser.id === user.id`).
+- **Modifications Dashboard** :
+  - Désactivation du bouton "Supprimer" dans la liste des utilisateurs (`UsersList.tsx`) et dans le profil (`UserDetail.tsx`) lorsque l'utilisateur affiché est l'utilisateur connecté.
+- **Fichiers modifiés** :
+  - `mct-maintenance-api/src/controllers/user/userController.js`
+  - `mct-maintenance-dashboard/src/pages/users/UsersList.tsx`
+  - `mct-maintenance-dashboard/src/pages/users/UserDetail.tsx`
+
+### ✅ Déploiement Dashboard et résolution crash API
+- **Modifications** :
+  - Utilisation de `scp` pour transférer le dossier `build` vers le serveur.
+  - Résolution d'une erreur de syntaxe introduite dans `userController.js` qui faisait crasher l'API et entraînait des "fausses" erreurs CORS dues à Nginx retournant une page 502 Bad Gateway.
+- **Leçons** : Ajoutées au fichier `lessons.md`.
+
+### ✅ Correction des notifications Dashboard (404 et Son)
+- **Modifications API** :
+  - Remplacement de la route `actionUrl: '/contracts'` par `/contrats` dans les services de paiement et de souscription pour éviter que les administrateurs tombent sur une page 404 dans le Dashboard.
+- **Modifications Dashboard** :
+  - Ajout d'un lecteur audio dans `NotificationBell.tsx` (`/notification.wav`) pour jouer un son lors de la réception de toute nouvelle notification Socket.IO.
+- **Fichiers modifiés** :
+  - `mct-maintenance-api/src/services/contractSchedulingService.js`
+  - `mct-maintenance-api/src/routes/contractRoutes.js`
+  - `mct-maintenance-api/src/controllers/payment/fineoPayController.js`
+  - `mct-maintenance-dashboard/src/components/Notifications/NotificationBell.tsx`
 
 ### ✅ Correction du crash silencieux lors de la déconnexion
 - **Problème** : Lors de l'appui sur "Déconnexion" (dans `customer_main_screen.dart`, `technician_main_screen.dart` et `modern_profile_menu.dart`), le menu ou bottom sheet était fermé via `navigator.pop()` **avant** d'exécuter la déconnexion. Cela rendait le `BuildContext` invalide (unmounted). L'appel suivant à `context.read<AuthRepository>()` déclenchait une exception Flutter silencieuse, empêchant `authRepository.logout()` d'être appelé. L'application naviguait vers le Login Screen en donnant l'illusion d'une déconnexion réussie, mais les tokens n'étaient jamais effacés !
