@@ -639,4 +639,44 @@ router.get('/config/diagnostic-fee',
 );
 
 
+
+/**
+ * @swagger
+ * /api/interventions/{id}/reschedule:
+ *   post:
+ *     summary: Reprogrammer une intervention
+ *     tags: [Interventions]
+ */
+router.post('/:id/reschedule',
+  authenticate,
+  authorize('admin', 'manager'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { scheduled_date } = req.body;
+
+      if (!scheduled_date) {
+        return res.status(400).json({ success: false, message: 'La date est requise' });
+      }
+
+      const intervention = await Intervention.findByPk(id);
+
+      if (!intervention) {
+        return res.status(404).json({ success: false, message: 'Intervention non trouvée' });
+      }
+
+      await intervention.update({
+        scheduled_date: new Date(scheduled_date),
+        status: intervention.technician_id ? 'assigned' : 'scheduled'
+      });
+
+      // TODO: Envoyer notification au client et technicien ? (optionnel, on laisse par défaut)
+
+      res.json({ success: true, message: 'Intervention reprogrammée avec succès', data: intervention });
+    } catch (error) {
+      console.error('Erreur reprogrammation intervention admin:', error);
+      res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
 module.exports = router;

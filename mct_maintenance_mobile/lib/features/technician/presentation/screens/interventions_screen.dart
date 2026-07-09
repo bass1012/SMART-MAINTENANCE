@@ -938,6 +938,11 @@ class _TechnicianInterventionsScreenState
         label = 'Rejetée';
         icon = Icons.block;
         break;
+      case 'client_unreachable':
+        gradientColors = [Colors.red.shade900, Colors.red.shade700];
+        label = 'Injoignable';
+        icon = Icons.person_off;
+        break;
       default:
         gradientColors = [Colors.grey.shade600, Colors.grey.shade400];
         label = status;

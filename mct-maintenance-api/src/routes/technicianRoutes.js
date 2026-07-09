@@ -340,6 +340,72 @@ router.post('/interventions/:id/accept', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/technician/interventions/{id}/report-unreachable:
+ *   post:
+ *     summary: Signaler que le client est injoignable ou absent
+ *     tags: [Technician]
+ */
+router.post('/interventions/:id/report-unreachable', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const technicianId = req.user.id;
+
+    const intervention = await Intervention.findOne({
+      where: { id, technician_id: technicianId },
+      include: [
+        { model: User, as: 'customer', attributes: ['id', 'first_name', 'last_name', 'email', 'fcm_token'] }
+      ]
+    });
+
+    if (!intervention) {
+      return res.status(404).json({
+        success: false,
+        message: 'Intervention non trouvée ou non autorisée'
+      });
+    }
+
+    await intervention.update({ 
+      status: 'client_unreachable',
+      description: intervention.description + (notes ? `\n\n[ABSENCE SIGNALÉE] Notes du technicien : ${notes}` : '')
+    });
+
+    // Notifier les admins
+    const notificationService = require('../services/notificationService');
+    await notificationService.notifyAdmins({
+      title: '🚨 Client Injoignable',
+      message: `Le technicien a signalé le client ${intervention.customer?.first_name || ''} comme injoignable pour l'intervention #${intervention.id}`,
+      type: 'intervention',
+      related_id: intervention.id
+    });
+
+    // Notifier le client
+    if (intervention.customer) {
+      await notificationService.create({
+        userId: intervention.customer.id,
+        title: 'Technicien sur place',
+        message: "Votre technicien MCT est sur place mais n'arrive pas à vous joindre. Sans réponse, l'intervention sera annulée veillez contacter le service client pour la reprogrammer ou aller sur l'application pour la reprogrammer.",
+        type: 'intervention',
+        relatedId: intervention.id,
+        sendPush: true
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Client signalé comme injoignable'
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors du signalement client injoignable:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors du signalement'
+    });
+  }
+});
+
 router.post('/interventions/:id/complete', async (req, res) => {
   try {
     const { id } = req.params;

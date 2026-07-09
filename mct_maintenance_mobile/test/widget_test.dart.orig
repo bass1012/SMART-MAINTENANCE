@@ -117,10 +117,6 @@ class _FakeInterventionRepository implements InterventionRepository {
   @override
   Future<Map<String, dynamic>> getTechnicianStats() async => {};
   @override
-  Future<Map<String, dynamic>> reportClientUnreachable(int id, {String? notes}) async => {};
-  @override
-  Future<Map<String, dynamic>> rescheduleIntervention(int id, DateTime date) async => {};
-  @override
   Future<Map<String, dynamic>> updateTechnicianAvailability(String s) async =>
       {};
   @override

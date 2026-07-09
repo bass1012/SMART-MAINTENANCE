@@ -1,0 +1,45 @@
+--- /Users/bassoued/Documents/MAINTENANCE/mct-maintenance-api/src/routes/adminRoutes.js
++++ /Users/bassoued/Documents/MAINTENANCE/mct-maintenance-api/src/routes/adminRoutes.js
+@@ -1071,6 +1071,43 @@
+   }
+ });
+ 
++/**
++ * @swagger
++ * /api/admin/interventions/{id}/reschedule:
++ *   post:
++ *     summary: Reprogrammer une intervention
++ *     tags: [Admin, Interventions]
++ */
++router.post('/interventions/:id/reschedule', async (req, res) => {
++  try {
++    const { id } = req.params;
++    const { scheduled_date } = req.body;
++
++    if (!scheduled_date) {
++      return res.status(400).json({ success: false, message: 'La date est requise' });
++    }
++
++    const intervention = await Intervention.findByPk(id);
++
++    if (!intervention) {
++      return res.status(404).json({ success: false, message: 'Intervention non trouvée' });
++    }
++
++    await intervention.update({
++      scheduled_date: new Date(scheduled_date),
++      status: intervention.technician_id ? 'assigned' : 'scheduled'
++    });
++
++    // TODO: Send push notification to technician and customer about rescheduling
++
++    res.json({ success: true, message: 'Intervention reprogrammée avec succès' });
++  } catch (error) {
++    console.error('Erreur reprogrammation intervention admin:', error);
++    res.status(500).json({ success: false, message: 'Erreur serveur' });
++  }
++});
++
+ /**
+  * @swagger
+  * /api/admin/interventions/{id}/cancel:

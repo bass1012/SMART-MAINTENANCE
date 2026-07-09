@@ -1,0 +1,108 @@
+--- /Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/features/technician/presentation/screens/intervention_detail_screen.dart
++++ /Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/features/technician/presentation/screens/intervention_detail_screen.dart
+@@ -695,6 +695,59 @@
+     );
+   }
+ 
++  void _showClientUnreachableBottomSheet() {
++    final notesController = TextEditingController();
++    
++    showModalBottomSheet(
++      context: context,
++      isScrollControlled: true,
++      shape: const RoundedRectangleBorder(
++        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
++      ),
++      builder: (context) {
++        return Padding(
++          padding: EdgeInsets.only(
++            bottom: MediaQuery.of(context).viewInsets.bottom,
++            left: 20,
++            right: 20,
++            top: 20,
++          ),
++          child: Column(
++            mainAxisSize: MainAxisSize.min,
++            crossAxisAlignment: CrossAxisAlignment.stretch,
++            children: [
++              const Text(
++                'Signaler le client comme injoignable',
++                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
++              ),
++              const SizedBox(height: 16),
++              TextField(
++                controller: notesController,
++                decoration: const InputDecoration(
++                  labelText: 'Notes (ex: 3 appels sans réponse)',
++                  border: OutlineInputBorder(),
++                ),
++                maxLines: 3,
++              ),
++              const SizedBox(height: 16),
++              ElevatedButton(
++                onPressed: () {
++                  Navigator.pop(context);
++                  _performAction('client_unreachable', extraData: notesController.text);
++                },
++                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
++                child: const Text('Confirmer l\'absence'),
++              ),
++              const SizedBox(height: 20),
++            ],
++          ),
++        );
++      },
++    );
++  }
++
+   Widget _buildActionButton() {
+     if (_isLoading) {
+       return const Padding(
+@@ -823,17 +876,33 @@
+         // Split déjà scanné, afficher les infos et le bouton démarrer
+         mainButton = Column(
+           children: [
+             // Afficher les infos du split scanné
+             if (_scannedSplit != null) _buildScannedSplitInfo(),
+             if (_scannedSplit != null) const SizedBox(height: 12),
+-            ElevatedButton.icon(
+-              onPressed: _isLoading ? null : () => _performAction('start'),
+-              icon: const Icon(Icons.play_arrow),
+-              label: const Text('Démarrer l\'intervention'),
+-              style: ElevatedButton.styleFrom(
+-                backgroundColor: const Color(0xFF0a543d),
+-                foregroundColor: Colors.white,
+-                minimumSize: const Size(double.infinity, 50),
+-              ),
++            Row(
++              children: [
++                Expanded(
++                  child: ElevatedButton.icon(
++                    onPressed: _isLoading ? null : _showClientUnreachableBottomSheet,
++                    icon: const Icon(Icons.person_off),
++                    label: const Text('Injoignable', style: TextStyle(fontSize: 12)),
++                    style: ElevatedButton.styleFrom(
++                      backgroundColor: Colors.red,
++                      foregroundColor: Colors.white,
++                      minimumSize: const Size(double.infinity, 50),
++                    ),
++                  ),
++                ),
++                const SizedBox(width: 8),
++                Expanded(
++                  flex: 2,
++                  child: ElevatedButton.icon(
++                    onPressed: _isLoading ? null : () => _performAction('start'),
++                    icon: const Icon(Icons.play_arrow),
++                    label: const Text('Démarrer', style: TextStyle(fontSize: 12)),
++                    style: ElevatedButton.styleFrom(
++                      backgroundColor: const Color(0xFF0a543d),
++                      foregroundColor: Colors.white,
++                      minimumSize: const Size(double.infinity, 50),
++                    ),
++                  ),
++                ),
++              ],
+             ),
+           ],
+         );

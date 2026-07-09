@@ -695,6 +695,90 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     );
   }
 
+  Future<void> _reportClientUnreachable(String notes) async {
+    setState(() => _isLoading = true);
+    try {
+      final interventionId = _intervention['id'];
+      final interventionRepository = context.read<InterventionRepository>();
+      final response = await interventionRepository.reportClientUnreachable(
+        interventionId,
+        notes: notes,
+      );
+
+      if (mounted) {
+        setState(() {
+          _intervention['status'] = 'client_unreachable';
+          if (response['data'] != null && response['data']['status'] != null) {
+            _intervention['status'] = response['data']['status'];
+          }
+          _isLoading = false;
+        });
+
+        SnackBarHelper.showSuccess(
+          context,
+          response['message'] ?? 'Client signalé comme injoignable',
+          emoji: '⚠️',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        SnackBarHelper.showError(context, e.toString());
+      }
+    }
+  }
+
+  void _showClientUnreachableBottomSheet() {
+    final notesController = TextEditingController();
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Signaler le client comme injoignable',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: notesController,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (ex: 3 appels sans réponse)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _reportClientUnreachable(notesController.text);
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Confirmer l\'absence', style: TextStyle(color: Colors.white)),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildActionButton() {
     final status = _intervention['status'];
     if (status == null) {
@@ -815,15 +899,35 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
             // Afficher les infos du split scanné
             if (_scannedSplit != null) _buildScannedSplitInfo(),
             if (_scannedSplit != null) const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : () => _performAction('start'),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Démarrer l\'intervention'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0a543d),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 50),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _showClientUnreachableBottomSheet,
+                    icon: const Icon(Icons.person_off),
+                    label: const Text('Injoignable', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : () => _performAction('start'),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Démarrer', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0a543d),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         );

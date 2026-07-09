@@ -1461,6 +1461,8 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
         return Colors.green;
       case 'cancelled':
         return Colors.red;
+      case 'client_unreachable':
+        return Colors.red.shade900;
       default:
         return Colors.grey;
     }
@@ -1484,6 +1486,8 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
         return 'Terminée';
       case 'cancelled':
         return 'Annulée';
+      case 'client_unreachable':
+        return 'Client injoignable';
       default:
         return status;
     }

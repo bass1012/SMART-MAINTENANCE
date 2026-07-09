@@ -37,4 +37,6 @@ abstract class InterventionRepository {
   Future<Map<String, dynamic>> getTechnicianReviews();
   Future<Map<String, dynamic>> replyToReview(int reviewId, String reply);
   Future<Map<String, dynamic>> suggestTechnicians({required int interventionId, int maxResults = 10});
+  Future<Map<String, dynamic>> reportClientUnreachable(int interventionId, {String? notes});
+  Future<Map<String, dynamic>> rescheduleIntervention(int interventionId, DateTime newDate);
 }
