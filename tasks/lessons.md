@@ -195,3 +195,5 @@ R# Leçons Apprises
 [2026-07-09] | API et App : Ajout de champs de mesure technique (pression, puissance, etc.) | Au lieu d'utiliser un champ générique "technical_data", définir des colonnes de mesure spécifiques et cohérentes (Pression, Puissance, Intensité, Tension) entre les modèles Flutter et les modèles Sequelize pour éviter les conversions de données difficiles.
 
 [2026-07-09] | API et App : Ajout du Fréon | Ajout de la mesure de Fréon dans le rapport de diagnostic et le rapport de maintenance.
+
+[2026-07-09] | Xcode Cloud & Flutter | Ajout du script ci_post_clone.sh pour forcer Xcode Cloud à installer Flutter et exécuter 'pod install' avant de tenter la compilation iOS, car par défaut Xcode Cloud ne gère pas nativement Flutter.

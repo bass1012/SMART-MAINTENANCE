@@ -2,6 +2,12 @@
 
 ## Terminé dans cette session (7-9 juillet 2026)
 
+### ✅ Fix Compilation Xcode Cloud (iOS)
+- **Problème** : `Unable to load contents of file list: '/Target Support Files/Pods-Runner/...xcfilelist'`. Xcode Cloud échouait à compiler l'application Flutter iOS car les dépendances CocoaPods n'étaient pas installées (Xcode Cloud ne sait pas qu'il s'agit d'un projet Flutter par défaut).
+- **Modifications** :
+  - Création du script `ci_post_clone.sh` dans `mct_maintenance_mobile/ios/ci_scripts/` qui est automatiquement appelé par Xcode Cloud après le clonage.
+  - Le script clone le SDK Flutter, exécute `flutter pub get` puis se place dans le dossier `ios/` pour exécuter `pod install --repo-update`, générant ainsi tous les fichiers nécessaires à Xcode.
+
 ### ✅ Ajout de champs de mesure technique au rapport de diagnostic
 - **Modifications Backend** :
   - Mise à jour du modèle `DiagnosticReport` et de `diagnosticReportController.js` pour inclure et stocker `pression`, `freon`, `puissance`, `intensite`, et `tension`.
