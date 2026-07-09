@@ -2,6 +2,14 @@
 
 ## Terminé dans cette session (7-9 juillet 2026)
 
+### ✅ Mise à jour esthétique Rapport de Diagnostic
+- **Modifications Mobile** :
+  - Changement de la couleur de l'AppBar du Rapport de Diagnostic (de bleu au vert de l'application) dans l'interface technicien pour une meilleure cohérence visuelle.
+
+### ✅ Rendre le champ "Modèle/Type" optionnel
+- **Modifications Dashboard** :
+  - Mise à jour de `OfferForm.tsx` pour autoriser le champ "Modèle/Type" à être vide lors de la création ou modification des offres d'installation et de réparation.
+
 ### ✅ Interdiction de suppression de son propre compte (Admin/Manager)
 - **Modifications Backend** :
   - Mise à jour de `userController.js` pour empêcher la suppression de l'utilisateur connecté (`currentUser.id === user.id`).

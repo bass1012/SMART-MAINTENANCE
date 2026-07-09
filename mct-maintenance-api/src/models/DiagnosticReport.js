@@ -72,6 +72,16 @@ const DiagnosticReport = sequelize.define('DiagnosticReport', {
     allowNull: true,
     comment: 'Notes additionnelles du technicien'
   },
+  technical_data: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Données techniques relevées (mesures, etc)'
+  },
+  after_intervention_report: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Rapport après intervention'
+  },
   status: {
     type: DataTypes.ENUM('submitted', 'reviewed', 'quote_sent', 'approved', 'rejected'),
     allowNull: false,
