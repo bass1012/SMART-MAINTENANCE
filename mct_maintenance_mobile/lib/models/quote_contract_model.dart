@@ -16,6 +16,9 @@ class QuoteContract {
   final String? paymentStatus; // 'pending', 'deferred', 'paid'
   final bool executeNow; // Exécution immédiate
   final List<QuoteItem> items; // Liste des articles
+  final double subtotal;
+  final double taxAmount;
+  final double discountAmount;
   // Split payment (50/50)
   final String? paymentType; // 'full' ou 'split'
   final double? firstPaymentAmount; // 50% du total
@@ -39,6 +42,9 @@ class QuoteContract {
     this.paymentStatus,
     this.executeNow = false,
     this.items = const [],
+    this.subtotal = 0.0,
+    this.taxAmount = 0.0,
+    this.discountAmount = 0.0,
     this.paymentType,
     this.firstPaymentAmount,
     this.firstPaymentStatus,
@@ -79,6 +85,9 @@ class QuoteContract {
       paymentStatus: json['payment_status'],
       executeNow: json['execute_now'] == true || json['execute_now'] == 1,
       items: itemsList,
+      subtotal: (json['subtotal'] ?? 0.0).toDouble(),
+      taxAmount: (json['taxAmount'] ?? json['tax_amount'] ?? 0.0).toDouble(),
+      discountAmount: (json['discountAmount'] ?? json['discount_amount'] ?? 0.0).toDouble(),
       // Split payment
       paymentType: json['payment_type'],
       firstPaymentAmount: json['first_payment_amount'] != null
@@ -109,6 +118,9 @@ class QuoteContract {
       'payment_status': paymentStatus,
       'execute_now': executeNow,
       'items': items.map((item) => item.toJson()).toList(),
+      'subtotal': subtotal,
+      'taxAmount': taxAmount,
+      'discountAmount': discountAmount,
     };
   }
 }

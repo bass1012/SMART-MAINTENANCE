@@ -1,14 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
-import 'package:mct_maintenance_mobile/screens/auth/login_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/invoices_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/support_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/profile_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/settings_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/history_screen.dart';
-import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/login_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/invoices_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/support_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/profile_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/settings_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/history_screen.dart';
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:mct_maintenance_mobile/services/fcm_service.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
+import 'package:provider/provider.dart';
 
 class CustomDrawer extends StatefulWidget {
   const CustomDrawer({super.key});
@@ -18,7 +20,6 @@ class CustomDrawer extends StatefulWidget {
 }
 
 class _CustomDrawerState extends State<CustomDrawer> {
-  final ApiService _apiService = ApiService();
   UserModel? _user;
   bool _isLoading = true;
   String? _errorMessage;
@@ -31,7 +32,8 @@ class _CustomDrawerState extends State<CustomDrawer> {
 
   Future<void> _loadUserData() async {
     try {
-      final userData = await _apiService.getProfile();
+      final authRepository = context.read<AuthRepository>();
+      final userData = await authRepository.getProfile();
       if (mounted) {
         setState(() {
           _user = UserModel.fromJson(userData['data']);
@@ -61,7 +63,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Drawer(
       child: Column(
         children: [
@@ -75,10 +77,14 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 : _errorMessage != null
                     ? Text(_errorMessage!)
                     : Text(
-                        '${_user?.firstName ?? ''} ${_user?.lastName ?? ''}'.trim().isNotEmpty
-                            ? '${_user?.firstName ?? ''} ${_user?.lastName ?? ''}'.trim()
+                        '${_user?.firstName ?? ''} ${_user?.lastName ?? ''}'
+                                .trim()
+                                .isNotEmpty
+                            ? '${_user?.firstName ?? ''} ${_user?.lastName ?? ''}'
+                                .trim()
                             : 'Utilisateur',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
                       ),
             accountEmail: _isLoading
                 ? const Text('')
@@ -106,7 +112,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
             ],
             currentAccountPicture: _buildProfilePicture(),
           ),
-          
+
           // Options de menu
           Expanded(
             child: ListView(
@@ -199,7 +205,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
               ],
             ),
           ),
-          
+
           // Pied de page
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -240,9 +246,10 @@ class _CustomDrawerState extends State<CustomDrawer> {
         imageUrl = '${AppConfig.baseUrl}${_user!.profileImage!}';
       } else {
         // Juste le nom du fichier
-        imageUrl = '${AppConfig.baseUrl}/uploads/avatars/${_user!.profileImage!}';
+        imageUrl =
+            '${AppConfig.baseUrl}/uploads/avatars/${_user!.profileImage!}';
       }
-      
+
       return CircleAvatar(
         backgroundColor: Colors.white24,
         child: ClipOval(
@@ -261,8 +268,9 @@ class _CustomDrawerState extends State<CustomDrawer> {
               );
             },
             errorBuilder: (context, error, stackTrace) {
-              print('❌ Drawer - Erreur chargement image: $error');
-              print('🔗 Drawer - URL tentée: $imageUrl');
+              if (kDebugMode)
+                debugPrint('❌ Drawer - Erreur chargement image: $error');
+              if (kDebugMode) debugPrint('🔗 Drawer - URL tentée: $imageUrl');
               return _buildInitialsAvatar();
             },
           ),
@@ -329,7 +337,8 @@ class _CustomDrawerState extends State<CustomDrawer> {
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Déconnexion'),
-              content: const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
+              content:
+                  const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
@@ -346,14 +355,15 @@ class _CustomDrawerState extends State<CustomDrawer> {
             ),
           );
 
-          if (shouldLogout == true && mounted) {
+          if (shouldLogout == true) {
             try {
+              final authRepository = context.read<AuthRepository>();
               await FCMService().clearOnLogout();
-              await _apiService.logout();
+              await authRepository.logout();
             } catch (e) {
               // Ignorer les erreurs de déconnexion
             }
-            
+
             if (mounted) {
               Navigator.pushAndRemoveUntil(
                 context,

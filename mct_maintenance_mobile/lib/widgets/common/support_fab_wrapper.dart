@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../screens/customer/support_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/support_screen.dart';
 
 /// Widget wrapper qui ajoute le bouton flottant de support à n'importe quel écran
 class SupportFabWrapper extends StatelessWidget {

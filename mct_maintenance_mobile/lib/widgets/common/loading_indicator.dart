@@ -61,11 +61,11 @@ class _LoadingIndicatorState extends State<LoadingIndicator>
                     width: widget.size,
                     height: widget.size,
                     decoration: BoxDecoration(
-                      color: dotColor.withOpacity(opacity),
+                      color: dotColor.withValues(alpha: opacity),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: dotColor.withOpacity(0.2),
+                          color: dotColor.withValues(alpha: 0.2),
                           blurRadius: 4,
                           spreadRadius: 1,
                         ),
@@ -145,7 +145,7 @@ class _ButtonLoadingIndicatorState extends State<ButtonLoadingIndicator>
               width: widget.size,
               height: widget.size,
               decoration: BoxDecoration(
-                color: dotColor.withOpacity(opacity),
+                color: dotColor.withValues(alpha: opacity),
                 shape: BoxShape.circle,
               ),
               transform: Matrix4.identity()..scale(scale),

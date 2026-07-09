@@ -1,9 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
-import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:mct_maintenance_mobile/features/auth/data/repositories/auth_repository_impl.dart';
+import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 
 class UserProvider extends ChangeNotifier {
-  final ApiService _apiService = ApiService();
+  final AuthRepository _authRepository;
+
+  UserProvider() : _authRepository = AuthRepositoryImpl(BaseApiService());
   
   UserModel? _user;
   bool _isLoading = false;
@@ -20,7 +24,7 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final userData = await _apiService.getProfile();
+      final userData = await _authRepository.getProfile();
       _user = UserModel.fromJson(userData['data']);
       _isLoading = false;
       notifyListeners();
@@ -34,7 +38,7 @@ class UserProvider extends ChangeNotifier {
   // Mettre à jour le profil utilisateur
   Future<void> updateUserProfile(Map<String, dynamic> data) async {
     try {
-      await _apiService.updateProfile(data);
+      await _authRepository.updateProfile(data);
       // Recharger le profil après la mise à jour
       await loadUserProfile();
     } catch (e) {

@@ -42,8 +42,8 @@ deploy_api() {
     
     # Envoyer vers le serveur
     echo -e "   ${YELLOW}📤 Envoi vers le serveur...${NC}"
-    ssh $SERVER_USER@$SERVER_IP "mkdir -p $APP_DIR/mct-maintenance-api/uploads"
-    rsync -avz --delete /tmp/mct-api-deploy/ $SERVER_USER@$SERVER_IP:$APP_DIR/mct-maintenance-api/
+    ssh $SERVER_USER@$SERVER_IP "mkdir -p $APP_DIR/mct-maintenance-api/uploads/products $APP_DIR/mct-maintenance-api/uploads/interventions"
+    rsync -avz --delete --exclude='uploads/' --exclude='.env' --exclude='*.sqlite' --exclude='*.db' /tmp/mct-api-deploy/ $SERVER_USER@$SERVER_IP:$APP_DIR/mct-maintenance-api/
     
     # Installer les dépendances et redémarrer
     echo -e "   ${YELLOW}🔧 Installation des dépendances...${NC}"

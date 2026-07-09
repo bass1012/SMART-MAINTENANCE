@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -55,7 +57,7 @@ class ChatService {
             '💾 [ChatService] ${_cachedMessages.length} messages chargés depuis le stockage');
       }
     } catch (e) {
-      print('❌ [ChatService] Erreur chargement cache: $e');
+      if (kDebugMode) debugPrint('❌ [ChatService] Erreur chargement cache: $e');
       _cachedMessages = [];
     }
   }
@@ -69,7 +71,7 @@ class ChatService {
       print(
           '💾 [ChatService] ${_cachedMessages.length} messages sauvegardés dans le stockage');
     } catch (e) {
-      print('❌ [ChatService] Erreur sauvegarde cache: $e');
+      if (kDebugMode) debugPrint('❌ [ChatService] Erreur sauvegarde cache: $e');
     }
   }
 
@@ -90,17 +92,21 @@ class ChatService {
     _cachedMessages.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cacheKey);
-    print('🗑️ [ChatService] Cache vidé');
+    if (kDebugMode) debugPrint('🗑️ [ChatService] Cache vidé');
   }
 
   // Méthode pour supprimer l'historique de chat du backend
   Future<bool> deleteHistory() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
+      const secureStorage = FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      );
+      final token = await secureStorage.read(key: 'auth_token');
 
       if (token == null) {
-        print('❌ [ChatService] Pas de token pour supprimer l\'historique');
+        if (kDebugMode)
+          debugPrint(
+              '❌ [ChatService] Pas de token pour supprimer l\'historique');
         return false;
       }
 
@@ -151,11 +157,11 @@ class ChatService {
   }
 
   Future<void> connect() async {
-    print('🔵 Demande de connexion au chat...');
+    if (kDebugMode) debugPrint('🔵 Demande de connexion au chat...');
 
     // Si le socket existe et est connecté, juste notifier et synchroniser l'état
     if (_socket != null && _socket!.connected) {
-      print('💬 Socket déjà connecté et fonctionnel');
+      if (kDebugMode) debugPrint('💬 Socket déjà connecté et fonctionnel');
       // Synchroniser l'état interne avec l'état réel du socket
       _isConnected = true;
       // IMPORTANT: Notifier les écouteurs que c'est connecté
@@ -165,21 +171,24 @@ class ChatService {
 
     // Nettoyer l'ancien socket s'il existe
     if (_socket != null) {
-      print('🧹 Nettoyage de l\'ancien socket...');
+      if (kDebugMode) debugPrint('🧹 Nettoyage de l\'ancien socket...');
       try {
         _socket!.disconnect();
         _socket!.dispose();
       } catch (e) {
-        print('⚠️ Erreur lors du nettoyage: $e');
+        if (kDebugMode) debugPrint('⚠️ Erreur lors du nettoyage: $e');
       }
       _socket = null;
     }
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token');
+      const secureStorage = FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      );
+      final token = await secureStorage.read(key: 'auth_token');
 
       // Charger les données utilisateur et extraire l'ID
+      final prefs = await SharedPreferences.getInstance();
       final userDataString = prefs.getString('user_data');
       if (userDataString != null) {
         try {
@@ -188,17 +197,20 @@ class ChatService {
           _userId = userData['id']?.toString() ??
               userData['user']?['id']?.toString() ??
               userData['data']?['user']?['id']?.toString();
-          print('🔍 UserData keys: ${userData.keys.toList()}');
-          print('🔍 UserId extrait: $_userId');
+          if (kDebugMode)
+            debugPrint('🔍 UserData keys: ${userData.keys.toList()}');
+          if (kDebugMode) debugPrint('🔍 UserId extrait: $_userId');
         } catch (e) {
-          print('❌ Erreur lors du décodage des données utilisateur: $e');
+          if (kDebugMode)
+            debugPrint('❌ Erreur lors du décodage des données utilisateur: $e');
         }
       }
 
       if (token == null || _userId == null) {
-        print('❌ Pas de token ou user_id pour le chat');
-        print('   Token: ${token != null ? "présent" : "absent"}');
-        print('   UserId: ${_userId ?? "absent"}');
+        if (kDebugMode) debugPrint('❌ Pas de token ou user_id pour le chat');
+        if (kDebugMode)
+          debugPrint('   Token: ${token != null ? "présent" : "absent"}');
+        if (kDebugMode) debugPrint('   UserId: ${_userId ?? "absent"}');
         return;
       }
 
@@ -208,9 +220,10 @@ class ChatService {
       // URL du serveur (utilise la configuration centralisée)
       final serverUrl = AppConfig.baseUrl;
 
-      print('💬 Création du nouveau socket: $serverUrl');
-      print('💬 Token disponible: ${token.substring(0, 20)}...');
-      print('💬 User ID: $_userId');
+      if (kDebugMode) debugPrint('💬 Création du nouveau socket: $serverUrl');
+      if (kDebugMode)
+        debugPrint('💬 Token disponible: ${token.substring(0, 20)}...');
+      if (kDebugMode) debugPrint('💬 User ID: $_userId');
 
       _socket = IO.io(serverUrl, <String, dynamic>{
         'transports': ['websocket', 'polling'],
@@ -224,10 +237,10 @@ class ChatService {
       });
 
       // Configurer les listeners sur le nouveau socket
-      print('🔧 Configuration des listeners Socket.IO...');
+      if (kDebugMode) debugPrint('🔧 Configuration des listeners Socket.IO...');
       _setupSocketListeners();
 
-      print('🔌 Connexion au serveur...');
+      if (kDebugMode) debugPrint('🔌 Connexion au serveur...');
 
       // Créer un Completer pour attendre la connexion
       _connectionCompleter = Completer<void>();
@@ -238,15 +251,16 @@ class ChatService {
       await _connectionCompleter!.future.timeout(
         const Duration(seconds: 5),
         onTimeout: () {
-          print('⏱️ Timeout de connexion après 5 secondes');
+          if (kDebugMode)
+            debugPrint('⏱️ Timeout de connexion après 5 secondes');
           _isConnected = false;
           _connectionController.add(false);
         },
       );
 
-      print('✅ [connect] Connexion établie avec succès');
+      if (kDebugMode) debugPrint('✅ [connect] Connexion établie avec succès');
     } catch (e) {
-      print('❌ Erreur connexion chat: $e');
+      if (kDebugMode) debugPrint('❌ Erreur connexion chat: $e');
       _isConnected = false;
       _connectionController.add(false);
     }
@@ -256,7 +270,7 @@ class ChatService {
     if (_socket == null) return;
 
     _socket!.onConnect((_) {
-      print('✅ Chat connecté au serveur avec succès!');
+      if (kDebugMode) debugPrint('✅ Chat connecté au serveur avec succès!');
       _isConnected = true;
       _connectionController.add(true);
 
@@ -266,7 +280,7 @@ class ChatService {
       }
 
       // S'authentifier avec le token stocké
-      print('💬 Envoi de l\'authentification...');
+      if (kDebugMode) debugPrint('💬 Envoi de l\'authentification...');
       _socket!.emit('chat:authenticate', {
         'token': _token,
         'userId': _userId,
@@ -274,14 +288,15 @@ class ChatService {
     });
 
     _socket!.onDisconnect((_) {
-      print('⚠️ Chat déconnecté du serveur');
+      if (kDebugMode) debugPrint('⚠️ Chat déconnecté du serveur');
       _isConnected = false;
       _connectionController.add(false);
 
       // Tenter une reconnexion après un court délai
       Future.delayed(const Duration(seconds: 2), () {
         if (_socket != null && !_socket!.connected) {
-          print('🔄 Tentative de reconnexion automatique...');
+          if (kDebugMode)
+            debugPrint('🔄 Tentative de reconnexion automatique...');
           _socket!.connect();
         }
       });
@@ -289,45 +304,49 @@ class ChatService {
 
     // Dans socket_io_client 3.x, onConnectError et onConnectTimeout sont remplacés par des événements
     _socket!.on('connect_error', (error) {
-      print('❌ Erreur de connexion Socket.IO: $error');
+      if (kDebugMode) debugPrint('❌ Erreur de connexion Socket.IO: $error');
     });
 
     _socket!.on('connect_timeout', (error) {
-      print('⏱️ Timeout de connexion Socket.IO: $error');
+      if (kDebugMode) debugPrint('⏱️ Timeout de connexion Socket.IO: $error');
     });
 
     _socket!.on('chat:authenticated', (data) {
-      print('✅ Authentifié avec succès: ${data['message']}');
+      if (kDebugMode)
+        debugPrint('✅ Authentifié avec succès: ${data['message']}');
       // S'assurer que l'état connecté est bien diffusé après l'authentification
       _isConnected = true;
       _connectionController.add(true);
     });
 
     _socket!.on('chat:new_message', (data) {
-      print('💬 Nouveau message reçu: ${data['message']}');
+      if (kDebugMode) debugPrint('💬 Nouveau message reçu: ${data['message']}');
       _messageController.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on('chat:message_sent', (data) {
-      print('✅ Confirmation d\'envoi du serveur: ${data['success']}');
+      if (kDebugMode)
+        debugPrint('✅ Confirmation d\'envoi du serveur: ${data['success']}');
       if (data['success'] == true && data['message'] != null) {
-        print('✅ Message bien enregistré, ajout dans le stream');
+        if (kDebugMode)
+          debugPrint('✅ Message bien enregistré, ajout dans le stream');
         // Ajouter le message confirmé dans le stream pour l'afficher
         _messageController.add(Map<String, dynamic>.from(data['message']));
       }
     });
 
     _socket!.on('chat:error', (data) {
-      print('❌ Erreur reçue du serveur: ${data['error']}');
+      if (kDebugMode) debugPrint('❌ Erreur reçue du serveur: ${data['error']}');
     });
 
     _socket!.on('chat:user_typing', (data) {
-      print('💬 ${data['userName']} est en train d\'écrire...');
+      if (kDebugMode)
+        debugPrint('💬 ${data['userName']} est en train d\'écrire...');
       _typingController.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on('chat:user_stop_typing', (data) {
-      print('💬 ${data['userName']} a arrêté d\'écrire');
+      if (kDebugMode) debugPrint('💬 ${data['userName']} a arrêté d\'écrire');
       _typingController.add({
         ...Map<String, dynamic>.from(data),
         'isTyping': false,
@@ -335,7 +354,8 @@ class ChatService {
     });
 
     _socket!.on('chat:messages_read', (data) {
-      print('📖 Messages marqués comme lus: ${data['messageIds']}');
+      if (kDebugMode)
+        debugPrint('📖 Messages marqués comme lus: ${data['messageIds']}');
       if (data['messageIds'] != null && data['messageIds'] is List) {
         final messageIds = List<int>.from(data['messageIds']);
         _messagesReadController.add(messageIds);
@@ -343,26 +363,29 @@ class ChatService {
     });
 
     _socket!.on('error', (error) {
-      print('❌ Erreur Socket.IO: $error');
+      if (kDebugMode) debugPrint('❌ Erreur Socket.IO: $error');
     });
   }
 
   void sendMessage(String message) {
     if (_socket == null || !_socket!.connected) {
-      print('❌ Socket non connecté, impossible d\'envoyer le message');
+      if (kDebugMode)
+        debugPrint('❌ Socket non connecté, impossible d\'envoyer le message');
       return;
     }
 
     print(
         '📤 Envoi du message: "${message.substring(0, message.length > 50 ? 50 : message.length)}..."');
-    print('📤 Socket connecté: ${_socket!.connected}, User ID: $_userId');
+    if (kDebugMode)
+      debugPrint(
+          '📤 Socket connecté: ${_socket!.connected}, User ID: $_userId');
 
     _socket!.emit('chat:send_message', {
       'message': message,
       'sender_role': 'customer',
     });
 
-    print('✅ Événement chat:send_message émis');
+    if (kDebugMode) debugPrint('✅ Événement chat:send_message émis');
   }
 
   void startTyping() {
@@ -386,10 +409,11 @@ class ChatService {
         '🔍 Vérification état connexion: ${_socket?.connected ?? false}, _isConnected: $_isConnected');
 
     if (_socket == null || !_socket!.connected) {
-      print('🔄 Reconnexion nécessaire...');
+      if (kDebugMode) debugPrint('🔄 Reconnexion nécessaire...');
       await connect();
     } else {
-      print('✅ Socket déjà connecté, synchronisation de l\'état...');
+      if (kDebugMode)
+        debugPrint('✅ Socket déjà connecté, synchronisation de l\'état...');
       // Le socket est connecté, s'assurer que l'état interne est synchronisé
       _isConnected = true;
       // Notifier tous les écouteurs de l'état actuel

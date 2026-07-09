@@ -3,7 +3,12 @@
 # Script pour créer une commande de test pour le paiement
 
 API_URL="http://localhost:3000"
-TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NjYsImVtYWlsIjoiYmFzc2lyb3UyMDEwQGdtYWlsLmNvbSIsInJvbGUiOiJjdXN0b21lciIsImlhdCI6MTc2OTY3OTcxNywiZXhwIjoxNzcwMjg0NTE3fQ.BbM_-5iDpP904mSI3mrmaqQ-zvMfsXCCluYN7aKiEjw"
+TOKEN="${TOKEN:-}"
+
+if [ -z "$TOKEN" ]; then
+  echo "❌ TOKEN JWT requis. Exportez TOKEN avant d'exécuter ce script."
+  exit 1
+fi
 
 echo "🛒 Création d'une commande de test"
 echo "==================================="

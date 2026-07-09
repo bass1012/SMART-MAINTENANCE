@@ -29,7 +29,10 @@ echo -e "\n${YELLOW}[2/8] Installation des dépendances...${NC}"
 sudo apt install -y curl git nginx certbot python3-certbot-nginx ufw
 
 echo -e "\n${YELLOW}[3/8] Installation de Node.js 20 LTS...${NC}"
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+TMP_SETUP_SCRIPT=$(mktemp)
+curl -fsSL https://deb.nodesource.com/setup_20.x -o "$TMP_SETUP_SCRIPT"
+sudo bash "$TMP_SETUP_SCRIPT"
+rm -f "$TMP_SETUP_SCRIPT"
 sudo apt install -y nodejs
 echo "   Node.js: $(node --version)"
 echo "   npm: $(npm --version)"

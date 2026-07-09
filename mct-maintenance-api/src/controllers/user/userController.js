@@ -143,6 +143,8 @@ exports.deleteUser = async (req, res, next) => {
         return res.status(403).json({ 
           success: false, 
           error: 'Seul un administrateur peut supprimer un compte admin ou manager' 
+        });
+      }
       
       // Vérifier que l'admin actuel a créé cet utilisateur
       if (user.created_by !== currentUser.id) {

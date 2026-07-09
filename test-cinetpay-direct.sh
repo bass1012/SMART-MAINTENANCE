@@ -3,9 +3,14 @@
 # Test direct CinetPay avec montant fixe
 
 API_URL="http://localhost:3000"
-TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NjYsImVtYWlsIjoiYmFzc2lyb3UyMDEwQGdtYWlsLmNvbSIsInJvbGUiOiJjdXN0b21lciIsImlhdCI6MTc2OTY3OTI1MywiZXhwIjoxNzcwMjg0MDUzfQ.jjlAWTUkqITaLaCJ3n1ZwfMvhFI962qWHHtkEeBXtJc"
+TOKEN="${TOKEN:-}"
 
 echo "🧪 Test Paiement CinetPay Direct"
+
+if [ -z "$TOKEN" ]; then
+  echo "❌ TOKEN JWT requis. Exportez TOKEN avant d'exécuter ce script."
+  exit 1
+fi
 echo "================================"
 echo ""
 

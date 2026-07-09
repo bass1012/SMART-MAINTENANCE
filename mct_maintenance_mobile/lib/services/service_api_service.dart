@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
-import '../models/installation_service.dart';
-import '../models/repair_service.dart';
-import '../config/environment.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:mct_maintenance_mobile/models/installation_service.dart';
+import 'package:mct_maintenance_mobile/models/repair_service.dart';
+import 'package:mct_maintenance_mobile/config/environment.dart';
+import 'package:flutter/foundation.dart';
 
 class ServiceApiService {
   static String? _verifiedBaseUrl;
@@ -30,26 +30,26 @@ class ServiceApiService {
       candidateUrls.add('http://localhost:3000');
     }
 
-    print('🔍 Testing API connectivity...');
+    if (kDebugMode) debugPrint('🔍 Testing API connectivity...');
     
     for (final baseUrl in candidateUrls) {
       try {
-        print('   Trying: $baseUrl/health');
+        if (kDebugMode) debugPrint('   Trying: $baseUrl/health');
         final response = await http
             .get(Uri.parse('$baseUrl/health'))
             .timeout(Duration(seconds: 3));
         
         if (response.statusCode == 200) {
-          print('✅ Connected to: $baseUrl');
+          if (kDebugMode) debugPrint('✅ Connected to: $baseUrl');
           _verifiedBaseUrl = baseUrl;
           return baseUrl;
         }
       } catch (e) {
-        print('   ❌ Failed: $baseUrl ($e)');
+        if (kDebugMode) debugPrint('   ❌ Failed: $baseUrl ($e)');
       }
     }
 
-    print('⚠️  No working API URL found, using default: ${AppConfig.baseUrl}');
+    if (kDebugMode) debugPrint('⚠️  No working API URL found, using default: ${AppConfig.baseUrl}');
     return AppConfig.baseUrl;
   }
   // Get active installation services
@@ -57,17 +57,17 @@ class ServiceApiService {
     try {
       final baseUrl = await _getWorkingBaseUrl();
       final url = '$baseUrl/api/installation-services/active';
-      print('🔵 Calling Installation Services API: $url');
+      if (kDebugMode) debugPrint('🔵 Calling Installation Services API: $url');
       
       final response = await http.get(
         Uri.parse(url),
       );
 
-      print('🔵 Installation Services Response Status: ${response.statusCode}');
+      if (kDebugMode) debugPrint('🔵 Installation Services Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
-        print('✅ Installation Services Count: ${jsonList.length}');
+        if (kDebugMode) debugPrint('✅ Installation Services Count: ${jsonList.length}');
         return jsonList
             .map((json) => InstallationService.fromJson(json))
             .toList();
@@ -76,7 +76,7 @@ class ServiceApiService {
             'Erreur lors du chargement des services d\'installation');
       }
     } catch (e) {
-      print('❌ Erreur getActiveInstallationServices: $e');
+      if (kDebugMode) debugPrint('❌ Erreur getActiveInstallationServices: $e');
       throw Exception('Erreur de connexion: $e');
     }
   }
@@ -86,23 +86,23 @@ class ServiceApiService {
     try {
       final baseUrl = await _getWorkingBaseUrl();
       final url = '$baseUrl/api/repair-services/active';
-      print('🟠 Calling Repair Services API: $url');
+      if (kDebugMode) debugPrint('🟠 Calling Repair Services API: $url');
       
       final response = await http.get(
         Uri.parse(url),
       );
 
-      print('🟠 Repair Services Response Status: ${response.statusCode}');
+      if (kDebugMode) debugPrint('🟠 Repair Services Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
-        print('✅ Repair Services Count: ${jsonList.length}');
+        if (kDebugMode) debugPrint('✅ Repair Services Count: ${jsonList.length}');
         return jsonList.map((json) => RepairService.fromJson(json)).toList();
       } else {
         throw Exception('Erreur lors du chargement des services de réparation');
       }
     } catch (e) {
-      print('❌ Erreur getActiveRepairServices: $e');
+      if (kDebugMode) debugPrint('❌ Erreur getActiveRepairServices: $e');
       throw Exception('Erreur de connexion: $e');
     }
   }
@@ -121,7 +121,7 @@ class ServiceApiService {
         throw Exception('Service non trouvé');
       }
     } catch (e) {
-      print('❌ Erreur getInstallationServiceById: $e');
+      if (kDebugMode) debugPrint('❌ Erreur getInstallationServiceById: $e');
       throw Exception('Erreur de connexion: $e');
     }
   }
@@ -140,7 +140,7 @@ class ServiceApiService {
         throw Exception('Service non trouvé');
       }
     } catch (e) {
-      print('❌ Erreur getRepairServiceById: $e');
+      if (kDebugMode) debugPrint('❌ Erreur getRepairServiceById: $e');
       throw Exception('Erreur de connexion: $e');
     }
   }

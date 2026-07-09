@@ -1,4 +1,4 @@
-import '../config/environment.dart';
+import 'package:mct_maintenance_mobile/config/environment.dart';
 
 class ProductModel {
   final int id;

@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/api_service.dart';
-import '../services/fcm_service.dart';
-import 'auth/email_verification_screen.dart';
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:mct_maintenance_mobile/services/fcm_service.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/email_verification_screen.dart';
+import 'package:provider/provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -14,7 +16,6 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  final ApiService _apiService = ApiService();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
@@ -65,17 +66,18 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     try {
+      final authRepository = context.read<AuthRepository>();
       // Vérifier si l'utilisateur est déjà connecté
-      final isLoggedIn = await _apiService.isLoggedIn();
+      final isLoggedIn = await authRepository.isLoggedIn();
 
       if (isLoggedIn) {
         // Initialiser FCM (notifications push) et rafraîchir le token
         try {
           await FCMService().initialize();
-          print('✅ FCM initialisé avec succès');
+          if (kDebugMode) debugPrint('✅ FCM initialisé avec succès');
 
           // Charger l'ID utilisateur courant pour filtrer les notifications
-          final storedUser = await _apiService.loadUserData();
+          final storedUser = await authRepository.getUserData();
           if (storedUser != null) {
             final userId = storedUser['id'];
             if (userId != null) {
@@ -87,36 +89,49 @@ class _SplashScreenState extends State<SplashScreen>
           // Toujours rafraîchir le token au démarrage pour s'assurer qu'il est à jour
           final fcmSuccess = await FCMService().refreshToken();
           if (fcmSuccess) {
-            print('✅ Token FCM rafraîchi et envoyé au backend');
+            if (kDebugMode)
+              debugPrint('✅ Token FCM rafraîchi et envoyé au backend');
           } else {
-            print('⚠️  Échec de l\'envoi du token FCM au backend');
+            if (kDebugMode)
+              debugPrint('⚠️  Échec de l\'envoi du token FCM au backend');
           }
         } catch (e) {
-          print('⚠️  Erreur initialisation FCM: $e');
+          if (kDebugMode) debugPrint('⚠️  Erreur initialisation FCM: $e');
           // Continuer même si FCM échoue
         }
 
         // Charger les données utilisateur locales
-        Map<String, dynamic>? localUserData = await _apiService.loadUserData();
+        Map<String, dynamic>? localUserData =
+            await authRepository.getUserData();
 
         if (localUserData != null && mounted) {
           // Toujours vérifier le statut côté serveur pour avoir les données à jour
-          print('🔄 Vérification du statut utilisateur côté serveur...');
+          if (kDebugMode)
+            debugPrint('🔄 Vérification du statut utilisateur côté serveur...');
           Map<String, dynamic> userData = localUserData;
           try {
-            final serverProfile = await _apiService.getProfile();
+            final serverProfile = await authRepository.getProfile();
             if (serverProfile['success'] == true &&
                 serverProfile['data'] != null &&
                 serverProfile['data']['user'] != null) {
               final serverUser =
                   serverProfile['data']['user'] as Map<String, dynamic>;
-              print('✅ Données serveur récupérées - mise à jour locale');
-              await _apiService.saveUserData(serverUser);
+              if (kDebugMode)
+                debugPrint('✅ Données serveur récupérées - mise à jour locale');
+              await authRepository.saveUserData(serverUser);
               userData = serverUser; // Utiliser les données serveur
             }
-          } catch (e) {
-            print('⚠️ Impossible de récupérer les données serveur: $e');
-            // Continuer avec les données locales
+          } on Exception catch (e) {
+            if (e.toString().contains('UNAUTHORIZED')) {
+              if (kDebugMode)
+                debugPrint('🔒 Token invalide — déconnexion forcée');
+              await authRepository.logout();
+              if (mounted) await _navigateToLoginOrOnboarding();
+              return;
+            }
+            if (kDebugMode)
+              debugPrint('⚠️ Impossible de récupérer les données serveur: $e');
+            // Continuer avec les données locales en cas d\'erreur réseau
           }
 
           // Vérifier si le compte est vérifié (email OU phone)
@@ -173,7 +188,7 @@ class _SplashScreenState extends State<SplashScreen>
         }
       }
     } catch (e) {
-      print('❌ Erreur vérification auth: $e');
+      if (kDebugMode) debugPrint('❌ Erreur vérification auth: $e');
       // En cas d'erreur, aller au login ou onboarding
       if (mounted) {
         await _navigateToLoginOrOnboarding();
@@ -213,7 +228,7 @@ class _SplashScreenState extends State<SplashScreen>
             image: AssetImage('assets/images/image_smart_maintenance.jpeg'),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(
-              Colors.black.withOpacity(0.3),
+              Colors.black.withValues(alpha: 0.3),
               BlendMode.darken,
             ),
           ),
@@ -224,9 +239,9 @@ class _SplashScreenState extends State<SplashScreen>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF0a543d).withOpacity(0.7),
-                const Color(0xFF0d6b4d).withOpacity(0.6),
-                const Color(0xFF0f7d59).withOpacity(0.5),
+                const Color(0xFF0a543d).withValues(alpha: 0.7),
+                const Color(0xFF0d6b4d).withValues(alpha: 0.6),
+                const Color(0xFF0f7d59).withValues(alpha: 0.5),
               ],
               stops: const [0.0, 0.5, 1.0],
             ),
@@ -249,11 +264,11 @@ class _SplashScreenState extends State<SplashScreen>
                           borderRadius: BorderRadius.circular(20),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.25),
+                              color: Colors.white.withValues(alpha: 0.25),
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.white.withOpacity(0.15),
+                                  color: Colors.white.withValues(alpha: 0.15),
                                   blurRadius: 30,
                                   spreadRadius: 5,
                                 ),
@@ -287,7 +302,7 @@ class _SplashScreenState extends State<SplashScreen>
                                 letterSpacing: 1.5,
                                 shadows: [
                                   Shadow(
-                                    color: Colors.black.withOpacity(0.4),
+                                    color: Colors.black.withValues(alpha: 0.4),
                                     offset: const Offset(0, 6),
                                     blurRadius: 15,
                                   ),
@@ -300,7 +315,7 @@ class _SplashScreenState extends State<SplashScreen>
                               'Votre solution de maintenance',
                               style: GoogleFonts.poppins(
                                 fontSize: 15,
-                                color: Colors.white.withOpacity(0.9),
+                                color: Colors.white.withValues(alpha: 0.9),
                                 fontWeight: FontWeight.w400,
                                 letterSpacing: 0.5,
                               ),
@@ -339,17 +354,20 @@ class _SplashScreenState extends State<SplashScreen>
                                     width: 14,
                                     height: 14,
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(opacity),
+                                      color: Colors.white
+                                          .withValues(alpha: opacity),
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.white.withOpacity(0.3),
+                                          color: Colors.white
+                                              .withValues(alpha: 0.3),
                                           blurRadius: 8,
                                           spreadRadius: 2,
                                         ),
                                       ],
                                     ),
-                                    transform: Matrix4.identity()..scale(scale),
+                                    transform: Matrix4.identity()
+                                      ..scale(scale, scale, 1.0),
                                   );
                                 },
                               );
@@ -360,7 +378,7 @@ class _SplashScreenState extends State<SplashScreen>
                             'Chargement...',
                             style: GoogleFonts.poppins(
                               fontSize: 14,
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white.withValues(alpha: 0.8),
                               fontWeight: FontWeight.w500,
                               letterSpacing: 0.5,
                             ),
@@ -380,7 +398,7 @@ class _SplashScreenState extends State<SplashScreen>
                             'Smart Maintenance by MCT © 2026',
                             style: GoogleFonts.poppins(
                               fontSize: 13,
-                              color: Colors.white.withOpacity(0.7),
+                              color: Colors.white.withValues(alpha: 0.7),
                               fontWeight: FontWeight.w500,
                               letterSpacing: 0.5,
                             ),
@@ -390,7 +408,7 @@ class _SplashScreenState extends State<SplashScreen>
                             'Version 1.0.0',
                             style: GoogleFonts.poppins(
                               fontSize: 11,
-                              color: Colors.white.withOpacity(0.5),
+                              color: Colors.white.withValues(alpha: 0.5),
                               fontWeight: FontWeight.w400,
                             ),
                           ),

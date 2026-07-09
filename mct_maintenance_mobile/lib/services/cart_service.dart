@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import '../models/cart_item_model.dart';
-import '../models/product_model.dart';
-import '../config/environment.dart';
+import 'package:mct_maintenance_mobile/models/cart_item_model.dart';
+import 'package:mct_maintenance_mobile/models/product_model.dart';
+import 'package:mct_maintenance_mobile/config/environment.dart';
 
 class CartService extends ChangeNotifier {
   final List<CartItem> _items = [];

@@ -1,14 +1,15 @@
 import 'dart:io' show SocketException;
 import 'dart:async' show TimeoutException;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
-import '../../services/api_service.dart';
-import '../../services/fcm_service.dart';
-import '../../utils/snackbar_helper.dart';
-import '../../utils/test_keys.dart';
-import '../../screens/auth/email_verification_screen.dart';
-import '../../widgets/common/loading_indicator.dart';
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:mct_maintenance_mobile/services/fcm_service.dart';
+import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
+import 'package:mct_maintenance_mobile/utils/test_keys.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/email_verification_screen.dart';
+import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
@@ -34,8 +35,8 @@ class _LoginFormState extends State<LoginForm> {
     try {
       setState(() => _isLoading = true);
 
-      final api = ApiService();
-
+      final authRepository = context.read<AuthRepository>();
+      
       // Afficher un indicateur de chargement
       if (mounted) {
         SnackBarHelper.showLoading(context, 'Connexion en cours...',
@@ -43,7 +44,7 @@ class _LoginFormState extends State<LoginForm> {
       }
 
       // Appel à l'API de connexion
-      final response = await api.login(
+      final response = await authRepository.login(
         _emailController.text,
         _passwordController.text,
       );
@@ -51,6 +52,11 @@ class _LoginFormState extends State<LoginForm> {
       if (mounted) {
         // Cacher le snackbar de chargement
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        if (response['success'] == false) {
+          _showError(response['message'] ?? 'Erreur de connexion');
+          return;
+        }
 
         // Vérification SMS uniquement pour comptes pending (email désactivé)
         if (response['data'] != null && response['data']['user'] != null) {
@@ -264,12 +270,12 @@ class _LoginFormState extends State<LoginForm> {
                 fontSize: 14,
               ),
               labelStyle: GoogleFonts.poppins(
-                color: const Color(0xFF0a543d).withOpacity(0.7),
+                color: const Color(0xFF0a543d).withValues(alpha: 0.7),
               ),
               prefixIcon: Container(
                 margin: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0a543d).withOpacity(0.1),
+                  color: const Color(0xFF0a543d).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -328,12 +334,12 @@ class _LoginFormState extends State<LoginForm> {
                 fontSize: 14,
               ),
               labelStyle: GoogleFonts.poppins(
-                color: const Color(0xFF0a543d).withOpacity(0.7),
+                color: const Color(0xFF0a543d).withValues(alpha: 0.7),
               ),
               prefixIcon: Container(
                 margin: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0a543d).withOpacity(0.1),
+                  color: const Color(0xFF0a543d).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -345,7 +351,7 @@ class _LoginFormState extends State<LoginForm> {
               suffixIcon: IconButton(
                 icon: Icon(
                   _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                  color: const Color(0xFF0a543d).withOpacity(0.7),
+                  color: const Color(0xFF0a543d).withValues(alpha: 0.7),
                 ),
                 onPressed: () {
                   setState(() {
@@ -415,7 +421,7 @@ class _LoginFormState extends State<LoginForm> {
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0a543d).withOpacity(0.1),
+                        color: const Color(0xFF0a543d).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: ButtonLoadingIndicator(
@@ -451,7 +457,7 @@ class _LoginFormState extends State<LoginForm> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF0a543d).withOpacity(0.4),
+                            color: const Color(0xFF0a543d).withValues(alpha: 0.4),
                             blurRadius: 12,
                             offset: const Offset(0, 6),
                           ),

@@ -85,7 +85,11 @@ build_ios() {
     flutter pub get
     
     cd ios
-    pod install --repo-update
+    if [ -f "/opt/homebrew/bin/pod" ]; then
+        /opt/homebrew/bin/pod install --repo-update
+    else
+        pod install --repo-update
+    fi
     cd ..
     
     flutter build ios --release

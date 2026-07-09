@@ -3,22 +3,46 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../screens/splash_screen.dart';
-import '../screens/onboarding/onboarding_screen.dart';
-import '../screens/auth/login_screen.dart';
-import '../screens/auth/register_screen.dart';
-import '../screens/auth/forgot_password_screen.dart';
-import '../screens/auth/reset_password_code_screen.dart';
-import '../screens/customer/customer_main_screen.dart';
-import '../screens/customer/subscriptions_screen.dart';
-import '../screens/technician/technician_main_screen.dart';
-import '../screens/technician/technician_profile_screen.dart';
-import '../screens/manager/manager_main_screen.dart';
-import '../screens/common/notification_settings_screen.dart';
-import '../services/cart_service.dart';
-import '../providers/settings_provider.dart';
-import '../providers/notification_preferences_provider.dart';
-import '../providers/sync_provider.dart';
+import 'package:mct_maintenance_mobile/screens/splash_screen.dart';
+import 'package:mct_maintenance_mobile/features/onboarding/presentation/screens/onboarding_screen.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/login_screen.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/register_screen.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/forgot_password_screen.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/reset_password_code_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/customer_main_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/subscriptions_screen.dart';
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/technician_main_screen.dart';
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/technician_profile_screen.dart';
+import 'package:mct_maintenance_mobile/features/manager/presentation/screens/manager_main_screen.dart';
+import 'package:mct_maintenance_mobile/features/common/presentation/screens/notification_settings_screen.dart';
+import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:mct_maintenance_mobile/features/auth/data/repositories/auth_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
+import 'package:mct_maintenance_mobile/features/interventions/data/repositories/intervention_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/common/domain/repositories/notification_repository.dart';
+import 'package:mct_maintenance_mobile/features/common/data/repositories/notification_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/subscription_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/subscription_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/service_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/service_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/complaint_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/complaint_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/shop_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/shop_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/payment_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/payment_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/equipment_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/equipment_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/contract_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/contract_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/notification_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/notification_repository_impl.dart';
+import 'package:mct_maintenance_mobile/services/cart_service.dart';
+import 'package:mct_maintenance_mobile/providers/settings_provider.dart';
+import 'package:mct_maintenance_mobile/providers/notification_preferences_provider.dart';
+import 'package:mct_maintenance_mobile/providers/sync_provider.dart';
+import 'package:mct_maintenance_mobile/services/payment_service.dart';
 
 // Initialiser la locale par défaut
 void initializeDateFormatting() {
@@ -32,6 +56,43 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        Provider<BaseApiService>(create: (_) => BaseApiService()),
+        ProxyProvider<BaseApiService, AuthRepository>(
+          update: (_, apiService, __) => AuthRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, InterventionRepository>(
+          update: (_, apiService, __) => InterventionRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, NotificationRepository>(
+          update: (_, apiService, __) => NotificationRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, SubscriptionRepository>(
+          update: (_, apiService, __) => SubscriptionRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, ServiceRepository>(
+          update: (_, apiService, __) => ServiceRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, ComplaintRepository>(
+          update: (_, apiService, __) => ComplaintRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, ShopRepository>(
+          update: (_, apiService, __) => ShopRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, PaymentRepository>(
+          update: (_, apiService, __) => PaymentRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, EquipmentRepository>(
+          update: (_, apiService, __) => EquipmentRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, ContractRepository>(
+          update: (_, apiService, __) => ContractRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, CustomerNotificationRepository>(
+          update: (_, apiService, __) => CustomerNotificationRepositoryImpl(apiService),
+        ),
+        ProxyProvider<BaseApiService, PaymentService>(
+          update: (_, apiService, __) => PaymentService(apiService),
+        ),
         ChangeNotifierProvider(
           create: (_) {
             final cartService = CartService();
@@ -115,12 +176,10 @@ class App extends StatelessWidget {
                 primary: const Color(0xFF2d9370),
                 secondary: const Color(0xFF4db88c),
                 surface: const Color(0xFF1e1e1e),
-                background: const Color(0xFF121212),
                 error: const Color(0xFFcf6679),
                 onPrimary: Colors.white,
                 onSecondary: Colors.white,
                 onSurface: const Color(0xFFe1e1e1),
-                onBackground: const Color(0xFFe1e1e1),
                 onError: Colors.black,
               ),
               cardTheme: CardThemeData(

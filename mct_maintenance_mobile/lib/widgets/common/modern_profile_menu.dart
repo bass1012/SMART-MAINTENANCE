@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
-import 'package:mct_maintenance_mobile/screens/auth/login_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/profile_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/history_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/invoices_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/support_screen.dart';
-import 'package:mct_maintenance_mobile/screens/customer/settings_screen.dart';
-import 'package:mct_maintenance_mobile/services/api_service.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/login_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/profile_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/history_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/invoices_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/support_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/settings_screen.dart';
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:mct_maintenance_mobile/services/fcm_service.dart';
 
 class ModernProfileMenu {
   final BuildContext context;
   final UserModel? user;
-  final ApiService apiService;
+  final AuthRepository authRepository;
 
   ModernProfileMenu({
     required this.context,
     required this.user,
-    required this.apiService,
+    required this.authRepository,
   });
 
   // Bouton de profil moderne
@@ -92,7 +92,7 @@ class ModernProfileMenu {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0a543d).withOpacity(0.3),
+                          color: const Color(0xFF0a543d).withValues(alpha: 0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -214,10 +214,17 @@ class ModernProfileMenu {
               title: 'Déconnexion',
               color: Colors.red,
               onTap: () async {
-                Navigator.pop(context);
+                // IMPORTANT : Lire le AuthRepository AVANT de pop le contexte
+                final authRepository = context.read<AuthRepository>();
+                // Capturer le BuildContext avant toute opération async
+                final navigator = Navigator.of(context);
+                
+                // Fermer le menu (bottom sheet)
+                navigator.pop();
+                
                 final shouldLogout = await showDialog<bool>(
                   context: context,
-                  builder: (context) => AlertDialog(
+                  builder: (dialogContext) => AlertDialog(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -231,11 +238,11 @@ class ModernProfileMenu {
                     ),
                     actions: [
                       TextButton(
-                        onPressed: () => Navigator.pop(context, false),
+                        onPressed: () => Navigator.pop(dialogContext, false),
                         child: Text('Annuler', style: GoogleFonts.poppins()),
                       ),
                       ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
+                        onPressed: () => Navigator.pop(dialogContext, true),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
                           shape: RoundedRectangleBorder(
@@ -249,20 +256,20 @@ class ModernProfileMenu {
                   ),
                 );
 
-                if (shouldLogout == true && context.mounted) {
+                if (shouldLogout == true) {
                   try {
                     await FCMService().clearOnLogout();
-                    await apiService.logout();
+                    await authRepository.logout();
                   } catch (e) {
                     // Ignorer les erreurs
                   }
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const LoginScreen()),
-                      (route) => false,
-                    );
+                  
+                  // Utiliser le navigator capturé au lieu du context
+                  navigator.pushAndRemoveUntil(
+                    MaterialPageRoute(
+                        builder: (context) => const LoginScreen()),
+                    (route) => false,
+                  );
                   }
                 }
               },
@@ -290,7 +297,7 @@ class ModernProfileMenu {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: (color ?? const Color(0xFF0a543d)).withOpacity(0.1),
+                color: (color ?? const Color(0xFF0a543d)).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(

@@ -1,11 +1,12 @@
+
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:google_fonts/google_fonts.dart';
-import '../../services/api_service.dart';
-import '../../utils/snackbar_helper.dart';
-import '../../screens/auth/email_verification_screen.dart';
-import '../../screens/customer/cgu_cgv_screen.dart';
-import '../../widgets/common/loading_indicator.dart';
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
+import 'package:mct_maintenance_mobile/features/auth/presentation/screens/email_verification_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/cgu_cgv_screen.dart';
+import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
+import 'package:provider/provider.dart';
 
 class RegisterForm extends StatefulWidget {
   const RegisterForm({super.key});
@@ -28,7 +29,7 @@ class _RegisterFormState extends State<RegisterForm> {
   // Champs supplémentaires (CustomerForm)
   String? _companyType;
   String? _gender;
-  String _country = 'Côte d\'Ivoire';
+  final String _country = 'Côte d\'Ivoire';
   String? _city;
   String? _commune;
 
@@ -130,9 +131,9 @@ class _RegisterFormState extends State<RegisterForm> {
             duration: const Duration(seconds: 10));
       }
 
-      final api = ApiService();
+      final authRepository = context.read<AuthRepository>();
       // Appel à l'API d'inscription avec tous les champs du CustomerForm
-      final response = await api.register({
+      final response = await authRepository.register({
         'first_name': _firstNameController.text.trim(),
         'last_name': _lastNameController.text.trim(),
         'email': _emailController.text.trim().toLowerCase(),
@@ -154,23 +155,16 @@ class _RegisterFormState extends State<RegisterForm> {
         // Cacher le snackbar de chargement
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
+        if (response['success'] == false) {
+          _showError(response['message'] ?? 'Une erreur est survenue lors de l\'inscription');
+          return;
+        }
+
         // Vérification requise
         final requiresVerification = response['requiresVerification'] == true ||
             response['verificationMethod'] != null;
 
         if (requiresVerification) {
-          // Sauvegarder le token directement
-          if (response['accessToken'] != null) {
-            await api.setAuthToken(response['accessToken']);
-            debugPrint('✅ Token sauvegardé pour vérification');
-          }
-
-          // Sauvegarder les données utilisateur
-          if (response['user'] != null) {
-            await api.saveUserData(response['user']);
-            debugPrint('✅ Données utilisateur sauvegardées');
-          }
-
           // Toujours afficher le message SMS (même si fallback email a été utilisé)
           // Le client pourra renvoyer le code par email s'il ne reçoit pas le SMS
           final userPhone = response['user']?['phone']?.toString() ??
@@ -182,7 +176,6 @@ class _RegisterFormState extends State<RegisterForm> {
           );
 
           // Rediriger vers l'écran de vérification avec le numéro de téléphone
-          // L'écran affichera "Vérifiez votre numéro" et proposera SMS/Email pour le renvoi
           await Future.delayed(const Duration(milliseconds: 500));
           if (mounted) {
             Navigator.pushReplacement(
@@ -197,20 +190,6 @@ class _RegisterFormState extends State<RegisterForm> {
             );
           }
           return;
-        }
-
-        // Pas de vérification requise - sauvegarder directement
-        final accessToken =
-            response['accessToken'] ?? response['data']?['accessToken'];
-        if (accessToken != null) {
-          await api.setAuthToken(accessToken);
-          debugPrint('✅ Token sauvegardé après inscription');
-        }
-
-        final userData = response['user'] ?? response['data']?['user'];
-        if (userData != null) {
-          await api.saveUserData(userData);
-          debugPrint('✅ Données utilisateur sauvegardées');
         }
 
         // Afficher un message de succès
@@ -264,18 +243,18 @@ class _RegisterFormState extends State<RegisterForm> {
     required void Function(String?) onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: GoogleFonts.poppins(
-          color: const Color(0xFF0a543d).withOpacity(0.7),
+          color: const Color(0xFF0a543d).withValues(alpha: 0.7),
           fontSize: 13,
         ),
         prefixIcon: Container(
           margin: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF0a543d).withOpacity(0.1),
+            color: const Color(0xFF0a543d).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: const Color(0xFF0a543d), size: 18),
@@ -323,7 +302,7 @@ class _RegisterFormState extends State<RegisterForm> {
         labelText: label,
         hintText: hintText,
         labelStyle: GoogleFonts.poppins(
-          color: const Color(0xFF0a543d).withOpacity(0.7),
+          color: const Color(0xFF0a543d).withValues(alpha: 0.7),
           fontSize: 13,
         ),
         hintStyle: GoogleFonts.poppins(
@@ -333,7 +312,7 @@ class _RegisterFormState extends State<RegisterForm> {
         prefixIcon: Container(
           margin: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF0a543d).withOpacity(0.1),
+            color: const Color(0xFF0a543d).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: const Color(0xFF0a543d), size: 18),
@@ -776,7 +755,7 @@ class _RegisterFormState extends State<RegisterForm> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0a543d).withOpacity(0.4),
+                    color: const Color(0xFF0a543d).withValues(alpha: 0.4),
                     blurRadius: 12,
                     offset: const Offset(0, 6),
                   ),
@@ -908,7 +887,7 @@ class _RegisterFormState extends State<RegisterForm> {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withOpacity(0.1),
+                      color: const Color(0xFF0a543d).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: ButtonLoadingIndicator(
@@ -939,7 +918,7 @@ class _RegisterFormState extends State<RegisterForm> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0a543d).withOpacity(0.4),
+                          color: const Color(0xFF0a543d).withValues(alpha: 0.4),
                           blurRadius: 12,
                           offset: const Offset(0, 6),
                         ),
@@ -970,13 +949,13 @@ class _RegisterFormState extends State<RegisterForm> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _acceptedCGU
-            ? const Color(0xFF0a543d).withOpacity(0.05)
-            : Colors.orange.withOpacity(0.05),
+            ? const Color(0xFF0a543d).withValues(alpha: 0.05)
+            : Colors.orange.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: _acceptedCGU
-              ? const Color(0xFF0a543d).withOpacity(0.2)
-              : Colors.orange.withOpacity(0.3),
+              ? const Color(0xFF0a543d).withValues(alpha: 0.2)
+              : Colors.orange.withValues(alpha: 0.3),
         ),
       ),
       child: Row(

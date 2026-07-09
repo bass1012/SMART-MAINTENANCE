@@ -1,16 +1,17 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../models/split.dart' as models;
-import '../services/api_service.dart';
+import 'package:mct_maintenance_mobile/models/split.dart' as models;
+import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 
 /// Service pour gérer les Splits (équipements individuels)
 class SplitService {
-  final ApiService _apiService = ApiService();
+  final BaseApiService _apiService = BaseApiService();
 
   /// Récupérer mes splits (client connecté)
   Future<List<models.Split>> getMySplits() async {
     try {
-      final data = await _apiService.get('/splits/my');
+      final response = await _apiService.get('/api/splits/my');
+      final data = jsonDecode(response.body);
       if (data['success'] == true && data['data'] != null) {
         return (data['data'] as List)
             .map((item) => models.Split.fromJson(item))
@@ -26,7 +27,8 @@ class SplitService {
   /// Rechercher un split par code QR
   Future<models.SplitScanResult?> findByQRCode(String code) async {
     try {
-      final data = await _apiService.get('/splits/code/$code');
+      final response = await _apiService.get('/api/splits/code/$code');
+      final data = jsonDecode(response.body);
       if (data['success'] == true && data['data'] != null) {
         return models.SplitScanResult.fromJson(data['data']);
       }
@@ -50,7 +52,8 @@ class SplitService {
         'scan_method': scanMethod,
         if (exceptionReason != null) 'exception_reason': exceptionReason,
       };
-      final data = await _apiService.post('/splits/scan/$interventionId', body);
+      final response = await _apiService.post('/api/splits/scan/$interventionId', body: body);
+      final data = jsonDecode(response.body);
       return data['data'];
     } catch (e) {
       if (kDebugMode) debugPrint('❌ scanSplitForIntervention: $e');
@@ -61,7 +64,8 @@ class SplitService {
   /// Récupérer les splits d'un client (pour technicien/admin)
   Future<List<models.Split>> getCustomerSplits(int customerId) async {
     try {
-      final data = await _apiService.get('/splits/customer/$customerId');
+      final response = await _apiService.get('/api/splits/customer/$customerId');
+      final data = jsonDecode(response.body);
       if (data['success'] == true && data['data'] != null) {
         return (data['data'] as List)
             .map((item) => models.Split.fromJson(item))
@@ -78,8 +82,9 @@ class SplitService {
   Future<List<models.Split>> getSplitsForIntervention(
       int interventionId) async {
     try {
-      final data =
-          await _apiService.get('/splits/intervention/$interventionId');
+      final response =
+          await _apiService.get('/api/splits/intervention/$interventionId');
+      final data = jsonDecode(response.body);
       if (data['success'] == true && data['data'] != null) {
         return (data['data'] as List)
             .map((item) => models.Split.fromJson(item))
@@ -95,7 +100,8 @@ class SplitService {
   /// Récupérer tous les splits
   Future<List<models.Split>> getAllSplits() async {
     try {
-      final data = await _apiService.get('/splits');
+      final response = await _apiService.get('/api/splits');
+      final data = jsonDecode(response.body);
       if (data['success'] == true && data['data'] != null) {
         final splitsList = data['data']['splits'] ?? data['data'];
         if (splitsList is List) {
@@ -112,7 +118,8 @@ class SplitService {
   /// Récupérer un split par ID
   Future<models.Split?> getSplitById(int id) async {
     try {
-      final data = await _apiService.get('/splits/$id');
+      final response = await _apiService.get('/api/splits/$id');
+      final data = jsonDecode(response.body);
       if (data['success'] == true && data['data'] != null) {
         return models.Split.fromJson(data['data']);
       }

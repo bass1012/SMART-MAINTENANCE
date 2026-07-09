@@ -28,10 +28,16 @@ sleep 1
 echo "🔄 Envoi de PATCH /api/complaints/$COMPLAINT_ID/status..."
 echo ""
 
+TOKEN="${TOKEN:-}"
+if [ -z "$TOKEN" ]; then
+  echo "❌ TOKEN JWT requis. Exportez TOKEN avant d'exécuter ce script."
+  exit 1
+fi
+
 # Faire un curl PATCH pour changer le statut
 RESPONSE=$(curl -s -X PATCH "http://localhost:3000/api/complaints/$COMPLAINT_ID/status" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NiwiZW1haWwiOiJhZG1pbkBtY3QtbWFpbnRlbmFuY2UuY29tIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzYxMzAxNTgyLCJleHAiOjE3NjE5MDYzODJ9.jwicS4qUGudi7GnXnZpBCDIGNPtYgPFhrZpX19e78Gk" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"status":"in_progress","resolution":"Test en cours"}')
 
 echo "📤 Réponse API:"

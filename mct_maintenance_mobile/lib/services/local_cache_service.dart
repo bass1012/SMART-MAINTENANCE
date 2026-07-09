@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'dart:convert';
@@ -84,7 +85,7 @@ class LocalCacheService {
       )
     ''');
 
-    print('✅ Tables SQLite créées pour mode offline');
+    if (kDebugMode) debugPrint('✅ Tables SQLite créées pour mode offline');
   }
 
   /// Migrations futures
@@ -107,7 +108,7 @@ class LocalCacheService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    print('💾 Intervention ${intervention['id']} mise en cache');
+    if (kDebugMode) debugPrint('💾 Intervention ${intervention['id']} mise en cache');
   }
 
   /// Récupérer toutes les interventions en cache
@@ -121,12 +122,12 @@ class LocalCacheService {
           try {
             final dataString = map['data'] as String?;
             if (dataString == null || dataString.isEmpty) {
-              print('⚠️ Intervention avec data null/vide, id: ${map['id']}');
+              if (kDebugMode) debugPrint('⚠️ Intervention avec data null/vide, id: ${map['id']}');
               return null;
             }
             return jsonDecode(dataString) as Map<String, dynamic>;
           } catch (e) {
-            print('❌ Erreur décodage intervention ${map['id']}: $e');
+            if (kDebugMode) debugPrint('❌ Erreur décodage intervention ${map['id']}: $e');
             return null;
           }
         })
@@ -171,7 +172,7 @@ class LocalCacheService {
       whereArgs: [id],
     );
 
-    print('✏️ Intervention $id modifiée en cache');
+    if (kDebugMode) debugPrint('✏️ Intervention $id modifiée en cache');
   }
 
   /// Supprimer intervention du cache
@@ -196,7 +197,7 @@ class LocalCacheService {
       'created_at': DateTime.now().toIso8601String(),
     });
 
-    print('📤 Ajouté à la queue sync: $type (id: $id)');
+    if (kDebugMode) debugPrint('📤 Ajouté à la queue sync: $type (id: $id)');
     return id;
   }
 
@@ -214,7 +215,7 @@ class LocalCacheService {
   Future<void> markSyncItemComplete(int id) async {
     final db = await database;
     await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
-    print('✅ Élément sync $id complété');
+    if (kDebugMode) debugPrint('✅ Élément sync $id complété');
   }
 
   /// Incrémenter compteur tentatives (en cas d'échec)
@@ -238,7 +239,7 @@ class LocalCacheService {
       whereArgs: [id],
     );
 
-    print('⚠️ Échec sync $id (tentative $retryCount)');
+    if (kDebugMode) debugPrint('⚠️ Échec sync $id (tentative $retryCount)');
   }
 
   /// Nombre d'éléments en attente
@@ -253,7 +254,7 @@ class LocalCacheService {
   Future<void> clearSyncQueue() async {
     final db = await database;
     final count = await db.delete('sync_queue');
-    print('🗑️ Queue de synchronisation vidée: $count éléments supprimés');
+    if (kDebugMode) debugPrint('🗑️ Queue de synchronisation vidée: $count éléments supprimés');
   }
 
   /// Nettoyer les éléments de sync bloqués ou anciens (plus de 24h)
@@ -269,7 +270,7 @@ class LocalCacheService {
     );
 
     if (count > 0) {
-      print('🧹 $count élément(s) de sync obsolètes/bloqués nettoyés');
+      if (kDebugMode) debugPrint('🧹 $count élément(s) de sync obsolètes/bloqués nettoyés');
     }
     return count;
   }
@@ -290,7 +291,7 @@ class LocalCacheService {
       'created_at': DateTime.now().toIso8601String(),
     });
 
-    print('📷 Photo mise en cache: $fileName');
+    if (kDebugMode) debugPrint('📷 Photo mise en cache: $fileName');
   }
 
   /// Récupérer photos non uploadées pour une intervention
@@ -313,7 +314,7 @@ class LocalCacheService {
       where: 'id = ?',
       whereArgs: [id],
     );
-    print('✅ Photo $id uploadée');
+    if (kDebugMode) debugPrint('✅ Photo $id uploadée');
   }
 
   // ==================== MÉTADONNÉES ====================
@@ -359,7 +360,7 @@ class LocalCacheService {
       whereArgs: [cutoffDate],
     );
 
-    print('🧹 Cache ancien nettoyé');
+    if (kDebugMode) debugPrint('🧹 Cache ancien nettoyé');
   }
 
   /// Réinitialiser toute la base (pour tests)
@@ -369,7 +370,7 @@ class LocalCacheService {
     await db.delete('sync_queue');
     await db.delete('cached_photos');
     await db.delete('sync_metadata');
-    print('🗑️ Cache complètement vidé');
+    if (kDebugMode) debugPrint('🗑️ Cache complètement vidé');
   }
 
   /// Fermer la base de données
