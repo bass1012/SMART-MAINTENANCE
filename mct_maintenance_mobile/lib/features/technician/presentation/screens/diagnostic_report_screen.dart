@@ -29,6 +29,8 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
   final _solutionController = TextEditingController();
   final _durationController = TextEditingController();
   final _notesController = TextEditingController();
+  final _technicalDataController = TextEditingController();
+  final _afterInterventionReportController = TextEditingController();
 
   // Parts list
   final List<Map<String, dynamic>> _partsList = [];
@@ -43,6 +45,8 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
     _solutionController.dispose();
     _durationController.dispose();
     _notesController.dispose();
+    _technicalDataController.dispose();
+    _afterInterventionReportController.dispose();
     super.dispose();
   }
 
@@ -131,6 +135,8 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
       'estimated_duration': _durationController.text,
       'photos': [],
       'notes': _notesController.text,
+      'technical_data': _technicalDataController.text,
+      'after_intervention_report': _afterInterventionReportController.text,
     };
 
     try {
@@ -478,6 +484,44 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                 border: OutlineInputBorder(),
               ),
               maxLines: 3,
+            ),
+            const SizedBox(height: 30),
+
+            // Technical Data
+            const Text(
+              'Données techniques',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _technicalDataController,
+              decoration: const InputDecoration(
+                hintText: 'Mesures, observations techniques...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 20),
+
+            // After intervention report
+            const Text(
+              'Rapport après interventions',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _afterInterventionReportController,
+              decoration: const InputDecoration(
+                hintText: 'Travaux effectués, recommandations...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 4,
             ),
             const SizedBox(height: 30),
 
