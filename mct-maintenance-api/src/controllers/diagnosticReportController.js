@@ -21,7 +21,9 @@ exports.submitReport = async (req, res) => {
       urgency_level,
       estimated_duration,
       photos, // Array of URLs
-      notes
+      notes,
+      technical_data,
+      after_intervention_report
     } = req.body;
     
     const technician_id = req.user.id;
@@ -71,6 +73,8 @@ exports.submitReport = async (req, res) => {
       estimated_duration,
       photos: JSON.stringify(photos || []),
       notes,
+      technical_data,
+      after_intervention_report,
       status: 'submitted',
       submitted_at: new Date()
     }, { transaction });
