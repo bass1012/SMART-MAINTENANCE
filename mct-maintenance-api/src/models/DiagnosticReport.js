@@ -77,6 +77,26 @@ const DiagnosticReport = sequelize.define('DiagnosticReport', {
     allowNull: true,
     comment: 'Données techniques relevées (mesures, etc)'
   },
+  pression: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Pression mesurée (en bar)'
+  },
+  puissance: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Puissance mesurée (en CV)'
+  },
+  intensite: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Intensité mesurée (en A)'
+  },
+  tension: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Tension mesurée (en V)'
+  },
   after_intervention_report: {
     type: DataTypes.TEXT,
     allowNull: true,

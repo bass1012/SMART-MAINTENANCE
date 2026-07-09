@@ -132,13 +132,43 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
                       ),
                     
                     // Technical Data
-                    if (report['technical_data'] != null &&
-                        report['technical_data'].toString().isNotEmpty)
-                      _buildSection(
+                    if ((report['pression'] != null && report['pression'].toString().isNotEmpty) ||
+                        (report['puissance'] != null && report['puissance'].toString().isNotEmpty) ||
+                        (report['intensite'] != null && report['intensite'].toString().isNotEmpty) ||
+                        (report['tension'] != null && report['tension'].toString().isNotEmpty)) ...[
+                      const Text(
                         'Données techniques',
-                        Icons.data_usage,
-                        report['technical_data'],
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Wrap(
+                          spacing: 16,
+                          runSpacing: 12,
+                          children: [
+                            if (report['pression'] != null && report['pression'].toString().isNotEmpty)
+                              _buildMeasureChip(Icons.compress, 'Pression', '${report['pression']} bar'),
+                            if (report['puissance'] != null && report['puissance'].toString().isNotEmpty)
+                              _buildMeasureChip(Icons.power, 'Puissance', '${report['puissance']} CV'),
+                            if (report['intensite'] != null && report['intensite'].toString().isNotEmpty)
+                              _buildMeasureChip(Icons.electrical_services, 'Intensité', '${report['intensite']} A'),
+                            if (report['tension'] != null && report['tension'].toString().isNotEmpty)
+                              _buildMeasureChip(Icons.bolt, 'Tension', '${report['tension']} V'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
 
                     // After intervention report
                     if (report['after_intervention_report'] != null &&
@@ -154,6 +184,28 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildMeasureChip(IconData icon, String label, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: Colors.orange.shade700),
+        const SizedBox(width: 4),
+        Text(
+          '$label: ',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.orange.shade900,
+          ),
+        ),
+      ],
     );
   }
 

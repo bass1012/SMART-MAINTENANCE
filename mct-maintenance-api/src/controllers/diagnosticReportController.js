@@ -23,6 +23,10 @@ exports.submitReport = async (req, res) => {
       photos, // Array of URLs
       notes,
       technical_data,
+      pression,
+      puissance,
+      intensite,
+      tension,
       after_intervention_report
     } = req.body;
     
@@ -74,6 +78,10 @@ exports.submitReport = async (req, res) => {
       photos: JSON.stringify(photos || []),
       notes,
       technical_data,
+      pression,
+      puissance,
+      intensite,
+      tension,
       after_intervention_report,
       status: 'submitted',
       submitted_at: new Date()
