@@ -1018,6 +1018,7 @@ router.get('/reports', async (req, res, next) => {
           submitted_at: intervention.report_submitted_at,
           // Mesures techniques
           pression: reportData.pression || '',
+          freon: reportData.freon || '',
           puissance: reportData.puissance || reportData.temperature || '',
           intensite: reportData.intensite || '',
           tension: reportData.tension || '',
@@ -1126,6 +1127,7 @@ router.get('/reports/:interventionId', async (req, res, next) => {
         submitted_at: intervention.report_submitted_at,
         // Mesures techniques
         pression: reportData.pression || '',
+        freon: reportData.freon || '',
         puissance: reportData.puissance || reportData.temperature || '',
         intensite: reportData.intensite || '',
         tension: reportData.tension || '',

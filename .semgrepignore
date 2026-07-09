@@ -1,0 +1,42 @@
+# ============================================================
+# .semgrepignore — Exclusions Semgrep pour SMART MAINTENANCE
+# ============================================================
+# Ces fichiers sont des scripts de test/développement local
+# qui utilisent http://127.0.0.1 intentionnellement.
+# Ils ne sont jamais exécutés en production.
+
+# ---- Scripts de test locaux ----
+mct-maintenance-api/test-*.js
+mct-maintenance-api/test_*.js
+mct-maintenance-api/test-socketio.html
+mct-maintenance-api/check-fineopay-transactions.js
+mct-maintenance-api/clean-test-data.js
+mct-maintenance-api/test_log.txt
+mct-maintenance-api/tests/
+
+# ---- Scripts de test racine ----
+test-*.js
+test_*.js
+check-fineopay-transactions.js
+# ---- Fichiers de configuration sensibles (non trackés par git) ----
+deploy/.env.sandbox
+deploy/.env.production
+deploy/.env.*
+mct_maintenance_mobile/lib/firebase_options.dart
+
+
+mct-maintenance-api/scripts/migrate-to-postgres.js
+mct-maintenance-api/migrate-intervention-customer-ids.js
+mct-maintenance-api/migrate.js
+mct-maintenance-api/scripts/migrate.js
+mct-maintenance-api/Scripts-api/
+
+# ---- Faux positifs unsafe-formatstring (console.log en JavaScript — non exploitables) ----
+# Ces fichiers contiennent uniquement des console.log() avec template literals
+# JavaScript n'a pas de format string vulnerabilities exploitables dans console.log
+mct-maintenance-api/src/jobs/
+mct-maintenance-api/src/models/SystemConfig.js
+
+# ---- Dépendances ----
+node_modules/
+**/node_modules/

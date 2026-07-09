@@ -622,6 +622,7 @@ router.get('/maintenance-reports', async (req, res) => {
         equipments: reportData.equipments || [],
         // Mesures techniques (format legacy)
         pression: reportData.pression || '',
+        freon: reportData.freon || '',
         puissance: reportData.puissance || reportData.temperature || '',
         intensite: reportData.intensite || '',
         tension: reportData.tension || '',
@@ -735,6 +736,7 @@ router.get('/maintenance-reports/:reportId', async (req, res) => {
       equipments: reportData.equipments || [],
       // Mesures techniques (format legacy)
       pression: reportData.pression || '',
+      freon: reportData.freon || '',
       puissance: reportData.puissance || reportData.temperature || '',
       intensite: reportData.intensite || '',
       tension: reportData.tension || '',

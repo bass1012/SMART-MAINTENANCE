@@ -2,6 +2,13 @@
 
 ## Terminé dans cette session (7-9 juillet 2026)
 
+### ✅ Ajout de champs de mesure technique au rapport de diagnostic
+- **Modifications Backend** :
+  - Mise à jour du modèle `DiagnosticReport` et de `diagnosticReportController.js` pour inclure et stocker `pression`, `freon`, `puissance`, `intensite`, et `tension`.
+- **Modifications Mobile** :
+  - Mise à jour de l'écran du formulaire `diagnostic_report_screen.dart` avec les 5 champs (avec clavier numérique et icônes correspondantes).
+  - Mise à jour de la vue `view_diagnostic_report_screen.dart` et `maintenance_reports_screen.dart` pour afficher la mesure de Fréon sous forme de chip.
+
 ### ✅ Mise à jour esthétique Rapport de Diagnostic
 - **Modifications Mobile** :
   - Changement de la couleur de l'AppBar du Rapport de Diagnostic (de bleu au vert de l'application) dans l'interface technicien pour une meilleure cohérence visuelle.

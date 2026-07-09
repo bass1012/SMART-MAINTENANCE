@@ -7,6 +7,7 @@ class ReportEquipment {
   final String? type;
   final String? brand;
   final String? pression;
+  final String? freon;
   final String? puissance;
   final String? intensite;
   final String? tension;
@@ -17,6 +18,7 @@ class ReportEquipment {
     this.type,
     this.brand,
     this.pression,
+    this.freon,
     this.puissance,
     this.intensite,
     this.tension,
@@ -29,6 +31,7 @@ class ReportEquipment {
       type: json['type']?.toString(),
       brand: json['brand']?.toString(),
       pression: json['pression']?.toString(),
+      freon: json['freon']?.toString(),
       puissance: json['puissance']?.toString(),
       intensite: json['intensite']?.toString(),
       tension: json['tension']?.toString(),
@@ -42,6 +45,7 @@ class ReportEquipment {
       'type': type,
       'brand': brand,
       'pression': pression,
+      'freon': freon,
       'puissance': puissance,
       'intensite': intensite,
       'tension': tension,
@@ -50,6 +54,7 @@ class ReportEquipment {
 
   bool get hasTechnicalMeasures =>
       (pression != null && pression!.isNotEmpty) ||
+      (freon != null && freon!.isNotEmpty) ||
       (puissance != null && puissance!.isNotEmpty) ||
       (intensite != null && intensite!.isNotEmpty) ||
       (tension != null && tension!.isNotEmpty);
@@ -73,6 +78,7 @@ class MaintenanceReport {
   final List<ReportEquipment>? equipments;
   // Mesures techniques (format legacy)
   final String? pression;
+  final String? freon;
   final String? puissance;
   final String? intensite;
   final String? tension;
@@ -93,6 +99,7 @@ class MaintenanceReport {
     this.updatedAt,
     this.equipments,
     this.pression,
+    this.freon,
     this.puissance,
     this.intensite,
     this.tension,
@@ -141,6 +148,7 @@ class MaintenanceReport {
         equipments: equipmentsList,
         // Mesures techniques legacy
         pression: json['pression']?.toString(),
+        freon: json['freon']?.toString(),
         puissance:
             json['puissance']?.toString() ?? json['temperature']?.toString(),
         intensite: json['intensite']?.toString(),
@@ -170,6 +178,7 @@ class MaintenanceReport {
       'updatedAt': updatedAt?.toIso8601String(),
       'equipments': equipments?.map((e) => e.toJson()).toList(),
       'pression': pression,
+      'freon': freon,
       'puissance': puissance,
       'intensite': intensite,
       'tension': tension,
@@ -182,6 +191,7 @@ class MaintenanceReport {
       return equipments!.any((e) => e.hasTechnicalMeasures);
     }
     return (pression != null && pression!.isNotEmpty) ||
+        (freon != null && freon!.isNotEmpty) ||
         (puissance != null && puissance!.isNotEmpty) ||
         (intensite != null && intensite!.isNotEmpty) ||
         (tension != null && tension!.isNotEmpty);

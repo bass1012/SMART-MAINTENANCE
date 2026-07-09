@@ -1,0 +1,71 @@
+# Plan d'Exécution : Optimisation de l'Application Mobile
+
+Ce document détaille les étapes nécessaires pour refactoriser et stabiliser l'application mobile Smart Maintenance en suivant les recommandations de l'audit technique.
+
+## User Review Required
+
+> [!IMPORTANT]
+> La refactorisation de l'architecture vers une structure "Feature-First" entraînera un déplacement massif de fichiers. Cela peut impacter les branches en cours de développement.
+> Le découpage de l' `ApiService` impactera presque tous les fichiers de l'application.
+
+## Proposed Changes
+
+### 1. Renforcement de la Qualité du Code
+Amélioration des règles d'analyse statique pour détecter les erreurs plus tôt.
+
+#### [MODIFY] [analysis_options.yaml](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/analysis_options.yaml)
+- Ajouter des règles strictes (ex: `prefer_final_locals`, `avoid_unnecessary_containers`, `always_declare_return_types`).
+
+---
+
+### 2. Unification de l'Architecture (Feature-First)
+Regrouper tout le code lié à une fonctionnalité (UI, Modèles, Providers, Repositories) dans un dossier unique sous `lib/features/`.
+
+#### [MOVE] [screens/auth/*](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/screens/auth) -> [features/auth/presentation/screens/](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/features/auth/presentation/screens)
+#### [MOVE] [screens/customer/*](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/screens/customer) -> [features/customer/presentation/screens/](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/features/customer/presentation/screens)
+*(Idem pour technician, manager, admin)*
+
+---
+
+### 3. Refactoring de la Couche Données (`ApiService`)
+Découpage de la "God Class" en services spécialisés et implémentation de repositories.
+
+#### [NEW] [base_api_service.dart](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/core/network/base_api_service.dart)
+- Contiendra la logique de base des requêtes HTTP (headers, gestion des erreurs, timeout).
+
+#### [NEW] [auth_repository.dart](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/features/auth/data/repositories/auth_repository.dart)
+- Logique spécifique à la connexion, inscription et profil.
+
+#### [NEW] [intervention_repository.dart](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/features/customer/data/repositories/intervention_repository.dart)
+- Logique spécifique aux devis, rapports et réclamations.
+
+#### [DELETE] [api_service.dart](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/services/api_service.dart)
+- À supprimer une fois la migration terminée.
+
+---
+
+### 4. Optimisation du Démarrage (Splash Screen)
+Séparation de la logique métier et de la vue.
+
+#### [NEW] [app_controller.dart](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/core/controllers/app_controller.dart)
+- Gérera la séquence d'initialisation (Firebase, Auth check, Connectivity).
+
+#### [MODIFY] [splash_screen.dart](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/screens/splash_screen.dart)
+- Devra uniquement s'occuper de l'animation et observer l'état via l' `AppController`.
+
+---
+
+### 5. Correction de la Gestion d'État
+#### [MODIFY] [app.dart](file:///Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/core/app.dart)
+- Enregistrer `UserProvider` dans le `MultiProvider` global pour qu'il soit accessible partout.
+
+## Verification Plan
+
+### Automated Tests
+- Exécuter `flutter analyze` pour vérifier les nouvelles règles de linting.
+- Lancer les tests existants avec `patrol test` (si configuré) ou `flutter test`.
+
+### Manual Verification
+- Vérifier que le flux d'authentification fonctionne toujours après le découpage de l'`ApiService`.
+- Vérifier que la navigation après le Splash Screen est fluide et correcte selon le rôle de l'utilisateur.
+- Vérifier que les données utilisateur sont bien partagées entre les écrans via le `UserProvider`.

@@ -30,6 +30,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
   final _durationController = TextEditingController();
   final _notesController = TextEditingController();
   final _pressionController = TextEditingController();
+  final _freonController = TextEditingController();
   final _puissanceController = TextEditingController();
   final _intensiteController = TextEditingController();
   final _tensionController = TextEditingController();
@@ -49,6 +50,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
     _durationController.dispose();
     _notesController.dispose();
     _pressionController.dispose();
+    _freonController.dispose();
     _puissanceController.dispose();
     _intensiteController.dispose();
     _tensionController.dispose();
@@ -142,6 +144,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
       'photos': [],
       'notes': _notesController.text,
       'pression': _pressionController.text,
+      'freon': _freonController.text,
       'puissance': _puissanceController.text,
       'intensite': _intensiteController.text,
       'tension': _tensionController.text,
@@ -530,6 +533,24 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                     keyboardType: TextInputType.number,
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _freonController,
+                    decoration: const InputDecoration(
+                      labelText: 'Fréon (Kg)',
+                      prefixIcon: Icon(Icons.ac_unit, size: 20),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(child: SizedBox()),
               ],
             ),
             const SizedBox(height: 16),
