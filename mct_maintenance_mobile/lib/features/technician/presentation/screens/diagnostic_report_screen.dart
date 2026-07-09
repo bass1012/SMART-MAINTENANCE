@@ -29,7 +29,10 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
   final _solutionController = TextEditingController();
   final _durationController = TextEditingController();
   final _notesController = TextEditingController();
-  final _technicalDataController = TextEditingController();
+  final _pressionController = TextEditingController();
+  final _puissanceController = TextEditingController();
+  final _intensiteController = TextEditingController();
+  final _tensionController = TextEditingController();
   final _afterInterventionReportController = TextEditingController();
 
   // Parts list
@@ -45,7 +48,10 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
     _solutionController.dispose();
     _durationController.dispose();
     _notesController.dispose();
-    _technicalDataController.dispose();
+    _pressionController.dispose();
+    _puissanceController.dispose();
+    _intensiteController.dispose();
+    _tensionController.dispose();
     _afterInterventionReportController.dispose();
     super.dispose();
   }
@@ -135,7 +141,10 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
       'estimated_duration': _durationController.text,
       'photos': [],
       'notes': _notesController.text,
-      'technical_data': _technicalDataController.text,
+      'pression': _pressionController.text,
+      'puissance': _puissanceController.text,
+      'intensite': _intensiteController.text,
+      'tension': _tensionController.text,
       'after_intervention_report': _afterInterventionReportController.text,
     };
 
@@ -496,13 +505,60 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            TextFormField(
-              controller: _technicalDataController,
-              decoration: const InputDecoration(
-                hintText: 'Mesures, observations techniques...',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _pressionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Pression (bar)',
+                      prefixIcon: Icon(Icons.compress, size: 20),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _puissanceController,
+                    decoration: const InputDecoration(
+                      labelText: 'Puissance (CV)',
+                      prefixIcon: Icon(Icons.power, size: 20),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _intensiteController,
+                    decoration: const InputDecoration(
+                      labelText: 'Intensité (A)',
+                      prefixIcon: Icon(Icons.electrical_services, size: 20),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _tensionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tension (V)',
+                      prefixIcon: Icon(Icons.bolt, size: 20),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
 
