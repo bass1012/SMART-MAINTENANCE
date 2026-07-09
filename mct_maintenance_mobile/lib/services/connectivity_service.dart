@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
 
@@ -25,13 +26,15 @@ class ConnectivityService {
 
   /// Initialiser le service de connectivité
   void initialize() {
-    print('📡 Initialisation ConnectivityService...');
+    if (_connectivitySubscription != null) return;
+
+    if (kDebugMode) debugPrint('📡 Initialisation ConnectivityService...');
 
     // Écouter changements de connectivité
     _connectivitySubscription = _connectivity.onConnectivityChanged.listen(
-      (result) => _updateConnectionStatus([result]),
+      (result) => _updateConnectionStatus(result),
       onError: (error) {
-        print('❌ Erreur écoute connectivité: $error');
+        if (kDebugMode) debugPrint('❌ Erreur écoute connectivité: $error');
       },
     );
 
@@ -42,10 +45,12 @@ class ConnectivityService {
   /// Vérifier l'état initial de la connexion
   Future<void> _checkInitialConnection() async {
     try {
-      final ConnectivityResult result = await _connectivity.checkConnectivity();
-      _updateConnectionStatus([result]);
+      final List<ConnectivityResult> result =
+          await _connectivity.checkConnectivity();
+      _updateConnectionStatus(result);
     } catch (e) {
-      print('❌ Erreur vérification connectivité initiale: $e');
+      if (kDebugMode)
+        debugPrint('❌ Erreur vérification connectivité initiale: $e');
       _isConnected = false;
       _connectionController.add(false);
     }
@@ -65,8 +70,10 @@ class ConnectivityService {
       _isConnected = hasConnection;
       _connectionController.add(_isConnected);
 
-      print(
-          '📡 Connectivité changée: ${_isConnected ? "🟢 En ligne" : "🔴 Hors ligne"}');
+      if (kDebugMode) {
+        debugPrint(
+            '📡 Connectivité changée: ${_isConnected ? "🟢 En ligne" : "🔴 Hors ligne"}');
+      }
       _logConnectionType(results);
     }
   }
@@ -74,32 +81,32 @@ class ConnectivityService {
   /// Logger le type de connexion
   void _logConnectionType(List<ConnectivityResult> results) {
     if (results.isEmpty) {
-      print('   Type: Aucune connexion');
+      if (kDebugMode) debugPrint('   Type: Aucune connexion');
       return;
     }
 
     for (var result in results) {
       switch (result) {
         case ConnectivityResult.wifi:
-          print('   Type: WiFi');
+          if (kDebugMode) debugPrint('   Type: WiFi');
           break;
         case ConnectivityResult.mobile:
-          print('   Type: Mobile Data');
+          if (kDebugMode) debugPrint('   Type: Mobile Data');
           break;
         case ConnectivityResult.ethernet:
-          print('   Type: Ethernet');
+          if (kDebugMode) debugPrint('   Type: Ethernet');
           break;
         case ConnectivityResult.vpn:
-          print('   Type: VPN');
+          if (kDebugMode) debugPrint('   Type: VPN');
           break;
         case ConnectivityResult.bluetooth:
-          print('   Type: Bluetooth');
+          if (kDebugMode) debugPrint('   Type: Bluetooth');
           break;
         case ConnectivityResult.none:
-          print('   Type: Aucune');
+          if (kDebugMode) debugPrint('   Type: Aucune');
           break;
         default:
-          print('   Type: Autre ($result)');
+          if (kDebugMode) debugPrint('   Type: Autre ($result)');
       }
     }
   }
@@ -107,11 +114,12 @@ class ConnectivityService {
   /// Forcer une vérification manuelle de connectivité
   Future<bool> checkConnection() async {
     try {
-      final ConnectivityResult result = await _connectivity.checkConnectivity();
-      _updateConnectionStatus([result]);
+      final List<ConnectivityResult> result =
+          await _connectivity.checkConnectivity();
+      _updateConnectionStatus(result);
       return _isConnected;
     } catch (e) {
-      print('❌ Erreur vérification connectivité: $e');
+      if (kDebugMode) debugPrint('❌ Erreur vérification connectivité: $e');
       return false;
     }
   }
@@ -120,9 +128,9 @@ class ConnectivityService {
   Future<List<ConnectivityResult>> getConnectionType() async {
     try {
       final result = await _connectivity.checkConnectivity();
-      return [result];
+      return result;
     } catch (e) {
-      print('❌ Erreur récupération type connexion: $e');
+      if (kDebugMode) debugPrint('❌ Erreur récupération type connexion: $e');
       return [ConnectivityResult.none];
     }
   }
@@ -141,7 +149,7 @@ class ConnectivityService {
 
   /// Libérer les ressources
   void dispose() {
-    print('📡 Fermeture ConnectivityService');
+    if (kDebugMode) debugPrint('📡 Fermeture ConnectivityService');
     _connectivitySubscription?.cancel();
     _connectionController.close();
   }

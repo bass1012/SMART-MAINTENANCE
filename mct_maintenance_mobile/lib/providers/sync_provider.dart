@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
-import '../services/local_cache_service.dart';
-import '../services/connectivity_service.dart';
-import '../services/api_service.dart';
+import 'package:mct_maintenance_mobile/services/local_cache_service.dart';
+import 'package:mct_maintenance_mobile/services/connectivity_service.dart';
+import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
+import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
+import 'package:mct_maintenance_mobile/features/interventions/data/repositories/intervention_repository_impl.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -15,7 +17,8 @@ import 'dart:convert';
 class SyncProvider extends ChangeNotifier {
   final LocalCacheService _cacheService = LocalCacheService();
   final ConnectivityService _connectivityService = ConnectivityService();
-  final ApiService _apiService = ApiService();
+  final BaseApiService _apiService = BaseApiService();
+  late final InterventionRepository _interventionRepository;
 
   // État synchronisation
   bool _isSyncing = false;
@@ -36,12 +39,13 @@ class SyncProvider extends ChangeNotifier {
   Timer? _periodicSyncTimer;
 
   SyncProvider() {
+    _interventionRepository = InterventionRepositoryImpl(_apiService);
     _init();
   }
 
   /// Initialiser le provider
   void _init() {
-    print('🔄 Initialisation SyncProvider...');
+    if (kDebugMode) debugPrint('🔄 Initialisation SyncProvider...');
 
     _connectivityService.initialize();
 
@@ -56,13 +60,13 @@ class SyncProvider extends ChangeNotifier {
         notifyListeners();
 
         if (isConnected) {
-          print('🟢 Retour en ligne - Démarrage synchronisation auto...');
+          if (kDebugMode) debugPrint('🟢 Retour en ligne - Démarrage synchronisation auto...');
           // Petit délai pour stabiliser la connexion
           Future.delayed(const Duration(seconds: 2), () {
             syncAll();
           });
         } else {
-          print('🔴 Passage hors ligne - Mode cache activé');
+          if (kDebugMode) debugPrint('🔴 Passage hors ligne - Mode cache activé');
         }
       },
     );
@@ -72,7 +76,7 @@ class SyncProvider extends ChangeNotifier {
       const Duration(minutes: 5),
       (timer) {
         if (_connectivityService.isConnected && !_isSyncing) {
-          print('⏰ Synchronisation périodique...');
+          if (kDebugMode) debugPrint('⏰ Synchronisation périodique...');
           syncAll();
         }
       },
@@ -84,11 +88,13 @@ class SyncProvider extends ChangeNotifier {
     try {
       final cleaned = await _cacheService.clearOldSyncItems();
       if (cleaned > 0) {
-        print(
-            '🧹 Nettoyage au démarrage: $cleaned éléments obsolètes supprimés');
+        if (kDebugMode) {
+          debugPrint(
+              '🧹 Nettoyage au démarrage: $cleaned éléments obsolètes supprimés');
+        }
       }
     } catch (e) {
-      print('❌ Erreur nettoyage éléments obsolètes: $e');
+      if (kDebugMode) debugPrint('❌ Erreur nettoyage éléments obsolètes: $e');
     }
   }
 
@@ -99,7 +105,7 @@ class SyncProvider extends ChangeNotifier {
       await _updatePendingCount();
       notifyListeners();
     } catch (e) {
-      print('❌ Erreur vidage queue sync: $e');
+      if (kDebugMode) debugPrint('❌ Erreur vidage queue sync: $e');
     }
   }
 
@@ -109,7 +115,7 @@ class SyncProvider extends ChangeNotifier {
       _pendingItems = await _cacheService.getPendingSyncCount();
       notifyListeners();
     } catch (e) {
-      print('❌ Erreur mise à jour compteur: $e');
+      if (kDebugMode) debugPrint('❌ Erreur mise à jour compteur: $e');
     }
   }
 
@@ -154,29 +160,31 @@ class SyncProvider extends ChangeNotifier {
           for (int i = 1; i < group.length; i++) {
             await _cacheService.markSyncItemComplete(group[i]['id'] as int);
             cleaned++;
-            print(
-                '🗑️ Duplicata supprimé: ${entry.key} (id: ${group[i]['id']})');
+            if (kDebugMode) {
+              debugPrint(
+                  '🗑️ Duplicata supprimé: ${entry.key} (id: ${group[i]['id']})');
+            }
           }
         }
       }
 
       if (cleaned > 0) {
-        print('🧹 $cleaned duplicata(s) nettoyé(s)');
+        if (kDebugMode) debugPrint('🧹 $cleaned duplicata(s) nettoyé(s)');
       }
     } catch (e) {
-      print('❌ Erreur nettoyage duplicatas: $e');
+      if (kDebugMode) debugPrint('❌ Erreur nettoyage duplicatas: $e');
     }
   }
 
   /// Synchroniser tous les éléments en attente
   Future<void> syncAll() async {
     if (_isSyncing) {
-      print('⚠️ Synchronisation déjà en cours, ignorée');
+      if (kDebugMode) debugPrint('⚠️ Synchronisation déjà en cours, ignorée');
       return;
     }
 
     if (!_connectivityService.isConnected) {
-      print('⚠️ Pas de connexion, synchronisation impossible');
+      if (kDebugMode) debugPrint('⚠️ Pas de connexion, synchronisation impossible');
       return;
     }
 
@@ -185,14 +193,14 @@ class SyncProvider extends ChangeNotifier {
     _syncedItemsCount = 0;
     notifyListeners();
 
-    print('🔄 Début synchronisation...');
+    if (kDebugMode) debugPrint('🔄 Début synchronisation...');
 
     try {
       // Nettoyer les duplicatas avant de synchroniser
       await _cleanupDuplicates();
 
       final items = await _cacheService.getPendingSyncItems();
-      print('📋 ${items.length} éléments à synchroniser');
+      if (kDebugMode) debugPrint('📋 ${items.length} éléments à synchroniser');
 
       // Trier les items pour synchroniser dans l'ordre du workflow
       final sortedItems = List<Map<String, dynamic>>.from(items);
@@ -242,8 +250,10 @@ class SyncProvider extends ChangeNotifier {
           await _syncItem(item);
           await _cacheService.markSyncItemComplete(item['id'] as int);
           _syncedItemsCount++;
-          print(
-              '✅ Élément ${item['id']} synchronisé (${_syncedItemsCount}/${sortedItems.length})');
+          if (kDebugMode) {
+            debugPrint(
+                '✅ Élément ${item['id']} synchronisé ($_syncedItemsCount/${sortedItems.length})');
+          }
         } catch (e) {
           final errorMessage = e.toString();
 
@@ -262,16 +272,16 @@ class SyncProvider extends ChangeNotifier {
 
           if (isReallyObsolete) {
             // Action vraiment obsolète = on la supprime
-            print('⚠️ Élément ${item['id']} obsolète: $errorMessage');
+            if (kDebugMode) debugPrint('⚠️ Élément ${item['id']} obsolète: $errorMessage');
             await _cacheService.markSyncItemComplete(item['id'] as int);
-            print('🗑️ Élément ${item['id']} supprimé de la queue');
+            if (kDebugMode) debugPrint('🗑️ Élément ${item['id']} supprimé de la queue');
           } else if (isOrderError) {
             // Erreur d'ordre = on garde et réessayera au prochain cycle
-            print('⏭️ Élément ${item['id']} reporté (ordre): $errorMessage');
+            if (kDebugMode) debugPrint('⏭️ Élément ${item['id']} reporté (ordre): $errorMessage');
             // Ne pas incrémenter retry_count - il sera réessayé automatiquement
           } else {
             // Autre erreur (réseau, serveur, etc.) = on incrémente retry
-            print('❌ Échec sync élément ${item['id']}: $errorMessage');
+            if (kDebugMode) debugPrint('❌ Échec sync élément ${item['id']}: $errorMessage');
             await _cacheService.incrementRetryCount(
               item['id'] as int,
               errorMessage,
@@ -283,22 +293,17 @@ class SyncProvider extends ChangeNotifier {
       _lastSyncTime = DateTime.now();
       final totalItems = sortedItems.length;
       final pendingItems = totalItems - _syncedItemsCount;
-      print(
-          '✅ Synchronisation terminée: $_syncedItemsCount/$totalItems réussis');
-
-      // Si des items sont reportés (erreur d'ordre), réessayer après 10 secondes
-      if (pendingItems > 0 && _syncedItemsCount > 0) {
-        print(
-            '🔄 $pendingItems items reportés, nouvelle tentative dans 10s...');
-        Future.delayed(const Duration(seconds: 10), () {
-          if (_connectivityService.isConnected && !_isSyncing) {
-            syncAll();
-          }
-        });
+      if (kDebugMode) {
+        debugPrint(
+            '✅ Synchronisation terminée: $_syncedItemsCount/$totalItems réussis');
       }
+
+      // Suppression du retry automatique 10s pour éviter la récursion infinie.
+      // La synchronisation sera retentée soit manuellement, soit par le timer périodique de 5min,
+      // soit lors d'un changement de connectivité.
     } catch (e) {
       _lastSyncError = e.toString();
-      print('❌ Erreur synchronisation globale: $e');
+      if (kDebugMode) debugPrint('❌ Erreur synchronisation globale: $e');
     } finally {
       _isSyncing = false;
       await _updatePendingCount();
@@ -313,7 +318,7 @@ class SyncProvider extends ChangeNotifier {
     final dataString = item['data'] as String;
     final data = jsonDecode(dataString) as Map<String, dynamic>;
 
-    print('🔄 Sync $type (entity: $entityId)');
+    if (kDebugMode) debugPrint('🔄 Sync $type (entity: $entityId)');
 
     switch (type) {
       case 'intervention_update':
@@ -337,7 +342,7 @@ class SyncProvider extends ChangeNotifier {
         break;
 
       default:
-        print('⚠️ Type de sync inconnu: $type');
+        if (kDebugMode) debugPrint('⚠️ Type de sync inconnu: $type');
     }
   }
 
@@ -345,7 +350,7 @@ class SyncProvider extends ChangeNotifier {
   Future<void> _syncInterventionUpdate(
       int interventionId, Map<String, dynamic> data) async {
     // TODO: Implémenter avec la bonne méthode API quand disponible
-    print('🔄 Sync intervention update: $interventionId');
+    if (kDebugMode) debugPrint('🔄 Sync intervention update: $interventionId');
     // Simulation réussite pour le moment
     await Future.delayed(const Duration(milliseconds: 500));
   }
@@ -359,53 +364,53 @@ class SyncProvider extends ChangeNotifier {
       throw Exception('Action manquante dans les données de sync');
     }
 
-    print('🔄 Sync intervention status: $interventionId -> $action');
+    if (kDebugMode) debugPrint('🔄 Sync intervention status: $interventionId -> $action');
 
     // Appeler le bon endpoint selon l'action
     switch (action) {
       case 'accept':
-        await _apiService.acceptIntervention(interventionId);
+        await _interventionRepository.acceptIntervention(interventionId);
         break;
       case 'on-the-way':
-        await _apiService.markInterventionOnTheWay(interventionId);
+        await _interventionRepository.markInterventionOnTheWay(interventionId);
         break;
       case 'arrived':
-        await _apiService.markInterventionArrived(interventionId);
+        await _interventionRepository.markInterventionArrived(interventionId);
         break;
       case 'start':
-        await _apiService.startIntervention(interventionId);
+        await _interventionRepository.startIntervention(interventionId);
         break;
       case 'complete':
-        await _apiService.completeIntervention(interventionId);
+        await _interventionRepository.completeIntervention(interventionId);
         break;
       default:
         throw Exception('Action inconnue: $action');
     }
 
-    print('✅ Statut synchronisé: $action');
+    if (kDebugMode) debugPrint('✅ Statut synchronisé: $action');
   }
 
   /// Synchroniser upload rapport
   Future<void> _syncReportUpload(
       int interventionId, Map<String, dynamic> reportData) async {
-    print('📝 Début upload rapport intervention $interventionId');
+    if (kDebugMode) debugPrint('📝 Début upload rapport intervention $interventionId');
 
     try {
       // IMPORTANT: S'assurer que l'intervention est marquée comme completed côté serveur
       // avant de soumettre le rapport
       try {
-        print('🔄 Vérification/Marquage intervention comme terminée...');
-        await _apiService.completeIntervention(interventionId);
-        print('✅ Intervention marquée comme terminée');
+        if (kDebugMode) debugPrint('🔄 Vérification/Marquage intervention comme terminée...');
+        await _interventionRepository.completeIntervention(interventionId);
+        if (kDebugMode) debugPrint('✅ Intervention marquée comme terminée');
       } catch (e) {
         final errorMessage = e.toString();
         // Si déjà terminée ou déjà en cours, c'est OK
         if (errorMessage.contains('déjà terminée') ||
             errorMessage.contains('doit être en cours')) {
-          print('ℹ️ Intervention déjà dans le bon état: $errorMessage');
+          if (kDebugMode) debugPrint('ℹ️ Intervention déjà dans le bon état: $errorMessage');
         } else {
           // Autre erreur, on continue quand même car le rapport peut être valide
-          print('⚠️ Erreur marquage terminée (on continue): $errorMessage');
+          if (kDebugMode) debugPrint('⚠️ Erreur marquage terminée (on continue): $errorMessage');
         }
       }
 
@@ -413,34 +418,34 @@ class SyncProvider extends ChangeNotifier {
       final photos = await _cacheService.getUnuploadedPhotos(interventionId);
 
       if (photos.isNotEmpty) {
-        print('📷 ${photos.length} photo(s) à uploader depuis le cache');
+        if (kDebugMode) debugPrint('📷 ${photos.length} photo(s) à uploader depuis le cache');
 
         // Les photos sont déjà dans reportData['photos'] avec leurs chemins locaux
         // L'API va les uploader via multipart
         final photoPaths = photos.map((p) => p['file_path'] as String).toList();
         reportData['photos'] = photoPaths;
       } else {
-        print('ℹ️ Aucune photo à uploader');
+        if (kDebugMode) debugPrint('ℹ️ Aucune photo à uploader');
         reportData['photos'] = [];
       }
 
       // Soumettre le rapport (upload multipart inclus)
-      await _apiService.submitInterventionReport(
+      await _interventionRepository.submitInterventionReport(
         interventionId,
         reportData,
       );
 
-      print('✅ Rapport uploadé avec succès');
+      if (kDebugMode) debugPrint('✅ Rapport uploadé avec succès');
 
       // Marquer les photos comme uploadées
       if (photos.isNotEmpty) {
         for (final photo in photos) {
           await _cacheService.markPhotoUploaded(photo['id'] as int);
         }
-        print('✅ ${photos.length} photo(s) marquées comme uploadées');
+        if (kDebugMode) debugPrint('✅ ${photos.length} photo(s) marquées comme uploadées');
       }
     } catch (e) {
-      print('❌ Erreur upload rapport: $e');
+      if (kDebugMode) debugPrint('❌ Erreur upload rapport: $e');
       rethrow;
     }
   }
@@ -448,13 +453,13 @@ class SyncProvider extends ChangeNotifier {
   /// Synchroniser upload rapport de diagnostic
   Future<void> _syncDiagnosticReportUpload(
       int interventionId, Map<String, dynamic> diagnosticData) async {
-    print('🔬 Début upload rapport diagnostic intervention $interventionId');
+    if (kDebugMode) debugPrint('🔬 Début upload rapport diagnostic intervention $interventionId');
 
     try {
       // Soumettre le rapport de diagnostic
       await _apiService.post(
         '/diagnostic-reports',
-        {
+        body: {
           'intervention_id': interventionId,
           'problem_description': diagnosticData['problem_description'],
           'recommended_solution': diagnosticData['recommended_solution'],
@@ -468,9 +473,9 @@ class SyncProvider extends ChangeNotifier {
         },
       );
 
-      print('✅ Rapport diagnostic uploadé avec succès');
+      if (kDebugMode) debugPrint('✅ Rapport diagnostic uploadé avec succès');
     } catch (e) {
-      print('❌ Erreur upload rapport diagnostic: $e');
+      if (kDebugMode) debugPrint('❌ Erreur upload rapport diagnostic: $e');
       rethrow;
     }
   }
@@ -480,7 +485,7 @@ class SyncProvider extends ChangeNotifier {
       int interventionId, Map<String, dynamic> photoData) async {
     final filePath = photoData['file_path'] as String;
     // TODO: Implémenter upload photo depuis cache
-    print('📷 Upload photo: $filePath');
+    if (kDebugMode) debugPrint('📷 Upload photo: $filePath');
   }
 
   /// Ajouter élément à la queue de synchronisation
@@ -495,7 +500,7 @@ class SyncProvider extends ChangeNotifier {
 
   /// Forcer une synchronisation manuelle
   Future<void> forceSyncNow() async {
-    print('🔄 Synchronisation forcée par l\'utilisateur');
+    if (kDebugMode) debugPrint('🔄 Synchronisation forcée par l\'utilisateur');
     await syncAll();
   }
 
@@ -503,9 +508,9 @@ class SyncProvider extends ChangeNotifier {
   Future<void> cleanOldCache() async {
     try {
       await _cacheService.clearOldCache();
-      print('🧹 Nettoyage cache ancien effectué');
+      if (kDebugMode) debugPrint('🧹 Nettoyage cache ancien effectué');
     } catch (e) {
-      print('❌ Erreur nettoyage cache: $e');
+      if (kDebugMode) debugPrint('❌ Erreur nettoyage cache: $e');
     }
   }
 
@@ -523,7 +528,7 @@ class SyncProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    print('🔄 Fermeture SyncProvider');
+    if (kDebugMode) debugPrint('🔄 Fermeture SyncProvider');
     _connectivitySubscription?.cancel();
     _periodicSyncTimer?.cancel();
     super.dispose();

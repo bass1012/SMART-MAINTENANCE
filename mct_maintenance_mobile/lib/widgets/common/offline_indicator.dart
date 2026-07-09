@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/sync_provider.dart';
+import 'package:mct_maintenance_mobile/providers/sync_provider.dart';
 
 /// Widget d'indicateur de mode offline
 ///
@@ -109,7 +109,7 @@ class OfflineIndicator extends StatelessWidget {
   /// Bouton de synchronisation manuelle
   Widget _buildSyncButton(BuildContext context, SyncProvider syncProvider) {
     return Material(
-      color: Colors.white.withOpacity(0.2),
+      color: Colors.white.withValues(alpha: 0.2),
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: () async {
@@ -156,7 +156,7 @@ class OfflineIndicator extends StatelessWidget {
   /// Bouton pour vider la queue de synchronisation bloquée
   Widget _buildClearButton(BuildContext context, SyncProvider syncProvider) {
     return Material(
-      color: Colors.white.withOpacity(0.2),
+      color: Colors.white.withValues(alpha: 0.2),
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: () async {

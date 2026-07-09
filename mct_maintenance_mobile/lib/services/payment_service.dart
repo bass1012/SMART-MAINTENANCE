@@ -1,9 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'api_service.dart';
+import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 
 class PaymentService {
-  final ApiService _apiService;
+  final BaseApiService _apiService;
 
   PaymentService(this._apiService);
 
@@ -13,14 +14,18 @@ class PaymentService {
     double amount,
     String reference, {
     int paymentStep = 1, // 1 = premier paiement 50%, 2 = second paiement 50%
+    String? redirectUrl,
+    bool? autoRedirect,
   }) async {
     try {
-      if (kDebugMode) debugPrint(
+      if (kDebugMode) {
+        debugPrint(
           '💳 Initialisation paiement pour commande $orderId (étape $paymentStep)');
+      }
 
       final response = await _apiService.post(
-        '/payments/fineopay/initialize',
-        {
+        '/api/payments/fineopay/initialize',
+        body: {
           'orderId': orderId,
           'amount': amount,
           'title': paymentStep == 1
@@ -30,15 +35,18 @@ class PaymentService {
               ? 'Premier paiement (50%) pour la commande $reference'
               : 'Paiement final (50%) pour la commande $reference',
           'paymentStep': paymentStep,
+          if (redirectUrl != null) 'redirectUrl': redirectUrl,
+          if (autoRedirect != null) 'autoRedirect': autoRedirect,
         },
       );
+      final responseData = jsonDecode(response.body);
 
-      if (response['success'] == true) {
+      if (responseData['success'] == true) {
         if (kDebugMode) debugPrint('✅ Paiement initialisé avec FineoPay');
-        return response['data'];
+        return responseData['data'];
       } else {
         throw Exception(
-            response['message'] ?? 'Erreur initialisation paiement');
+            responseData['message'] ?? 'Erreur initialisation paiement');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Erreur initialisation paiement: $e');
@@ -82,14 +90,15 @@ class PaymentService {
       if (kDebugMode) debugPrint('🔍 Vérification statut paiement: $transactionId');
 
       final response = await _apiService.get(
-        '/payments/fineopay/status/$transactionId',
+        '/api/payments/fineopay/status/$transactionId',
       );
+      final responseData = jsonDecode(response.body);
 
-      if (response['success'] == true) {
-        if (kDebugMode) debugPrint('✅ Statut récupéré: ${response['data']}');
-        return response['data'];
+      if (responseData['success'] == true) {
+        if (kDebugMode) debugPrint('✅ Statut récupéré: ${responseData['data']}');
+        return responseData['data'];
       } else {
-        throw Exception(response['message'] ?? 'Erreur vérification statut');
+        throw Exception(responseData['message'] ?? 'Erreur vérification statut');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Erreur vérification statut: $e');
@@ -97,25 +106,36 @@ class PaymentService {
     }
   }
 
-  /// Initialiser un paiement pour les frais de diagnostic
   Future<Map<String, dynamic>> initializeDiagnosticPayment(
-      int interventionId) async {
+    int interventionId, {
+    String? redirectUrl,
+    bool? autoRedirect,
+  }) async {
     try {
-      if (kDebugMode) debugPrint(
+      if (kDebugMode) {
+        debugPrint(
           '💳 Initialisation paiement diagnostic pour intervention $interventionId');
+      }
 
       final response = await _apiService.post(
-        '/payments/fineopay/initialize-diagnostic',
-        {'interventionId': interventionId},
+        '/api/payments/fineopay/initialize-diagnostic',
+        body: {
+          'interventionId': interventionId,
+          if (redirectUrl != null) 'redirectUrl': redirectUrl,
+          if (autoRedirect != null) 'autoRedirect': autoRedirect,
+        },
       );
+      final responseData = jsonDecode(response.body);
 
-      if (response['success'] == true) {
-        if (kDebugMode) debugPrint(
-            '✅ Paiement diagnostic initialisé: ${response['data']['transaction_id']}');
-        return response['data'];
+      if (responseData['success'] == true) {
+        if (kDebugMode) {
+          debugPrint(
+            '✅ Paiement diagnostic initialisé: ${responseData['data']['transaction_id']}');
+        }
+        return responseData['data'];
       } else {
         throw Exception(
-            response['message'] ?? 'Erreur initialisation paiement diagnostic');
+            responseData['message'] ?? 'Erreur initialisation paiement diagnostic');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Erreur initialisation paiement diagnostic: $e');
@@ -146,23 +166,26 @@ class PaymentService {
     }
   }
 
-  /// Initialiser un paiement FineoPay pour un contrat/subscription
   Future<Map<String, dynamic>> initializeSubscriptionPayment(
     int subscriptionId,
     double amount,
     String reference, {
     int? paymentPhase,
+    String? redirectUrl,
+    bool? autoRedirect,
   }) async {
     try {
       final phaseLabel = paymentPhase == 1
           ? '1er paiement (50%)'
           : (paymentPhase == 2 ? '2ème paiement (50%)' : '');
-      if (kDebugMode) debugPrint(
+      if (kDebugMode) {
+        debugPrint(
           '💳 Initialisation paiement pour contrat $subscriptionId - $phaseLabel');
+      }
 
       final response = await _apiService.post(
-        '/payments/fineopay/initialize-subscription',
-        {
+        '/api/payments/fineopay/initialize-subscription',
+        body: {
           'subscriptionId': subscriptionId,
           'amount': amount,
           'title':
@@ -170,15 +193,18 @@ class PaymentService {
           'description':
               'Paiement du contrat de maintenance $reference${paymentPhase != null ? ' (${paymentPhase == 1 ? "50% à la validation" : "50% dernière visite"})' : ''}',
           'paymentPhase': paymentPhase,
+          if (redirectUrl != null) 'redirectUrl': redirectUrl,
+          if (autoRedirect != null) 'autoRedirect': autoRedirect,
         },
       );
+      final responseData = jsonDecode(response.body);
 
-      if (response['success'] == true) {
+      if (responseData['success'] == true) {
         if (kDebugMode) debugPrint('✅ Paiement contrat initialisé avec FineoPay');
-        return response['data'];
+        return responseData['data'];
       } else {
         throw Exception(
-            response['message'] ?? 'Erreur initialisation paiement contrat');
+            responseData['message'] ?? 'Erreur initialisation paiement contrat');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Erreur initialisation paiement contrat: $e');

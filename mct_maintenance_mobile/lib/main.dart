@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,11 +7,15 @@ import 'firebase_options.dart';
 import 'core/app.dart';
 import 'services/fcm_service.dart';
 import 'services/connectivity_service.dart';
+import 'services/deep_link_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  print('🚀 DÉMARRAGE APP');
+  // Initialiser le service de Deep Link pour FineoPay
+  DeepLinkService().initialize();
+
+  if (kDebugMode) debugPrint('🚀 DÉMARRAGE APP');
 
   // Initialiser Firebase avec gestion d'erreur
   try {
@@ -20,31 +24,31 @@ void main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      print('✅ Firebase initialisé');
+      if (kDebugMode) debugPrint('✅ Firebase initialisé');
     } else {
-      print('ℹ️  Firebase déjà initialisé');
+      if (kDebugMode) debugPrint('ℹ️  Firebase déjà initialisé');
     }
 
     // Configurer le handler pour les notifications en background
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    print('✅ Handler background configuré');
+    if (kDebugMode) debugPrint('✅ Handler background configuré');
   } on FirebaseException catch (e) {
     // Ignorer silencieusement l'erreur duplicate-app
     if (e.code == 'duplicate-app') {
-      print('ℹ️  Firebase déjà initialisé (duplicate-app)');
+      if (kDebugMode) debugPrint('ℹ️  Firebase déjà initialisé (duplicate-app)');
     } else {
-      print('❌ ERREUR Firebase: $e');
+      if (kDebugMode) debugPrint('❌ ERREUR Firebase: $e');
     }
   } catch (e) {
-    print('❌ ERREUR Firebase: $e');
+    if (kDebugMode) debugPrint('❌ ERREUR Firebase: $e');
     // Continuer même si Firebase échoue
   }
 
   // Initialiser le service de connectivité pour le mode offline
-  print('📡 Initialisation du service de connectivité...');
+  if (kDebugMode) debugPrint('📡 Initialisation du service de connectivité...');
   final connectivityService = ConnectivityService();
   connectivityService.initialize();
-  print('✅ Service de connectivité initialisé');
+  if (kDebugMode) debugPrint('✅ Service de connectivité initialisé');
 
   // Configuration du mode paysage désactivé
   await SystemChrome.setPreferredOrientations([
@@ -63,7 +67,7 @@ void main() async {
   // Initialisation et configuration de l'application
   _setupApp();
 
-  print('✅ LANCEMENT APP');
+  if (kDebugMode) debugPrint('✅ LANCEMENT APP');
 
   // Démarrer l'application
   runApp(const App());

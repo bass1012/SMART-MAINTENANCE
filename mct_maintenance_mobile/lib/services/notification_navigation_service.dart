@@ -1,30 +1,57 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../screens/customer/intervention_detail_screen.dart' as customer;
-import '../screens/technician/intervention_detail_screen.dart' as technician;
-import '../screens/technician/view_report_screen.dart';
-import '../screens/customer/quote_detail_screen.dart';
-import '../screens/customer/order_detail_screen.dart';
-import '../screens/customer/support_screen.dart';
-import '../screens/customer/maintenance_offers_screen.dart';
-import '../screens/customer/quotes_contracts_screen.dart';
-import '../screens/customer/contract_detail_screen.dart';
-import '../screens/customer/notifications_screen.dart';
-import '../screens/customer/subscription_payment_screen.dart';
-import '../screens/customer/contract_payment_screen.dart';
-import '../screens/customer/profile_screen.dart';
-import '../services/api_service.dart';
-import '../models/quote_contract_model.dart';
-import '../models/contract_model.dart';
-import '../widgets/common/loading_indicator.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/intervention_detail_screen.dart' as customer;
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/intervention_detail_screen.dart' as technician;
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/view_report_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/quote_detail_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/order_detail_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/support_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/maintenance_offers_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/quotes_contracts_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/contract_detail_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/notifications_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/subscription_payment_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/contract_payment_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/profile_screen.dart';
+import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
+import 'package:mct_maintenance_mobile/features/interventions/data/repositories/intervention_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/service_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/service_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/shop_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/shop_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/subscription_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/subscription_repository_impl.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/contract_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/data/repositories/contract_repository_impl.dart';
+import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
+import 'package:mct_maintenance_mobile/models/quote_contract_model.dart';
+import 'package:mct_maintenance_mobile/models/contract_model.dart';
+import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 
 /// Service pour gérer la navigation depuis les notifications
 class NotificationNavigationService {
   static final NotificationNavigationService _instance =
       NotificationNavigationService._internal();
   factory NotificationNavigationService() => _instance;
-  NotificationNavigationService._internal();
+  final BaseApiService _apiService = BaseApiService();
+  late final InterventionRepository _interventionRepository;
+  late final ServiceRepository _serviceRepository;
+  late final ShopRepository _shopRepository;
+  late final SubscriptionRepository _subscriptionRepository;
+  late final ContractRepository _contractRepository;
 
-  final ApiService _apiService = ApiService();
+  NotificationNavigationService._internal() {
+    _interventionRepository = InterventionRepositoryImpl(_apiService);
+    _serviceRepository = ServiceRepositoryImpl(_apiService);
+    _shopRepository = ShopRepositoryImpl(_apiService);
+    _subscriptionRepository = SubscriptionRepositoryImpl(_apiService);
+    _contractRepository = ContractRepositoryImpl(_apiService);
+  }
+
+  /// Propager le token auth à ce service (à appeler après login/chargement du token)
+  void setToken(String? token) {
+    _apiService.setToken(token);
+  }
 
   /// Naviguer avec remplacement (évite les problèmes de context invalide)
   void navigateFromNotificationWithReplace(
@@ -34,10 +61,10 @@ class NotificationNavigationService {
 
     print(
         '🧭 Navigation depuis notification (replace) - Type: $type, Role: $role');
-    print('   Données: $notificationData');
+    if (kDebugMode) debugPrint('   Données: $notificationData');
 
     if (type == null) {
-      print('⚠️  Type de notification manquant');
+      if (kDebugMode) debugPrint('⚠️  Type de notification manquant');
       navigator.pop();
       return;
     }
@@ -139,26 +166,26 @@ class NotificationNavigationService {
   /// Navigation vers intervention avec remplacement
   Future<void> _navigateToInterventionWithReplace(
       NavigatorState navigator, Map<String, dynamic> data) async {
-    print('🔍 _navigateToInterventionWithReplace - Données reçues: $data');
-    print('   interventionId brut: ${data['interventionId']}');
-    print('   intervention_id brut: ${data['intervention_id']}');
+    if (kDebugMode) debugPrint('🔍 _navigateToInterventionWithReplace - Données reçues: $data');
+    if (kDebugMode) debugPrint('   interventionId brut: ${data['interventionId']}');
+    if (kDebugMode) debugPrint('   intervention_id brut: ${data['intervention_id']}');
 
     final int? interventionId =
         _parseId(data['interventionId']) ?? _parseId(data['intervention_id']);
     final String? role = data['role'];
 
-    print('   interventionId parsé: $interventionId');
+    if (kDebugMode) debugPrint('   interventionId parsé: $interventionId');
 
     if (interventionId == null) {
-      print('⚠️  ID intervention manquant');
+      if (kDebugMode) debugPrint('⚠️  ID intervention manquant');
       _showSnackBarAndPop(navigator, 'ID intervention manquant');
       return;
     }
 
-    print('→ Navigation vers intervention #$interventionId (replace)');
+    if (kDebugMode) debugPrint('→ Navigation vers intervention #$interventionId (replace)');
 
     try {
-      final response = await _apiService.getInterventionById(interventionId);
+      final response = await _interventionRepository.getInterventionById(interventionId);
 
       if (response['success'] == true && response['data'] != null) {
         final intervention = response['data'];
@@ -181,7 +208,7 @@ class NotificationNavigationService {
             navigator, 'Cette intervention n\'existe plus ou a été supprimée');
       }
     } catch (e) {
-      print('❌ Erreur navigation intervention: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation intervention: $e');
       // Vérifier si c'est une erreur "non trouvé"
       final errorMessage = e.toString().toLowerCase();
       if (errorMessage.contains('non trouvée') ||
@@ -203,7 +230,7 @@ class NotificationNavigationService {
         _parseId(data['interventionId']) ?? _parseId(data['intervention_id']);
 
     if (interventionId == null) {
-      print('⚠️  ID intervention manquant pour le rapport');
+      if (kDebugMode) debugPrint('⚠️  ID intervention manquant pour le rapport');
       _showSnackBarAndPop(navigator, 'ID intervention manquant');
       return;
     }
@@ -212,7 +239,7 @@ class NotificationNavigationService {
         '→ Navigation vers rapport de l\'intervention #$interventionId (replace)');
 
     try {
-      final response = await _apiService.getInterventionById(interventionId);
+      final response = await _interventionRepository.getInterventionById(interventionId);
 
       if (response['success'] == true && response['data'] != null) {
         final intervention = response['data'];
@@ -234,7 +261,7 @@ class NotificationNavigationService {
             navigator, 'Cette intervention n\'existe plus ou a été supprimée');
       }
     } catch (e) {
-      print('❌ Erreur navigation rapport: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation rapport: $e');
       _showSnackBarAndPop(navigator, 'Erreur lors du chargement du rapport');
     }
   }
@@ -278,7 +305,7 @@ class NotificationNavigationService {
 
     try {
       // Charger tous les devis puis chercher le bon
-      final response = await _apiService.getQuotes();
+      final response = await _contractRepository.getCustomerQuotesRaw();
 
       if (response['success'] == true) {
         final quotes = List<Map<String, dynamic>>.from(response['data'] ?? []);
@@ -301,7 +328,7 @@ class NotificationNavigationService {
         _showSnackBarAndPop(navigator, 'Erreur lors du chargement des devis');
       }
     } catch (e) {
-      print('❌ Erreur navigation devis: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation devis: $e');
       _showSnackBarAndPop(navigator, 'Erreur lors du chargement du devis');
     }
   }
@@ -319,7 +346,7 @@ class NotificationNavigationService {
 
     try {
       // Charger toutes les commandes puis chercher la bonne
-      final response = await _apiService.getOrders();
+      final response = await _shopRepository.getOrders();
 
       if (response['success'] == true) {
         final orders = List<Map<String, dynamic>>.from(response['data'] ?? []);
@@ -342,15 +369,17 @@ class NotificationNavigationService {
             navigator, 'Erreur lors du chargement des commandes');
       }
     } catch (e) {
-      print('❌ Erreur navigation commande: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation commande: $e');
       _showSnackBarAndPop(
           navigator, 'Erreur lors du chargement de la commande');
     }
   }
 
+
+
   /// Navigation vers le paiement de souscription avec remplacement
-  void _navigateToSubscriptionPaymentWithReplace(
-      NavigatorState navigator, Map<String, dynamic> data) {
+  Future<void> _navigateToSubscriptionPaymentWithReplace(
+      NavigatorState navigator, Map<String, dynamic> data) async {
     final String? paymentStatus = data['paymentStatus']?.toString();
     final int? subscriptionId = _parseId(data['subscriptionId']);
     final String? serviceName = data['serviceName']?.toString();
@@ -359,12 +388,42 @@ class NotificationNavigationService {
     print(
         '→ Vérification souscription #$subscriptionId - payment: $paymentStatus');
 
+    if (paymentStatus == 'pending' && subscriptionId != null) {
+      try {
+        final subDetails = await _subscriptionRepository.getSubscriptionDetails(subscriptionId);
+        final sub = subDetails['data'] ?? subDetails;
+        
+        // Souscriptions maintenance (maintenance_offer_id renseigné ou offer présent) → paiement 50/50
+        final bool isMaintenance = sub['maintenance_offer_id'] != null || sub['offer'] != null;
+        
+        if (isMaintenance) {
+          navigator.pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => ContractPaymentScreen(
+                subscriptionId: subscriptionId,
+                reference: sub['reference'] ?? 'CTR-$subscriptionId',
+                amount: amount ?? (sub['price'] as num).toDouble(),
+                contractType: sub['contract_type'] ?? 'on_demand',
+                equipment: sub['equipment_description'] ?? sub['offer']?['title'] ?? 'Équipement',
+                model: sub['equipment_model'],
+                firstPaymentStatus: sub['first_payment_status'],
+                secondPaymentStatus: sub['second_payment_status'],
+              ),
+            ),
+          );
+          return;
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('❌ Erreur chargement détails souscription: $e');
+      }
+    }
+
     // Si paiement en attente et données disponibles, naviguer vers paiement
     if (paymentStatus == 'pending' &&
         subscriptionId != null &&
         serviceName != null &&
         amount != null) {
-      print('  → Navigation vers écran de paiement (replace)');
+      if (kDebugMode) debugPrint('  → Navigation vers écran de paiement (replace)');
       navigator.pushReplacement(
         MaterialPageRoute(
           builder: (context) => SubscriptionPaymentScreen(
@@ -376,7 +435,7 @@ class NotificationNavigationService {
       );
     } else {
       // Sinon, naviguer vers les offres d'entretien
-      print('  → Navigation vers offres d\'entretien (replace)');
+      if (kDebugMode) debugPrint('  → Navigation vers offres d\'entretien (replace)');
       navigator.pushReplacement(
         MaterialPageRoute(
           builder: (context) => const MaintenanceOffersScreen(),
@@ -393,10 +452,10 @@ class NotificationNavigationService {
         _parseId(data['contractId']) ??
         _parseId(data['contract_id']);
 
-    print('→ Navigation vers contrat #$contractId (replace)');
+    if (kDebugMode) debugPrint('→ Navigation vers contrat #$contractId (replace)');
 
     if (contractId == null) {
-      print('⚠️  ID contrat manquant - data: $data');
+      if (kDebugMode) debugPrint('⚠️  ID contrat manquant - data: $data');
       // Fallback vers la liste des contrats
       navigator.pushReplacement(
         MaterialPageRoute(
@@ -408,7 +467,7 @@ class NotificationNavigationService {
 
     try {
       // Charger le contrat
-      final Contract? contract = await _apiService.getContractById(contractId);
+      final Contract? contract = await _contractRepository.getContractDetails(contractId.toString());
 
       if (contract != null) {
         navigator.pushReplacement(
@@ -418,7 +477,7 @@ class NotificationNavigationService {
         );
       } else {
         // Fallback vers la liste des contrats si le contrat spécifique n'est pas trouvé
-        print('⚠️  Contrat #$contractId non trouvé, redirection vers la liste');
+        if (kDebugMode) debugPrint('⚠️  Contrat #$contractId non trouvé, redirection vers la liste');
         navigator.pushReplacement(
           MaterialPageRoute(
             builder: (context) => const QuotesContractsScreen(),
@@ -426,7 +485,7 @@ class NotificationNavigationService {
         );
       }
     } catch (e) {
-      print('❌ Erreur navigation contrat: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation contrat: $e');
       // Fallback vers la liste des contrats
       navigator.pushReplacement(
         MaterialPageRoute(
@@ -440,7 +499,7 @@ class NotificationNavigationService {
   void _navigateToProfileWithReplace(
       NavigatorState navigator, Map<String, dynamic> data) {
     final String? action = data['action']?.toString();
-    print('→ Navigation vers profil (action: $action) (replace)');
+    if (kDebugMode) debugPrint('→ Navigation vers profil (action: $action) (replace)');
 
     navigator.pushReplacement(
       MaterialPageRoute(
@@ -460,7 +519,7 @@ class NotificationNavigationService {
         '→ Navigation vers second paiement contrat #$subscriptionId - montant: $amount');
 
     if (subscriptionId == null) {
-      print('⚠️  ID contrat manquant pour second paiement');
+      if (kDebugMode) debugPrint('⚠️  ID contrat manquant pour second paiement');
       _showSnackBarAndPop(navigator, 'ID contrat manquant');
       return;
     }
@@ -468,7 +527,7 @@ class NotificationNavigationService {
     try {
       // Charger le contrat pour obtenir toutes les informations
       final Contract? contract =
-          await _apiService.getContractById(subscriptionId);
+          await _contractRepository.getContractDetails(subscriptionId.toString());
 
       if (contract != null) {
         // Naviguer directement vers l'écran de paiement avec paymentPhase=2
@@ -488,11 +547,11 @@ class NotificationNavigationService {
           ),
         );
       } else {
-        print('⚠️  Contrat #$subscriptionId non trouvé');
+        if (kDebugMode) debugPrint('⚠️  Contrat #$subscriptionId non trouvé');
         _showSnackBarAndPop(navigator, 'Contrat non trouvé');
       }
     } catch (e) {
-      print('❌ Erreur navigation second paiement: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation second paiement: $e');
       _showSnackBarAndPop(navigator, 'Erreur lors du chargement du contrat');
     }
   }
@@ -503,11 +562,11 @@ class NotificationNavigationService {
     final String? type = notificationData['type'];
     final String? role = notificationData['role'];
 
-    print('🧭 Navigation depuis notification - Type: $type, Role: $role');
-    print('   Données: $notificationData');
+    if (kDebugMode) debugPrint('🧭 Navigation depuis notification - Type: $type, Role: $role');
+    if (kDebugMode) debugPrint('   Données: $notificationData');
 
     if (type == null) {
-      print('⚠️  Type de notification manquant');
+      if (kDebugMode) debugPrint('⚠️  Type de notification manquant');
       return;
     }
 
@@ -631,7 +690,7 @@ class NotificationNavigationService {
         break;
 
       default:
-        print('⚠️  Type de notification non géré: $type');
+        if (kDebugMode) debugPrint('⚠️  Type de notification non géré: $type');
         _navigateToNotifications(context);
     }
   }
@@ -645,12 +704,12 @@ class NotificationNavigationService {
     final String? role = data['role'];
 
     if (interventionId == null) {
-      print('⚠️  ID intervention manquant - data: $data');
+      if (kDebugMode) debugPrint('⚠️  ID intervention manquant - data: $data');
       _showError(context, 'ID intervention manquant');
       return;
     }
 
-    print('→ Navigation vers intervention #$interventionId (role: $role)');
+    if (kDebugMode) debugPrint('→ Navigation vers intervention #$interventionId (role: $role)');
 
     // Variable pour suivre si le dialog est ouvert
     bool dialogOpen = false;
@@ -667,7 +726,7 @@ class NotificationNavigationService {
       }
 
       // Charger les details de l'intervention
-      final response = await _apiService.getInterventionById(interventionId);
+      final response = await _interventionRepository.getInterventionById(interventionId);
 
       // Fermer le loader
       if (context.mounted && dialogOpen) {
@@ -699,7 +758,7 @@ class NotificationNavigationService {
             context, 'Cette intervention n\'existe plus ou a été supprimée');
       }
     } catch (e) {
-      print('❌ Erreur navigation intervention: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation intervention: $e');
       // Fermer le loader en cas d'erreur
       if (context.mounted && dialogOpen) {
         try {
@@ -719,12 +778,12 @@ class NotificationNavigationService {
         _parseId(data['interventionId']) ?? _parseId(data['intervention_id']);
 
     if (interventionId == null) {
-      print('⚠️  ID intervention manquant pour le rapport - data: $data');
+      if (kDebugMode) debugPrint('⚠️  ID intervention manquant pour le rapport - data: $data');
       _showError(context, 'ID intervention manquant');
       return;
     }
 
-    print('→ Navigation vers rapport de l\'intervention #$interventionId');
+    if (kDebugMode) debugPrint('→ Navigation vers rapport de l\'intervention #$interventionId');
 
     bool dialogOpen = false;
 
@@ -738,7 +797,7 @@ class NotificationNavigationService {
         );
       }
 
-      final response = await _apiService.getInterventionById(interventionId);
+      final response = await _interventionRepository.getInterventionById(interventionId);
 
       if (context.mounted && dialogOpen) {
         Navigator.of(context, rootNavigator: true).pop();
@@ -766,7 +825,7 @@ class NotificationNavigationService {
             context, 'Cette intervention n\'existe plus ou a été supprimée');
       }
     } catch (e) {
-      print('❌ Erreur navigation rapport: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation rapport: $e');
       if (context.mounted && dialogOpen) {
         try {
           Navigator.of(context, rootNavigator: true).pop();
@@ -786,11 +845,11 @@ class NotificationNavigationService {
         _parseId(data['quoteId']) ?? _parseId(data['quote_id']);
 
     if (quoteId == null) {
-      print('⚠️  ID devis manquant - data: $data');
+      if (kDebugMode) debugPrint('⚠️  ID devis manquant - data: $data');
       return;
     }
 
-    print('→ Navigation vers devis #$quoteId');
+    if (kDebugMode) debugPrint('→ Navigation vers devis #$quoteId');
 
     // Variable pour suivre si le dialog est ouvert
     bool dialogOpen = false;
@@ -807,7 +866,7 @@ class NotificationNavigationService {
       }
 
       // Charger les details du devis
-      final response = await _apiService.getQuotes();
+      final response = await _contractRepository.getCustomerQuotesRaw();
 
       // Fermer le loader
       if (context.mounted && dialogOpen) {
@@ -826,9 +885,9 @@ class NotificationNavigationService {
           orElse: () => {},
         );
 
-        print('🔍 Recherche devis #$quoteId dans ${quotes.length} devis');
-        print('   IDs disponibles: ${quotes.map((q) => q['id']).toList()}');
-        print('   Devis trouvé: ${quoteData.isNotEmpty}');
+        if (kDebugMode) debugPrint('🔍 Recherche devis #$quoteId dans ${quotes.length} devis');
+        if (kDebugMode) debugPrint('   IDs disponibles: ${quotes.map((q) => q['id']).toList()}');
+        if (kDebugMode) debugPrint('   Devis trouvé: ${quoteData.isNotEmpty}');
 
         if (quoteData.isNotEmpty) {
           final quote = QuoteContract.fromJson(quoteData);
@@ -845,7 +904,7 @@ class NotificationNavigationService {
         _showError(context, 'Impossible de charger les devis');
       }
     } catch (e) {
-      print('❌ Erreur navigation devis: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation devis: $e');
       // Fermer le loader en cas d'erreur
       if (context.mounted && dialogOpen) {
         try {
@@ -866,12 +925,12 @@ class NotificationNavigationService {
         _parseId(data['orderId']) ?? _parseId(data['order_id']);
 
     if (orderId == null) {
-      print('⚠️  ID commande manquant - data: $data');
+      if (kDebugMode) debugPrint('⚠️  ID commande manquant - data: $data');
       _showError(context, 'ID commande manquant');
       return;
     }
 
-    print('→ Navigation vers commande #$orderId');
+    if (kDebugMode) debugPrint('→ Navigation vers commande #$orderId');
 
     // Variable pour suivre si le dialog est ouvert
     bool dialogOpen = false;
@@ -889,7 +948,7 @@ class NotificationNavigationService {
       }
 
       // Charger les details de la commande depuis l'API
-      final response = await _apiService.getOrderDetails(orderId);
+      final response = await _shopRepository.getOrderDetails(orderId);
 
       // Fermer le loader
       if (context.mounted && dialogOpen) {
@@ -910,7 +969,7 @@ class NotificationNavigationService {
         _showError(context, 'Cette commande n\'existe plus ou a été supprimée');
       }
     } catch (e) {
-      print('❌ Erreur navigation commande: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation commande: $e');
       // Fermer le loader en cas d'erreur
       if (context.mounted && dialogOpen) {
         try {
@@ -931,11 +990,11 @@ class NotificationNavigationService {
         _parseId(data['complaintId']) ?? _parseId(data['complaint_id']);
 
     if (complaintId == null) {
-      print('⚠️  ID réclamation manquant - data: $data');
+      if (kDebugMode) debugPrint('⚠️  ID réclamation manquant - data: $data');
       return;
     }
 
-    print('→ Navigation vers réclamation #$complaintId (via support)');
+    if (kDebugMode) debugPrint('→ Navigation vers réclamation #$complaintId (via support)');
     // Les réclamations sont gérées dans l'écran de support
     Navigator.push(
       context,
@@ -947,7 +1006,7 @@ class NotificationNavigationService {
 
   /// Navigation vers le chat/support
   void _navigateToChat(BuildContext context, Map<String, dynamic> data) {
-    print('→ Navigation vers chat/support');
+    if (kDebugMode) debugPrint('→ Navigation vers chat/support');
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -958,7 +1017,7 @@ class NotificationNavigationService {
 
   /// Navigation vers les offres d'entretien
   void _navigateToMaintenanceOffers(BuildContext context) {
-    print('→ Navigation vers offres d\'entretien');
+    if (kDebugMode) debugPrint('→ Navigation vers offres d\'entretien');
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -983,7 +1042,7 @@ class NotificationNavigationService {
         subscriptionId != null &&
         serviceName != null &&
         amount != null) {
-      print('  → Navigation vers écran de paiement');
+      if (kDebugMode) debugPrint('  → Navigation vers écran de paiement');
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -996,7 +1055,7 @@ class NotificationNavigationService {
       );
     } else {
       // Sinon, naviguer vers les offres d'entretien
-      print('  → Navigation vers offres d\'entretien');
+      if (kDebugMode) debugPrint('  → Navigation vers offres d\'entretien');
       _navigateToMaintenanceOffers(context);
     }
   }
@@ -1012,7 +1071,7 @@ class NotificationNavigationService {
 
   /// Navigation vers les contrats
   void _navigateToContracts(BuildContext context) {
-    print('→ Navigation vers contrats');
+    if (kDebugMode) debugPrint('→ Navigation vers contrats');
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1024,7 +1083,7 @@ class NotificationNavigationService {
   /// Navigation vers le profil (pour mise à jour adresse)
   void _navigateToProfile(BuildContext context, Map<String, dynamic> data) {
     final String? action = data['action']?.toString();
-    print('→ Navigation vers profil (action: $action)');
+    if (kDebugMode) debugPrint('→ Navigation vers profil (action: $action)');
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1041,13 +1100,13 @@ class NotificationNavigationService {
         _parseId(data['subscriptionId']) ?? _parseId(data['subscription_id']);
 
     if (contractId == null) {
-      print('⚠️  ID contrat manquant - data: $data');
+      if (kDebugMode) debugPrint('⚠️  ID contrat manquant - data: $data');
       // Fallback vers la liste des contrats
       _navigateToContracts(context);
       return;
     }
 
-    print('→ Navigation vers contrat #$contractId');
+    if (kDebugMode) debugPrint('→ Navigation vers contrat #$contractId');
 
     bool dialogOpen = false;
 
@@ -1063,7 +1122,7 @@ class NotificationNavigationService {
       }
 
       // Charger le contrat
-      final Contract? contract = await _apiService.getContractById(contractId);
+      final Contract? contract = await _contractRepository.getContractDetails(contractId.toString());
 
       // Fermer le loader
       if (context.mounted && dialogOpen) {
@@ -1082,7 +1141,7 @@ class NotificationNavigationService {
         );
       } else {
         // Fallback vers la liste des contrats si le contrat spécifique n'est pas trouvé
-        print('⚠️  Contrat #$contractId non trouvé, redirection vers la liste');
+        if (kDebugMode) debugPrint('⚠️  Contrat #$contractId non trouvé, redirection vers la liste');
         _navigateToContracts(context);
       }
     } catch (e) {
@@ -1091,7 +1150,7 @@ class NotificationNavigationService {
         Navigator.of(context, rootNavigator: true).pop();
       }
 
-      print('❌ Erreur navigation contrat: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation contrat: $e');
       // Fallback vers la liste des contrats
       if (context.mounted) {
         _navigateToContracts(context);
@@ -1110,7 +1169,7 @@ class NotificationNavigationService {
         '→ Navigation vers second paiement contrat #$subscriptionId - montant: $amount');
 
     if (subscriptionId == null) {
-      print('⚠️  ID contrat manquant pour second paiement');
+      if (kDebugMode) debugPrint('⚠️  ID contrat manquant pour second paiement');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('ID contrat manquant')),
@@ -1134,8 +1193,7 @@ class NotificationNavigationService {
       }
 
       // Charger le contrat
-      final Contract? contract =
-          await _apiService.getContractById(subscriptionId);
+      final Contract? contract = await _contractRepository.getContractDetails(subscriptionId.toString());
 
       // Fermer le loader
       if (context.mounted && dialogOpen) {
@@ -1164,7 +1222,7 @@ class NotificationNavigationService {
           ),
         );
       } else {
-        print('⚠️  Contrat #$subscriptionId non trouvé');
+        if (kDebugMode) debugPrint('⚠️  Contrat #$subscriptionId non trouvé');
         _navigateToContracts(context);
       }
     } catch (e) {
@@ -1173,7 +1231,7 @@ class NotificationNavigationService {
         Navigator.of(context, rootNavigator: true).pop();
       }
 
-      print('❌ Erreur navigation second paiement: $e');
+      if (kDebugMode) debugPrint('❌ Erreur navigation second paiement: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Erreur lors du chargement du contrat')),
@@ -1185,7 +1243,7 @@ class NotificationNavigationService {
 
   /// Navigation vers la liste des notifications
   void _navigateToNotifications(BuildContext context) {
-    print('→ Navigation vers notifications');
+    if (kDebugMode) debugPrint('→ Navigation vers notifications');
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1196,7 +1254,7 @@ class NotificationNavigationService {
 
   /// Afficher un message pour les paiements en attente
   void _showPaymentPendingMessage(BuildContext context) {
-    print('→ Affichage message paiement en attente');
+    if (kDebugMode) debugPrint('→ Affichage message paiement en attente');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Row(
@@ -1228,7 +1286,7 @@ class NotificationNavigationService {
       try {
         return int.parse(id);
       } catch (e) {
-        print('⚠️  Erreur parsing ID: $id');
+        if (kDebugMode) debugPrint('⚠️  Erreur parsing ID: $id');
         return null;
       }
     }

@@ -2,9 +2,10 @@
 ///
 /// Ce fichier montre comment ajouter des keys aux widgets
 /// pour les rendre testables avec Patrol
+library;
 
 import 'package:flutter/material.dart';
-import '../utils/test_keys.dart';
+import 'package:mct_maintenance_mobile/utils/test_keys.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // EXEMPLE 1: Écran de Connexion Simple

@@ -1,5 +1,5 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'package:flutter/foundation.dart';
 
 // Configuration des environnements
 enum Environment { development, staging, production }
@@ -22,7 +22,7 @@ class AppConfig {
   // Configuration des IPs selon le lieu
   // ⚠️ Pour ngrok: lancez `ngrok http 3000` et copiez l'URL ici (sans le https://)
   static const Map<Location, String> _locationIPs = {
-    Location.office: '192.168.1.139', // IP du bureau
+    Location.office: '192.168.0.102', // IP du bureau
     Location.home: '192.168.1.4', // IP de la maison
     Location.ngrok:
         '', // URL ngrok à renseigner localement (ex: https://abc123.ngrok-free.app)

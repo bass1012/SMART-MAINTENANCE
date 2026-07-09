@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import '../models/notification_preference.dart';
-import '../services/notification_preferences_service.dart';
+import 'package:mct_maintenance_mobile/models/notification_preference.dart';
+import 'package:mct_maintenance_mobile/services/notification_preferences_service.dart';
 
 class NotificationPreferencesProvider extends ChangeNotifier {
   final NotificationPreferencesService _service =

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../utils/responsive_helper.dart';
+import 'package:mct_maintenance_mobile/utils/responsive_helper.dart';
 
 /// Widget pour afficher l'image de fond du maintenancier de manière responsive
 ///
@@ -51,7 +51,7 @@ class ResponsiveBackground extends StatelessWidget {
           Container(
             width: double.infinity,
             height: double.infinity,
-            color: const Color(0xFFe6ffe6).withOpacity(0.3),
+            color: const Color(0xFFe6ffe6).withValues(alpha: 0.3),
           ),
 
           // Gradient overlay si activé
@@ -65,10 +65,10 @@ class ResponsiveBackground extends StatelessWidget {
                   end: Alignment.bottomRight,
                   colors: gradientColors ??
                       [
-                        const Color(0xFF0a543d).withOpacity(0.15),
-                        const Color(0xFF0d6b4d).withOpacity(0.10),
-                        const Color(0xFF0f7d59).withOpacity(0.10),
-                        Colors.white.withOpacity(0.3),
+                        const Color(0xFF0a543d).withValues(alpha: 0.15),
+                        const Color(0xFF0d6b4d).withValues(alpha: 0.10),
+                        const Color(0xFF0f7d59).withValues(alpha: 0.10),
+                        Colors.white.withValues(alpha: 0.3),
                       ],
                   stops: gradientStops ?? const [0.0, 0.3, 0.6, 1.0],
                 ),
@@ -103,7 +103,7 @@ class ResponsiveBackground extends StatelessWidget {
           Container(
             width: double.infinity,
             height: double.infinity,
-            color: const Color(0xFFe6ffe6).withOpacity(0.4),
+            color: const Color(0xFFe6ffe6).withValues(alpha: 0.4),
           ),
 
           // Gradient overlay
@@ -117,9 +117,9 @@ class ResponsiveBackground extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: gradientColors ??
                       [
-                        const Color(0xFF0a543d).withOpacity(0.20),
-                        const Color(0xFF0d6b4d).withOpacity(0.15),
-                        Colors.white.withOpacity(0.4),
+                        const Color(0xFF0a543d).withValues(alpha: 0.20),
+                        const Color(0xFF0d6b4d).withValues(alpha: 0.15),
+                        Colors.white.withValues(alpha: 0.4),
                       ],
                   stops: gradientStops ?? const [0.0, 0.4, 1.0],
                 ),
@@ -151,9 +151,9 @@ class ResponsiveBackground extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: gradientColors ??
                       [
-                        const Color(0xFF0a543d).withOpacity(0.25),
-                        const Color(0xFF0d6b4d).withOpacity(0.20),
-                        Colors.white.withOpacity(0.5),
+                        const Color(0xFF0a543d).withValues(alpha: 0.25),
+                        const Color(0xFF0d6b4d).withValues(alpha: 0.20),
+                        Colors.white.withValues(alpha: 0.5),
                       ],
                   stops: gradientStops ?? const [0.0, 0.5, 1.0],
                 ),
@@ -202,7 +202,7 @@ class SimpleResponsiveBackground extends StatelessWidget {
           Container(
             width: double.infinity,
             height: double.infinity,
-            color: const Color(0xFFe6ffe6).withOpacity(0.35),
+            color: const Color(0xFFe6ffe6).withValues(alpha: 0.35),
           ),
           child,
         ],

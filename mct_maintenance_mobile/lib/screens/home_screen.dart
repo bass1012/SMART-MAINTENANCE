@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'admin/suggest_technicians_screen.dart';
+import 'package:mct_maintenance_mobile/features/admin/presentation/screens/suggest_technicians_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
