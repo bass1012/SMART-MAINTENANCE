@@ -82,6 +82,11 @@ const DiagnosticReport = sequelize.define('DiagnosticReport', {
     allowNull: true,
     comment: 'Pression mesurée (en bar)'
   },
+  freon: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Quantité de fréon (en Kg/Bar)'
+  },
   puissance: {
     type: DataTypes.STRING,
     allowNull: true,

@@ -133,6 +133,7 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
                     
                     // Technical Data
                     if ((report['pression'] != null && report['pression'].toString().isNotEmpty) ||
+                        (report['freon'] != null && report['freon'].toString().isNotEmpty) ||
                         (report['puissance'] != null && report['puissance'].toString().isNotEmpty) ||
                         (report['intensite'] != null && report['intensite'].toString().isNotEmpty) ||
                         (report['tension'] != null && report['tension'].toString().isNotEmpty)) ...[
@@ -158,6 +159,8 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
                           children: [
                             if (report['pression'] != null && report['pression'].toString().isNotEmpty)
                               _buildMeasureChip(Icons.compress, 'Pression', '${report['pression']} bar'),
+                            if (report['freon'] != null && report['freon'].toString().isNotEmpty)
+                              _buildMeasureChip(Icons.ac_unit, 'Fréon', '${report['freon']} Kg'),
                             if (report['puissance'] != null && report['puissance'].toString().isNotEmpty)
                               _buildMeasureChip(Icons.power, 'Puissance', '${report['puissance']} CV'),
                             if (report['intensite'] != null && report['intensite'].toString().isNotEmpty)

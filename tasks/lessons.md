@@ -191,3 +191,7 @@ R# Leçons Apprises
 [2026-04-29] | Singletons créant des abonnements multiples à chaque `initialize()` | Toujours vérifier si un abonnement existe déjà (`_subscription != null`) avant de s'abonner à un stream dans une méthode d'initialisation répétable.
 
 [2026-04-29] | Backend forçant le stockage Base64 au lieu des fichiers | Dans `uploadController.js`, l'utilisation systématique de `fileToBase64DataUrl` supprimait les fichiers physiques après upload. Toujours préférer le stockage de fichiers physiques pour les avatars et équipements afin de préserver la performance de la base de données et du réseau.
+
+[2026-07-09] | API et App : Ajout de champs de mesure technique (pression, puissance, etc.) | Au lieu d'utiliser un champ générique "technical_data", définir des colonnes de mesure spécifiques et cohérentes (Pression, Puissance, Intensité, Tension) entre les modèles Flutter et les modèles Sequelize pour éviter les conversions de données difficiles.
+
+[2026-07-09] | API et App : Ajout du Fréon | Ajout de la mesure de Fréon dans le rapport de diagnostic et le rapport de maintenance.

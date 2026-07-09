@@ -590,6 +590,7 @@ router.get('/reports', async (req, res, next) => {
         total_cost: 0, // À calculer si besoin
         // Mesures techniques
         pression: reportData.pression || '',
+        freon: reportData.freon || '',
         puissance: reportData.puissance || reportData.temperature || '',
         intensite: reportData.intensite || '',
         tension: reportData.tension || '',

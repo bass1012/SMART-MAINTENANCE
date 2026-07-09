@@ -279,6 +279,7 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
     }
     // Format legacy
     return (report.pression != null && report.pression!.isNotEmpty) ||
+        (report.freon != null && report.freon!.isNotEmpty) ||
         (report.puissance != null && report.puissance!.isNotEmpty) ||
         (report.intensite != null && report.intensite!.isNotEmpty) ||
         (report.tension != null && report.tension!.isNotEmpty);
@@ -378,6 +379,9 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
                       equipment.pression!.isNotEmpty)
                     _buildMeasureChip(Icons.compress, 'Pression',
                         '${equipment.pression} bar'),
+                  if (equipment.freon != null && equipment.freon!.isNotEmpty)
+                    _buildMeasureChip(Icons.ac_unit, 'Fréon',
+                        '${equipment.freon} Kg'),
                   if (equipment.puissance != null &&
                       equipment.puissance!.isNotEmpty)
                     _buildMeasureChip(
@@ -432,6 +436,9 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
               if (report.pression != null && report.pression!.isNotEmpty)
                 _buildMeasureChip(
                     Icons.compress, 'Pression', '${report.pression} bar'),
+              if (report.freon != null && report.freon!.isNotEmpty)
+                _buildMeasureChip(
+                    Icons.ac_unit, 'Fréon', '${report.freon} Kg'),
               if (report.puissance != null && report.puissance!.isNotEmpty)
                 _buildMeasureChip(
                     Icons.power, 'Puissance', '${report.puissance} kW'),

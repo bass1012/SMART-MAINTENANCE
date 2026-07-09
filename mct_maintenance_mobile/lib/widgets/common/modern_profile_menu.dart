@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
 import 'package:mct_maintenance_mobile/features/auth/presentation/screens/login_screen.dart';
@@ -270,7 +271,6 @@ class ModernProfileMenu {
                         builder: (context) => const LoginScreen()),
                     (route) => false,
                   );
-                  }
                 }
               },
             ),
