@@ -14,7 +14,7 @@ const RepairService = sequelize.define('RepairService', {
   },
   model: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
     comment: 'Modèle ou type (ex: R410A, R32, R22)'
   },
   price: {

@@ -14,7 +14,7 @@ const InstallationService = sequelize.define('InstallationService', {
   },
   model: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
     comment: 'Modèle ou marque (ex: Daikin, Mitsubishi, LG)'
   },
   price: {
