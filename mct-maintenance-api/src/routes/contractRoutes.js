@@ -334,7 +334,7 @@ router.post('/scheduled/renewal-requests/:id/process', authenticate, authorize('
         message: `Votre demande de renouvellement pour le contrat ${data.contractReference} a été approuvée. Veuillez procéder au paiement pour activer votre nouvelle période.`,
         data: { contractId: data.contractId, subscriptionId: data.contractId },
         priority: 'high',
-        actionUrl: '/contracts'
+        actionUrl: '/contrats'
       });
     } else {
       await notificationService.create({
@@ -344,7 +344,7 @@ router.post('/scheduled/renewal-requests/:id/process', authenticate, authorize('
         message: notes || 'Votre demande de renouvellement a été examinée. Veuillez nous contacter pour plus d\'informations.',
         data: { contractId: data.contractId, subscriptionId: data.contractId },
         priority: 'medium',
-        actionUrl: '/contracts'
+        actionUrl: '/contrats'
       });
     }
 

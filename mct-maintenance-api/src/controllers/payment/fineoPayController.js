@@ -1221,7 +1221,7 @@ const handleSecondSubscriptionPayment = async (subscription, reference, amount, 
           payment_phase: 2
         },
         priority: 'high',
-        actionUrl: '/contracts'
+        actionUrl: '/contrats'
       });
     }
 

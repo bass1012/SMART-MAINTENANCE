@@ -120,7 +120,7 @@ class ContractSchedulingService {
           paymentStatus: 'pending'
         },
         priority: 'high',
-        actionUrl: '/contracts'
+        actionUrl: '/contrats'
       });
       console.log(`✅ Notification contract_created envoyée à user ${userId}`);
     } catch (notifError) {
@@ -212,7 +212,7 @@ class ContractSchedulingService {
           reference: paymentReference || ''
         },
         priority: 'high',
-        actionUrl: '/contracts'
+        actionUrl: '/contrats'
       });
       console.log(`✅ Notification paiement envoyée pour contrat #${subscriptionId}`);
     } catch (paymentNotifError) {
@@ -231,7 +231,7 @@ class ContractSchedulingService {
           interventionId: String(firstIntervention.id)
         },
         priority: 'high',
-        actionUrl: '/contracts'
+        actionUrl: '/contrats'
       });
     } catch (notifError) {
       console.error(`⚠️ Erreur envoi notification contract_activated:`, notifError.message);
@@ -408,7 +408,7 @@ class ContractSchedulingService {
               paymentPhase: 2
             },
             priority: 'high',
-            actionUrl: '/contracts'
+            actionUrl: '/contrats'
           });
           console.log('✅ Notification de second paiement envoyée');
         } catch (notifError) {
