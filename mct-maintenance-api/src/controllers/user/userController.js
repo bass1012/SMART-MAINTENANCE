@@ -127,6 +127,14 @@ exports.deleteUser = async (req, res, next) => {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
     
+    // 🔒 INTERDICTION ABSOLUE: Un utilisateur ne peut pas se supprimer lui-même
+    if (req.user && String(user.id) === String(req.user.id)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Vous ne pouvez pas supprimer votre propre compte.'
+      });
+    }
+
     // 🔒 RESTRICTION: Pour supprimer un admin ou manager, l'admin doit l'avoir créé lui-même
     if (user.role === 'admin' || user.role === 'manager') {
       const currentUser = req.user; // L'utilisateur connecté via middleware authenticate
@@ -135,8 +143,6 @@ exports.deleteUser = async (req, res, next) => {
         return res.status(403).json({ 
           success: false, 
           error: 'Seul un administrateur peut supprimer un compte admin ou manager' 
-        });
-      }
       
       // Vérifier que l'admin actuel a créé cet utilisateur
       if (user.created_by !== currentUser.id) {
