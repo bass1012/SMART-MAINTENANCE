@@ -1,0 +1,55 @@
+--- /Users/bassoued/Documents/MAINTENANCE/mct-maintenance-api/src/routes/customerRoutes.js
++++ /Users/bassoued/Documents/MAINTENANCE/mct-maintenance-api/src/routes/customerRoutes.js
+@@ -2131,6 +2131,52 @@
+   }
+ });
+ 
++/**
++ * @swagger
++ * /api/customer/interventions/{id}/reschedule:
++ *   post:
++ *     summary: Reprogrammer une intervention
++ *     tags: [Customer]
++ */
++router.post('/interventions/:id/reschedule', async (req, res) => {
++  try {
++    const customerId = req.user.id;
++    const { id } = req.params;
++    const { scheduled_date } = req.body;
++
++    if (!scheduled_date) {
++      return res.status(400).json({ success: false, message: 'La date est requise' });
++    }
++
++    const intervention = await Intervention.findOne({
++      where: { id, customer_id: customerId }
++    });
++
++    if (!intervention) {
++      return res.status(404).json({ success: false, message: 'Intervention non trouvée' });
++    }
++
++    await intervention.update({
++      scheduled_date: new Date(scheduled_date),
++      status: intervention.technician_id ? 'assigned' : 'scheduled'
++    });
++
++    // Notifier le back-office
++    const notificationService = require('../services/notificationService');
++    await notificationService.notifyAdmins({
++      title: '📅 Intervention reprogrammée',
++      message: `Le client a reprogrammé l'intervention #${intervention.id} au ${new Date(scheduled_date).toLocaleString('fr-FR')}`,
++      type: 'intervention',
++      related_id: intervention.id
++    });
++
++    res.json({ success: true, message: 'Intervention reprogrammée avec succès' });
++  } catch (error) {
++    console.error('Erreur reprogrammation intervention:', error);
++    res.status(500).json({ success: false, message: 'Erreur serveur' });
++  }
++});
++
+ /**
+  * @swagger
+  * /api/customer/interventions/{id}/complaints:

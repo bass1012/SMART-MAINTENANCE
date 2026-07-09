@@ -404,39 +404,6 @@ class InterventionRepositoryImpl implements InterventionRepository {
     return '?${pairs.join('&')}';
   }
 
-  @override
-  Future<Map<String, dynamic>> reportClientUnreachable(int interventionId, {String? notes}) async {
-    final Map<String, dynamic> data = {};
-    if (notes != null && notes.isNotEmpty) {
-      data['notes'] = notes;
-    }
-    
-    try {
-      final response = await _apiService.post(
-        '/api/technician/interventions/$interventionId/report-unreachable',
-        body: data,
-      );
-      return jsonDecode(response.body);
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
-    }
-  }
-
-  @override
-  Future<Map<String, dynamic>> rescheduleIntervention(int interventionId, DateTime newDate) async {
-    try {
-      final response = await _apiService.post(
-        '/api/customer/interventions/$interventionId/reschedule',
-        body: {
-          'scheduled_date': newDate.toIso8601String(),
-        },
-      );
-      return jsonDecode(response.body);
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
-    }
-  }
-
   Future<Map<String, dynamic>> _queueAction(
       int id, String action, String status) async {
     await _cacheService.updateCachedIntervention(id, {'status': status});

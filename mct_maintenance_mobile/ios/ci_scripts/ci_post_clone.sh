@@ -33,13 +33,10 @@ flutter precache --ios
 echo "=== Installation des dépendances Flutter ==="
 flutter pub get
 
-# Install CocoaPods using Homebrew.
-echo "=== Installation de CocoaPods via Homebrew ==="
-HOMEBREW_NO_AUTO_UPDATE=1 brew install cocoapods
-
 # Install CocoaPods dependencies.
 echo "=== Installation des pods iOS ==="
 cd ios
+# Use the pre-installed cocoapods on Xcode Cloud
 pod install --repo-update
 
 echo "=== Script terminé avec succès ==="

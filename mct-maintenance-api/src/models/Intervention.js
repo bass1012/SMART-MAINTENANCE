@@ -20,7 +20,7 @@ const Intervention = sequelize.define('Intervention', {
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM('pending', 'assigned', 'accepted', 'on_the_way', 'arrived', 'in_progress', 'completed', 'cancelled', 'scheduled', 'rejected', 'diagnostic_submitted', 'execution_confirmed'),
+    type: DataTypes.ENUM('pending', 'assigned', 'accepted', 'on_the_way', 'arrived', 'in_progress', 'completed', 'cancelled', 'scheduled', 'rejected', 'diagnostic_submitted', 'execution_confirmed', 'client_unreachable'),
     allowNull: false,
     defaultValue: 'pending'
   },

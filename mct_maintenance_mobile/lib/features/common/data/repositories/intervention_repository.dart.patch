@@ -1,0 +1,50 @@
+--- /Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/features/common/data/repositories/intervention_repository.dart
++++ /Users/bassoued/Documents/MAINTENANCE/mct_maintenance_mobile/lib/features/common/data/repositories/intervention_repository.dart
+@@ -104,6 +104,46 @@
+     }
+   }
+ 
++  // Customer Reschedule
++  Future<Map<String, dynamic>> rescheduleIntervention(int interventionId, DateTime newDate) async {
++    try {
++      final response = await _apiService.post(
++        '/customer/interventions/$interventionId/reschedule',
++        data: {
++          'scheduled_date': newDate.toIso8601String(),
++        },
++      );
++      return response;
++    } catch (e) {
++      print('Error rescheduling intervention: $e');
++      return {
++        'success': false,
++        'message': e.toString(),
++      };
++    }
++  }
++
++  // Technician Report Client Unreachable
++  Future<Map<String, dynamic>> reportClientUnreachable(int interventionId, {String? notes}) async {
++    try {
++      final Map<String, dynamic> data = {};
++      if (notes != null && notes.isNotEmpty) {
++        data['notes'] = notes;
++      }
++      
++      final response = await _apiService.post(
++        '/technician/interventions/$interventionId/report-unreachable',
++        data: data,
++      );
++      return response;
++    } catch (e) {
++      print('Error reporting client unreachable: $e');
++      return {
++        'success': false,
++        'message': e.toString(),
++      };
++    }
++  }
++
+   // Technician assign
+   Future<Map<String, dynamic>> assignTechnician(int interventionId, int technicianId) async {
+     try {

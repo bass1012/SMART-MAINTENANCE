@@ -162,8 +162,6 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (status == 'client_unreachable') _buildUnreachableBanner(),
-                      if (status == 'client_unreachable') const SizedBox(height: 16),
                       // Titre et priorité
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -911,101 +909,6 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Future<void> _rescheduleIntervention(DateTime newDate) async {
-    setState(() => _isLoading = true);
-    try {
-      final interventionId = _intervention['id'];
-      final interventionRepository = context.read<InterventionRepository>();
-      final response = await interventionRepository.rescheduleIntervention(
-        interventionId,
-        newDate,
-      );
-      if (mounted) {
-        if (response['success'] == true) {
-          SnackBarHelper.showSuccess(context, 'Intervention reprogrammée avec succès');
-          _refreshIntervention();
-        } else {
-          SnackBarHelper.showError(context, response['message'] ?? 'Erreur lors de la reprogrammation');
-          setState(() => _isLoading = false);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        SnackBarHelper.showError(context, 'Erreur de connexion');
-      }
-    }
-  }
-
-  Widget _buildUnreachableBanner() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Technicien sur place - Vous êtes injoignable',
-                  style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Le technicien est sur place mais n\'arrive pas à vous joindre. Sans réponse, l\'intervention sera annulée. Veuillez contacter le service client ou reprogrammer l\'intervention ci-dessous.',
-            style: TextStyle(color: Colors.red.shade800),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: () async {
-              final newDate = await showDatePicker(
-                context: context,
-                initialDate: DateTime.now().add(const Duration(days: 1)),
-                firstDate: DateTime.now(),
-                lastDate: DateTime.now().add(const Duration(days: 30)),
-              );
-              if (newDate != null) {
-                if (mounted) {
-                  final time = await showTimePicker(
-                    context: context,
-                    initialTime: const TimeOfDay(hour: 9, minute: 0),
-                  );
-                  if (time != null) {
-                    final finalDate = DateTime(
-                      newDate.year,
-                      newDate.month,
-                      newDate.day,
-                      time.hour,
-                      time.minute,
-                    );
-                    _rescheduleIntervention(finalDate);
-                  }
-                }
-              }
-            },
-            icon: const Icon(Icons.calendar_month),
-            label: const Text('Reprogrammer'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade700,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 45),
-            ),
-          )
-        ],
       ),
     );
   }
@@ -1841,8 +1744,6 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         return Colors.green;
       case 'cancelled':
         return Colors.red;
-      case 'client_unreachable':
-        return Colors.red.shade900;
       default:
         return Colors.grey;
     }
@@ -1866,8 +1767,6 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         return 'Terminée';
       case 'cancelled':
         return 'Annulée';
-      case 'client_unreachable':
-        return 'Client injoignable';
       default:
         return status;
     }
