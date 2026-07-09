@@ -130,6 +130,25 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
                         Icons.comment,
                         report['notes'],
                       ),
+                    
+                    // Technical Data
+                    if (report['technical_data'] != null &&
+                        report['technical_data'].toString().isNotEmpty)
+                      _buildSection(
+                        'Données techniques',
+                        Icons.data_usage,
+                        report['technical_data'],
+                      ),
+
+                    // After intervention report
+                    if (report['after_intervention_report'] != null &&
+                        report['after_intervention_report'].toString().isNotEmpty)
+                      _buildSection(
+                        'Rapport après interventions',
+                        Icons.assignment_turned_in,
+                        report['after_intervention_report'],
+                      ),
+
                     const SizedBox(height: 32),
                   ],
                 ),
