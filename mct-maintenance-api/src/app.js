@@ -166,7 +166,10 @@ app.use('/api/admin/subscriptions', require('./routes/subscriptionRoutes')); // 
 app.use('/api/installation-services', require('./routes/installationServiceRoutes'));
 app.use('/api/repair-services', require('./routes/repairServiceRoutes'));
 app.use('/api/diagnostic-reports', require('./routes/diagnosticRoutes'));
-app.use('/api/test', require('./routes/testNotificationRoutes'));
+// Route de test FCM — disponible uniquement en environnement de développement
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/test', require('./routes/testNotificationRoutes'));
+}
 app.use('/api/equipments', equipmentRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/upload', uploadRoutes);

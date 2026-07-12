@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireRole } = require('../middleware/auth');
 const {
   uploadAvatar,
   uploadProductImage,
@@ -49,27 +49,18 @@ const storage = multer.diskStorage({
   }
 });
 
-// Filtre pour les images
+// Filtre pour les images — exige MIME TYPE valide ET extension valide
 const imageFilter = (req, file, cb) => {
-  console.log('📸 Image filter - originalname:', file.originalname);
-  console.log('📸 Image filter - mimetype:', file.mimetype);
-  
-  const allowedExtensions = /jpeg|jpg|png|gif|webp/;
-  const allowedMimetypes = /image\/(jpeg|jpg|png|gif|webp)/;
-  
-  const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedMimetypes.test(file.mimetype);
-  
-  console.log('📸 Extension valide:', extname);
-  console.log('📸 Mimetype valide:', mimetype);
-  
-  // Accepter si au moins l'extension OU le mimetype est valide
-  if (mimetype || extname) {
+  const allowedExtensions = /\.(jpeg|jpg|png|gif|webp)$/i;
+  const allowedMimetypes = /^image\/(jpeg|png|gif|webp)$/;
+
+  const extOk = allowedExtensions.test(path.extname(file.originalname));
+  const mimeOk = allowedMimetypes.test(file.mimetype);
+
+  if (extOk && mimeOk) {
     return cb(null, true);
-  } else {
-    console.log('❌ Fichier rejeté - Extension:', path.extname(file.originalname), 'Mimetype:', file.mimetype);
-    cb(new Error('Seules les images sont autorisées (jpeg, jpg, png, gif, webp)'));
   }
+  cb(new Error('Seules les images sont autorisées (jpeg, jpg, png, gif, webp) — extension et MIME type requis'));
 };
 
 // Filtre pour les documents
@@ -131,13 +122,15 @@ const handleEquipmentImage = (req, res, next) => {
   });
 };
 
-// Routes d'upload (authentification requise)
+// Routes d'upload
+// - Avatar : tout utilisateur authentifié peut changer son propre avatar
 router.post('/avatar', authenticate, uploadImage.single('avatar'), uploadAvatar);
-router.post('/product', authenticate, handleProductImage, uploadProductImage);
-router.post('/equipment', authenticate, handleEquipmentImage, uploadEquipmentImage);
-router.post('/document', authenticate, uploadDoc.single('document'), uploadDocument);
+// - Produit, équipement, document : réservés aux admins
+router.post('/product', authenticate, requireRole('admin'), handleProductImage, uploadProductImage);
+router.post('/equipment', authenticate, requireRole('admin'), handleEquipmentImage, uploadEquipmentImage);
+router.post('/document', authenticate, requireRole('admin'), uploadDoc.single('document'), uploadDocument);
 
-// Route de suppression
-router.delete('/:type/:filename', authenticate, deleteUploadedFile);
+// Route de suppression — admin uniquement
+router.delete('/:type/:filename', authenticate, requireRole('admin'), deleteUploadedFile);
 
 module.exports = router;
