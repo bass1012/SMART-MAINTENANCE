@@ -2,6 +2,7 @@ const ChatMessage = require('../models/ChatMessage');
 const User = require('../models/User');
 const CustomerProfile = require('../models/CustomerProfile');
 const fcmService = require('./fcmService');
+const jwt = require('jsonwebtoken');
 
 class ChatService {
   constructor(io) {
@@ -15,15 +16,29 @@ class ChatService {
     const io = this.io;
     
     this.io.on('connection', (socket) => {
-      // Authentification utilisateur
+      // Authentification utilisateur — vérifie le JWT côté serveur
       socket.on('chat:authenticate', async (data) => {
         try {
-          const userId = typeof data === 'object' ? data.userId : data;
           const token = typeof data === 'object' ? data.token : null;
-          
+
+          if (!token) {
+            socket.emit('chat:error', { error: 'Token JWT requis' });
+            return;
+          }
+
+          // Vérifier la signature du token
+          let decoded;
+          try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+          } catch (jwtErr) {
+            console.error('❌ [Chat] JWT invalide:', jwtErr.message);
+            socket.emit('chat:error', { error: 'Token invalide ou expiré' });
+            return;
+          }
+
+          const userId = decoded.id;
           if (!userId) {
-            console.error('❌ [Chat] Auth échouée - userId manquant');
-            socket.emit('chat:error', { error: 'userId requis' });
+            socket.emit('chat:error', { error: 'Token JWT malformé (id manquant)' });
             return;
           }
 
@@ -36,20 +51,21 @@ class ChatService {
             }]
           });
 
+          if (!user || user.status === 'deleted' || user.status === 'inactive') {
+            socket.emit('chat:error', { error: 'Utilisateur inactif ou introuvable' });
+            return;
+          }
+
           // Déterminer le nom à afficher
           let userName = 'Utilisateur';
-          let userRole = 'customer'; // Par défaut
-          
-          if (user) {
-            userRole = user.role || 'customer';
-            
-            if (user.customerProfile && user.customerProfile.first_name) {
-              userName = `${user.customerProfile.first_name} ${user.customerProfile.last_name || ''}`.trim();
-            } else if (user.first_name) {
-              userName = `${user.first_name} ${user.last_name || ''}`.trim();
-            } else if (user.email) {
-              userName = user.email.split('@')[0];
-            }
+          const userRole = user.role || 'customer'; // rôle issu de la DB, pas du client
+
+          if (user.customerProfile && user.customerProfile.first_name) {
+            userName = `${user.customerProfile.first_name} ${user.customerProfile.last_name || ''}`.trim();
+          } else if (user.first_name) {
+            userName = `${user.first_name} ${user.last_name || ''}`.trim();
+          } else if (user.email) {
+            userName = user.email.split('@')[0];
           }
 
           this.connectedUsers.set(userId, socket.id);
@@ -85,10 +101,11 @@ class ChatService {
       // Envoi d'un message
       socket.on('chat:send_message', async (data) => {
         try {
-          const { message, sender_role, attachment_url, attachment_type, recipient_id } = data;
+          const { message, attachment_url, attachment_type, recipient_id } = data;
           
-          // Utiliser le userId stocké dans le socket lors de l'authentification
+          // Utiliser userId et role issus du token (stockés lors de l'authentification)
           const sender_id = socket.userId;
+          const sender_role = socket.userRole; // ignoré si fourni par le client
 
           if (!sender_id) {
             console.error('❌ [Chat] sender_id manquant - non authentifié');
@@ -104,7 +121,7 @@ class ChatService {
           // Sauvegarder le message dans la base de données
           const newMessage = await ChatMessage.create({
             sender_id,
-            sender_role: sender_role || 'customer',
+            sender_role,
             recipient_id: recipient_id || null, // ID du destinataire (pour les messages admin → client)
             message: message.trim(),
             attachment_url,
@@ -164,13 +181,12 @@ class ChatService {
             }, {
               type: 'chat',
               sender_id: String(sender_id),
-              sender_role: sender_role || 'customer',
+              sender_role,
               message_id: String(newMessage.id)
             });
           }
 
           // Confirmer l'envoi à l'expéditeur avec le message complet
-          // L'expéditeur utilisera ce message pour l'afficher localement
           socket.emit('chat:message_sent', { success: true, message: messageWithSender });
 
         } catch (error) {
@@ -213,34 +229,42 @@ class ChatService {
         }
       });
 
-      // Marquer les messages comme lus
-      // Marquer les messages comme lus
+      // Marquer les messages comme lus — limité aux messages dont le socket est le destinataire
       socket.on('chat:mark_read', async (data) => {
         try {
           const messageIds = data?.messageIds || data; // Support des deux formats
+          const userId = socket.userId;
           
-          console.log('📖 [Chat] Requête mark_read reçue:', { data, messageIds });
-          
-          if (!messageIds || (Array.isArray(messageIds) && messageIds.length === 0)) {
-            console.log('⚠️ [Chat] Aucun message à marquer');
+          if (!userId) {
+            socket.emit('chat:error', { error: 'Non authentifié' });
             return;
+          }
+
+          if (!messageIds || (Array.isArray(messageIds) && messageIds.length === 0)) {
+            return;
+          }
+
+          // Restreindre aux messages dont l'utilisateur est le destinataire (ou tous les messages pour les admins)
+          const whereClause = {
+            id: Array.isArray(messageIds) ? messageIds : [messageIds],
+            is_read: false
+          };
+          // Un non-admin ne peut marquer comme lus que les messages qui lui sont destinés
+          if (socket.userRole !== 'admin') {
+            whereClause.recipient_id = userId;
           }
 
           const result = await ChatMessage.update(
             { is_read: true },
-            {
-              where: {
-                id: Array.isArray(messageIds) ? messageIds : [messageIds],
-                is_read: false
-              }
-            }
+            { where: whereClause }
           );
 
-          console.log(`✅ [Chat] ${result[0]} message(s) mis à jour en DB (sur ${Array.isArray(messageIds) ? messageIds.length : 1} demandés)`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ [Chat] ${result[0]} message(s) marqué(s) comme lu(s)`);
+          }
 
           // Notifier les autres utilisateurs
           this.io.emit('chat:messages_read', { messageIds });
-          console.log('📢 [Chat] Événement chat:messages_read émis');
         } catch (error) {
           console.error('❌ [Chat] Erreur marquage lus:', error);
         }
@@ -255,6 +279,7 @@ class ChatService {
       });
     });
   }
+
 
   // Envoyer un message à un utilisateur spécifique
   sendToUser(userId, event, data) {

@@ -70,19 +70,35 @@ const testConnection = async () => {
 // Sync database models
 const syncDatabase = async () => {
   try {
-    // Vérifier si les tables existent déjà
     const forceSync = process.env.FORCE_SYNC === 'true';
-    
+
     if (forceSync) {
+      if (isProduction) {
+        // En production, FORCE_SYNC est trop dangereux — refus explicite
+        console.error('❌ CRITIQUE: FORCE_SYNC=true est interdit en production. Utilisez des migrations versionnées.');
+        process.exit(1);
+      }
       console.log('⚠️  Force sync activé - Recréation des tables...');
       await sequelize.sync({ force: true });
+
+    } else if (isProduction) {
+      // En production : vérifier la connexion uniquement — pas d'alter automatique.
+      // Les changements de schéma doivent passer par des migrations explicites.
+      console.log('ℹ️  Production : sync désactivé. Vérification de connexion uniquement.');
+      await sequelize.authenticate();
+      console.log('✅ Database schema assumed to be up-to-date (managed by migrations).');
+
     } else {
-      // Utiliser alter pour ajouter les colonnes/tables manquantes sans supprimer les données
+      // Développement (SQLite) : alter:true est safe
       await sequelize.sync({ alter: true });
+      console.log('✅ Database synchronized successfully (development mode).');
     }
-    console.log('✅ Database synchronized successfully.');
   } catch (error) {
     console.error('❌ Error synchronizing database:', error.message);
+    if (isProduction) {
+      // Empêcher le serveur de démarrer avec un schéma inconnu
+      process.exit(1);
+    }
   }
 };
 

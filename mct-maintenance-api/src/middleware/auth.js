@@ -231,10 +231,29 @@ const logout = async (req, res, next) => {
   }
 };
 
+/**
+ * Middleware de contrôle de rôle.
+ * Usage : requireRole('admin') ou requireRole('admin', 'technician')
+ * Doit être utilisé APRÈS authenticate (req.user doit être défini).
+ */
+const requireRole = (...allowedRoles) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Non authentifié' });
+  }
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      message: `Accès refusé — rôle requis : ${allowedRoles.join(' ou ')}`
+    });
+  }
+  next();
+};
+
 module.exports = {
   authenticate,
   authorize,
   adminOnly,
+  requireRole,
   optionalAuth,
   refreshToken,
   logout
