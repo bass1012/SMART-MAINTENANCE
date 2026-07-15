@@ -1,7 +1,7 @@
 const express = require('express');
 const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const customerController = require('../controllers/customerController');
-const { Contract, User, InstallationService, RepairService, Subscription, MaintenanceOffer } = require('../models');
+const { Contract, User, InstallationService, RepairService, Subscription, MaintenanceOffer, Intervention } = require('../models');
 const { 
   listCustomers, 
   getCustomer, 
@@ -2763,7 +2763,7 @@ router.get('/export-data', authenticate, async (req, res) => {
  */
 router.post('/interventions/:id/reschedule', async (req, res) => {
   try {
-    const customerId = req.user.id;
+    const userId = req.user.id;
     const { id } = req.params;
     const { scheduled_date } = req.body;
 
@@ -2771,8 +2771,15 @@ router.post('/interventions/:id/reschedule', async (req, res) => {
       return res.status(400).json({ success: false, message: 'La date est requise' });
     }
 
+    const { CustomerProfile } = require('../models');
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    
+    if (!customerProfile) {
+      return res.status(404).json({ success: false, message: 'Profil client non trouvé' });
+    }
+
     const intervention = await Intervention.findOne({
-      where: { id, customer_id: customerId }
+      where: { id, customer_id: customerProfile.id }
     });
 
     if (!intervention) {
@@ -2789,7 +2796,7 @@ router.post('/interventions/:id/reschedule', async (req, res) => {
     await notificationService.notifyAdmins({
       title: '📅 Intervention reprogrammée',
       message: `Le client a reprogrammé l'intervention #${intervention.id} au ${new Date(scheduled_date).toLocaleString('fr-FR')}`,
-      type: 'intervention',
+      type: 'alert',
       related_id: intervention.id
     });
 

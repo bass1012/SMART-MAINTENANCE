@@ -967,17 +967,7 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
 
   Widget _buildFilters() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -995,6 +985,8 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
             _buildFilterChip('En cours', 'in_progress'),
             const SizedBox(width: 8),
             _buildFilterChip('Terminée', 'completed'),
+            const SizedBox(width: 8),
+            _buildFilterChip('Absence', 'client_unreachable'),
           ],
         ),
       ),

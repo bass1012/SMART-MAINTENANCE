@@ -274,7 +274,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             totalAmount.toDouble(),
             reference,
             redirectUrl: 'smartmaintenance://payment-callback',
-            autoRedirect: true,
+            autoRedirect: false,
           );
 
           final paymentUrl = paymentData['paymentUrl'];

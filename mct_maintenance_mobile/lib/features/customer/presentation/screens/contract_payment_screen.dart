@@ -44,6 +44,8 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
   bool _isProcessing = false;
   bool _isWaitingForPayment = false;
   Timer? _pollingTimer;
+  int _pollCount = 0;
+  static const int _maxPolls = 60; // 5 minutes max (60 × 5s)
 
   // Calcul du montant pour 50% (premier ou deuxième paiement)
   double get _firstPaymentAmount => (widget.amount / 2).ceilToDouble();
@@ -824,7 +826,7 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
         widget.reference,
         paymentPhase: _currentPaymentPhase, // Indiquer la phase de paiement
         redirectUrl: 'smartmaintenance://payment-callback',
-        autoRedirect: true,
+        autoRedirect: false,
       );
       final paymentUrl = paymentData['paymentUrl'] as String;
 
@@ -887,10 +889,21 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
     if (kDebugMode) {
       debugPrint('🔄 Démarrage du polling pour vérifier le paiement...');
     }
+    _pollCount = 0;
 
     _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (!_isWaitingForPayment) {
         timer.cancel();
+        return;
+      }
+      _pollCount++;
+      if (_pollCount >= _maxPolls) {
+        _stopPolling();
+        // Fermer le dialog de vérification s'il est ouvert
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        _showPollingTimeoutDialog();
         return;
       }
       _checkPaymentStatus();
@@ -904,6 +917,43 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
     setState(() {
       _isWaitingForPayment = false;
     });
+  }
+
+  void _showPollingTimeoutDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.timer_off, color: Colors.orange, size: 64),
+        title: const Text('Vérification expirée'),
+        content: const Text(
+          'La confirmation de paiement n\'a pas été reçue dans les 5 minutes.\n\n'
+          'Si vous avez bien effectué le paiement, appuyez sur "Vérifier maintenant" '
+          'pour relancer la vérification. Sinon, fermez cette fenêtre et réessayez.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context, false);
+            },
+            child: const Text('Fermer'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _isWaitingForPayment = true);
+              _startPolling();
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Vérifier maintenant'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _checkPaymentStatus() async {

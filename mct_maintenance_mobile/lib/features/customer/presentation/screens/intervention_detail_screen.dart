@@ -436,9 +436,25 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     }
   }
 
+  List<dynamic> _getEquipments(Map<String, dynamic> report) {
+    final equipments = report['equipments'];
+    if (equipments == null) return [];
+    if (equipments is List) return equipments;
+    if (equipments is String) {
+      try {
+        final decoded = json.decode(equipments);
+        if (decoded is List) return decoded;
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  }
+
   Widget _buildReportSummary(Map<String, dynamic> report) {
     final workDone = report['travaux_effectues'] ?? report['description'] ?? '';
     final observations = report['observations'] ?? '';
+    final List<dynamic> equipments = _getEquipments(report);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -489,6 +505,82 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
               ],
             ),
           ],
+          if (equipments.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text(
+              'Équipements & Mesures techniques',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            ...equipments.asMap().entries.map((entry) {
+              final equipment = entry.value;
+              final index = entry.key + 1;
+              final name = equipment['name']?.toString() ?? '';
+              final brand = equipment['brand']?.toString() ?? '';
+              final type = equipment['type']?.toString() ?? '';
+              final state = equipment['state']?.toString() ?? '';
+              final pression = equipment['pression']?.toString() ?? '';
+              final puissance = equipment['puissance']?.toString() ?? '';
+              final intensite = equipment['intensite']?.toString() ?? '';
+              final tension = equipment['tension']?.toString() ?? '';
+              final freon = equipment['freon']?.toString() ?? '';
+
+              final displayName = name.isNotEmpty
+                  ? name
+                  : brand.isNotEmpty
+                      ? '$brand - $type'
+                      : 'Équipement $index';
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.blue.shade100),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.kitchen, size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            displayName,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    if (state.isNotEmpty)
+                      Text('État : $state',
+                          style: const TextStyle(fontSize: 12)),
+                    if (pression.isNotEmpty || puissance.isNotEmpty || intensite.isNotEmpty || tension.isNotEmpty || freon.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          'Mesures : ${[
+                            if (pression.isNotEmpty) 'Pression $pression',
+                            if (puissance.isNotEmpty) 'Puissance $puissance',
+                            if (intensite.isNotEmpty) 'Intensité $intensite',
+                            if (tension.isNotEmpty) 'Tension $tension',
+                            if (freon.isNotEmpty) 'Fréon $freon',
+                          ].join(', ')}',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.orange.shade800),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }),
+          ]
         ],
       ),
     );
@@ -966,7 +1058,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Le technicien est sur place mais n\'arrive pas à vous joindre. Sans réponse, l\'intervention sera annulée. Veuillez contacter le service client ou reprogrammer l\'intervention ci-dessous.',
+            'Le technicien était sur place mais n\'a pas réussi à vous joindre. L\'intervention a donc été annulée. Veuillez contacter le service client ou reprogrammer l\'intervention ci-dessous.',
             style: TextStyle(color: Colors.red.shade800),
           ),
           const SizedBox(height: 12),

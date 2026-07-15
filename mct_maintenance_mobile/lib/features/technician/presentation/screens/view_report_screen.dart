@@ -92,9 +92,14 @@ class ViewReportScreen extends StatelessWidget {
                       ),
                     const SizedBox(height: 24),
 
-                    // Mesures techniques
-                    if (_hasTechnicalMeasures(report))
+                    // Équipements ou Mesures techniques
+                    if (_getEquipments(report).isNotEmpty) ...[
+                      _buildEquipmentsSection(
+                        _getEquipments(report),
+                      ),
+                    ] else if (_hasTechnicalMeasures(report)) ...[
                       _buildTechnicalMeasuresSection(report),
+                    ],
                     const SizedBox(height: 24),
 
                     // Matériaux utilisés
@@ -579,6 +584,21 @@ Rapport officiel soumis
     }
   }
 
+  List<dynamic> _getEquipments(Map<String, dynamic> report) {
+    final equipments = report['equipments'];
+    if (equipments == null) return [];
+    if (equipments is List) return equipments;
+    if (equipments is String) {
+      try {
+        final decoded = json.decode(equipments);
+        if (decoded is List) return decoded;
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  }
+
   bool _hasTechnicalMeasures(Map<String, dynamic> report) {
     final pression = report['pression']?.toString() ?? '';
     final puissance = report['puissance']?.toString() ??
@@ -586,11 +606,155 @@ Rapport officiel soumis
         '';
     final intensite = report['intensite']?.toString() ?? '';
     final tension = report['tension']?.toString() ?? '';
+    final freon = report['freon']?.toString() ?? '';
     return pression.isNotEmpty ||
         puissance.isNotEmpty ||
         intensite.isNotEmpty ||
-        tension.isNotEmpty;
+        tension.isNotEmpty ||
+        freon.isNotEmpty;
   }
+
+  Widget _buildEquipmentsSection(List<dynamic> equipments) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.kitchen, color: const Color(0xFF0a543d), size: 24),
+            const SizedBox(width: 8),
+            const Text(
+              'Équipements & Mesures',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0a543d),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...equipments.asMap().entries.map((entry) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: _buildEquipmentCard(entry.value, entry.key + 1),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildEquipmentCard(dynamic equipment, int index) {
+    final state = equipment['state']?.toString() ?? '';
+    final type = equipment['type']?.toString() ?? '';
+    final name = equipment['name']?.toString() ?? '';
+    final brand = equipment['brand']?.toString() ?? '';
+    final pression = equipment['pression']?.toString() ?? '';
+    final puissance = equipment['puissance']?.toString() ?? '';
+    final intensite = equipment['intensite']?.toString() ?? '';
+    final tension = equipment['tension']?.toString() ?? '';
+
+    final freon = equipment['freon']?.toString() ?? '';
+
+    final hasMeasures = pression.isNotEmpty ||
+        puissance.isNotEmpty ||
+        intensite.isNotEmpty ||
+        tension.isNotEmpty ||
+        freon.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // En-tête avec numéro
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0a543d),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  name.isNotEmpty
+                      ? name
+                      : brand.isNotEmpty
+                          ? '$brand - $type'
+                          : 'Équipement $index',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (state.isNotEmpty) ...[
+            _buildInfoRow('État', state),
+            const SizedBox(height: 8),
+          ],
+          if (type.isNotEmpty) ...[
+            _buildInfoRow('Type', type),
+            const SizedBox(height: 8),
+          ],
+          if (brand.isNotEmpty) ...[
+            _buildInfoRow('Marque', brand),
+            const SizedBox(height: 8),
+          ],
+          if (hasMeasures) ...[
+            const Divider(),
+            const Text(
+              'Mesures Techniques',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                if (pression.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.compress, 'Pression', '$pression bar'),
+                if (puissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$puissance CV'),
+                if (intensite.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.electrical_services, 'Intensité', '$intensite A'),
+                if (tension.isNotEmpty)
+                  _buildMeasureItem(Icons.bolt, 'Tension', '$tension V'),
+                if (freon.isNotEmpty)
+                  _buildMeasureItem(Icons.cloud, 'Fréon', freon),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
 
   Widget _buildTechnicalMeasuresSection(Map<String, dynamic> report) {
     final pression = report['pression']?.toString() ?? '';
@@ -599,6 +763,7 @@ Rapport officiel soumis
         '';
     final intensite = report['intensite']?.toString() ?? '';
     final tension = report['tension']?.toString() ?? '';
+    final freon = report['freon']?.toString() ?? '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -667,6 +832,20 @@ Rapport officiel soumis
                           '$tension V',
                         ),
                       ),
+                  ],
+                ),
+              ],
+              if (freon.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildMeasureItem(
+                        Icons.cloud,
+                        'Fréon',
+                        freon,
+                      ),
+                    ),
                   ],
                 ),
               ],

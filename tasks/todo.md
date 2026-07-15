@@ -1,6 +1,95 @@
-# TODO - Session 7-8 juillet 2026 - Affichage PDF Inline, TVA Devis, Résolution Devis Diagnostic & Fixes de Paiements
+# TODO - Session 15 juillet 2026 - Fixes Hors Ligne & Interface Rapport
 
-## Terminé dans cette session (7-9 juillet 2026)
+## Terminé dans cette session (15 juillet 2026)
+
+### ✅ Mise à jour en direct de l'en-tête d'équipement
+- **Problème** : L'en-tête de l'équipement (le titre du bloc déroulant) ne se mettait pas à jour en direct lors de la saisie de la désignation (Nom), de la Marque ou du Type. Il fallait réduire/agrandir ou passer à un autre équipement pour voir le changement.
+- **Modifications Mobile** :
+  - Ajout de `setState` dans les événements `onChanged` des champs de texte `Désignation / Nom`, `Marque` et `Type`.
+  - Modification de la logique de l'en-tête pour privilégier la `Désignation / Nom` s'il est rempli, sinon fallback vers `Marque - Type`, sinon `Équipement {index}`.
+
+### ✅ Application du thème global sur le Rapport d'Intervention
+- **Problème** : Les champs de l'écran `create_report_screen.dart` affichaient toujours des bordures carrées classiques car ils surchargeaient manuellement le `InputDecoration` avec des `OutlineInputBorder()` et des `BoxDecoration` stricts, ignorant le thème global.
+- **Modifications Mobile** :
+  - Suppression de toutes les surcharges manuelles `border: OutlineInputBorder()`, `filled: true` et `fillColor: Colors.white` dans `create_report_screen.dart`.
+  - Harmonisation des sélecteurs de Date et d'Heure (qui utilisent des `Container` avec `BoxDecoration`) pour qu'ils respectent le thème global (bords arrondis `16`, fond `Colors.grey.shade50`, bordure discrète `Colors.grey.shade200`).
+  - L'écran entier respecte désormais l'esthétique "chic" et arrondie définie dans `themes.dart`.
+
+### ✅ Fix Faux Positif de Connectivité (Fallback Hors Ligne)
+- **Problème** : Lorsque l'application était en ligne mais que le réseau internet tombait (ex: DNS lookup failed), l'appel API échouait brutalement avec une erreur `SocketException`, bloquant l'accès aux interventions pour le technicien, bien que les données soient dans le cache local.
+- **Modifications Mobile** :
+  - Mise à jour de `InterventionRepositoryImpl.dart` : ajout de blocs `try/catch` autour des méthodes `getInterventions`, `getTechnicianInterventions` et `getInterventionById`.
+  - En cas d'erreur réseau interceptée, l'application effectue désormais un fallback transparent vers le cache local SQLite.
+
+### ✅ Restauration des champs perdus de l'Interface Rapport
+- **Problème** : Lors de récentes modifications, certains champs de l'écran `create_report_screen.dart` avaient disparu.
+- **Modifications Mobile** :
+  - Restauration du champ `Désignation / Nom` pour identifier l'équipement.
+  - Restauration du champ technique `Fréon` avec clavier numérique (en Kg).
+  - Mise à jour de la fonction `_createEmptyEquipment` et du dictionnaire de rétrocompatibilité `reportData` pour assurer l'enregistrement correct de ces nouvelles données.
+
+### ✅ Formatage de la date et des montants dans les devis
+- **Problème** : Les dates de devis étaient affichées au format yyMMdd (ex: 260715) et les gros montants sans séparateur de milliers (ex: 100000) ce qui rendait la lecture difficile.
+- **Modifications Mobile** :
+  - `quote_detail_screen.dart` : Création de la méthode `_formatCurrency` utilisant la logique d'expressions régulières `replaceAllMapped` pour insérer des espaces tous les 3 chiffres (`100 000`).
+  - Utilisation de `DateFormat('dd/MM/yy')` pour formater élégamment les dates.
+
+### ✅ Amélioration UX de la page de Notifications (Animation & Swipe)
+- **Problème** : La page de notifications apparaissait toujours depuis la droite par défaut, et les clients/managers ne pouvaient pas supprimer/masquer individuellement leurs notifications comme le pouvaient les techniciens.
+- **Modifications Mobile** :
+  - **Animation de Slide** : Mise à jour de `NotificationNavigationService` et des `main_screen` pour utiliser un `PageRouteBuilder` avec `SlideTransition` ayant un `Offset(-1.0, 0.0)`, de sorte que l'écran glisse depuis la gauche.
+  - **Swipe-to-delete** : Intégration du Widget `Dismissible` dans `_buildNotificationCard` de `notifications_screen.dart` côté client/manager. Appel à l'API `markNotificationAsRead` pour archiver virtuellement la notification au swipe, complété par la mise à jour de l'état (retrait de la liste locale avec `setState`).
+
+## Terminé dans les sessions précédentes (13 juillet 2026)
+
+### ✅ Upload de Vidéos pour les Rapports d'Intervention (Limite 30 Mo)
+- **Modifications Mobile** :
+  - Ajout du support de sélection et de capture vidéo (`_takeVideo`) dans `create_report_screen.dart` avec limite de 2 mins et 30 Mo.
+  - Mise à jour de l'interface utilisateur (grille de prévisualisation) pour afficher une icône `Vidéo` au lieu de tenter de rendre un fichier vidéo avec `Image.file()`.
+
+### ✅ Upload de Vidéos pour les Nouvelles Interventions (Limite 30 Mo)
+- **Modifications Backend** :
+  - Mise à jour de la configuration de `multer` (`multer.js`) pour autoriser les extensions `.mp4`, `.mov`, et `.avi`.
+  - Augmentation de la limite de taille des fichiers de 10 Mo à 30 Mo.
+  - Fix du rejet silencieux des vidéos provenant de l'appareil photo iOS en autorisant explicitement le mimetype `video/quicktime` dans le filtre `multer`.
+- **Modifications Mobile** :
+  - Mise à jour de `intervention_repository_impl.dart` pour définir correctement le Content-Type (`video/mp4`, `video/quicktime`, `video/x-msvideo`) en fonction de l'extension du fichier lors de l'upload.
+  - Ajout du bouton "Vidéo" dans l'écran de création d'intervention (`new_intervention_screen.dart`).
+  - Ajout de la logique de sélection de vidéo depuis la galerie (`_pickVideoFromGallery`) avec validation de la durée max (2 min) et du poids (30 Mo).
+  - Adaptation de la grille de prévisualisation pour afficher une icône `Vidéo` au lieu de tenter de rendre un fichier vidéo avec `Image.file()`.
+  - Ajout de l'autorisation `NSMicrophoneUsageDescription` dans `ios/Runner/Info.plist` pour corriger le crash systématique de l'application iOS lors de la tentative d'enregistrement vidéo.
+- **Modifications Dashboard** :
+  - Mise à jour de `InterventionReportsPage.tsx` et `InterventionsPage.tsx` pour détecter dynamiquement les URLs de vidéos via l'extension du fichier.
+  - Remplacement de `<Image>` par la balise native HTML5 `<video controls>` pour permettre la lecture des vidéos (client ou technicien) directement depuis le panneau d'administration.
+  - Ajustement de l'affichage vidéo avec `objectFit: 'contain'` pour s'assurer que la vidéo ne soit jamais rognée (notamment lors des zooms sur mobile).
+
+## Terminé dans les sessions précédentes (7-10 juillet 2026)
+
+### ✅ Fix Redirection Notification Client Absent
+- **Problème** : Lors du clic sur la notification "Technicien sur place" (client injoignable), l'application redirigeait le client vers son profil au lieu du détail de l'intervention.
+- **Cause racine** : L'API backend transmettait l'identifiant de l'intervention via la clé `relatedId` à la racine de l'objet, paramètre ignoré par `notificationService.create` dont la signature s'attend à une sous-clé `data`.
+- **Fix Backend** : Mise à jour de `technicianRoutes.js` pour inclure `relatedId` et `interventionId` dans l'objet `data` de la notification.
+
+### ✅ Fix Filtre Absence Interface Client
+- **Modifications Mobile** :
+  - Ajout du filtre "Absence" dans la liste des interventions côté client (`interventions_list_screen.dart`).
+  - Suppression de l'arrière-plan blanc et de l'ombre autour de la zone de filtres pour améliorer l'esthétique et l'intégration.
+
+### ✅ Personnalisation du nom de l'équipement dans le rapport
+- **Modifications Mobile** :
+  - Ajout d'un champ "Désignation / Nom" dans l'écran de création du rapport d'intervention (`create_report_screen.dart`).
+  - L'écran de récapitulatif du rapport (`report_summary_screen.dart`) affiche désormais ce nom personnalisé, avec un système de fallback sur "Marque - Type", puis sur "Équipement X" par défaut.
+
+### ✅ Masquage intelligent du bouton "Voir l'itinéraire"
+- **Modifications Mobile** :
+  - Dans `intervention_detail_screen.dart`, le bouton "Voir l'itinéraire" est désormais uniquement visible lorsque l'intervention est aux statuts `accepted` ou `on_the_way`.
+  - Dès que le technicien clique sur "Je suis arrivé" (statut `arrived`) ou commence les travaux, le bouton disparaît automatiquement pour alléger l'interface.
+
+### ✅ Vérification Intégration FineoPay (Erreur Redirection)
+- **Problème** : Lors de la fin du paiement sur le navigateur, au lieu de rediriger vers l'application, un message JSON s'affiche : `{"success":false,"message":"Transaction non trouvée","error":"Bad Request"}`.
+- **Analyse** : Après vérification complète du code backend et frontend, il s'avère que ce message d'erreur n'est généré par aucune route de l'API MCT Maintenance.
+- **Cause racine** : Ce message JSON provient directement des serveurs de **FineoPay**. Bien que FineoPay ait mis à jour son API pour accepter `autoRedirect: true` et les deep links (`smartmaintenance://payment-callback`), leur backend échoue lors de la tentative de redirection post-paiement (probablement car il ne trouve pas la transaction dans leur propre base de données à ce moment précis pour la lier à la redirection).
+- **Conclusion** : Le code côté MCT est 100% conforme à leur nouvelle documentation (les bons champs sont envoyés dans la payload). Le problème se situe côté API Intégrateur (FineoPay) qui crash au moment d'exécuter la redirection automatique.
 
 ### ✅ Fix Compilation Xcode Cloud (iOS)
 - **Problème** : `Unable to load contents of file list: '/Target Support Files/Pods-Runner/...xcfilelist'`. Xcode Cloud échouait à compiler l'application Flutter iOS car les dépendances CocoaPods n'étaient pas installées (Xcode Cloud ne sait pas qu'il s'agit d'un projet Flutter par défaut).
@@ -749,3 +838,70 @@ Passage en revue esthétique pour garantir le look "Premium" attendu (micro-anim
 Tests de Non-Régression :
 Exécuter la suite complète de tests widgets pour s'assurer que le refactoring d'imports n'a rien cassé dans la logique métier.
 L'application est dans un excellent état pour aborder la phase finale de stabilisation demain. Bonne soirée !
+
+### ✅ Fix : Reprogrammation Intervention (Client Injoignable)
+- **Cause racine** : 1) La création de notification utilisait un type enum invalide (`intervention`). 2) La route de reprogrammation client comparait `Intervention.customer_id` (qui est le `CustomerProfile.id`) avec `req.user.id` (ID d'authentification), causant une erreur 404.
+- **Fix** : 
+  - Changement de `type: 'intervention'` en `type: 'alert'` dans `mct-maintenance-api/src/routes/technicianRoutes.js`.
+  - Ajout d'une requête `CustomerProfile.findOne` dans `mct-maintenance-api/src/routes/customerRoutes.js` pour récupérer le bon ID avant de chercher l'intervention, et ajout de l'import manquant du modèle `Intervention`.
+  - Reformulation du message affiché au client dans `mct_maintenance_mobile/lib/features/customer/presentation/screens/intervention_detail_screen.dart`.
+- **Statut** : Déployé sur VPS et testé avec succès.
+
+### ✅ Fix : Redirection Notification "Client Injoignable"
+- **Cause racine** : La notification d'alerte pour absence (client injoignable) utilisait le type `alert`, qui redirigeait toujours le client vers la page de Profil car c'était initialement prévu pour les alertes d'adresse manquante.
+- **Fix** : Mise à jour de `notification_navigation_service.dart` pour analyser si le payload de l'alerte contient un `relatedId` ou `interventionId`. Si oui, l'app redirige correctement vers les détails de l'intervention pour que le client puisse la reprogrammer.
+- **Statut** : Appliqué (nécessite de relancer l'application Flutter).
+
+### ✅ Fix : Synchronisation des Rapports et Équipements
+- **Cause racine** : Lors de la soumission du rapport, la méthode `submitInterventionReport` supprimait silencieusement les tableaux complexes (la liste des équipements) car elle n'envoyait que 3 champs stricts en multipart/form-data.
+- **Fix** : Refonte complète de la méthode dans `intervention_repository_impl.dart` pour qu'elle itère dynamiquement sur les clés du rapport et applique `jsonEncode` sur les `List` et `Map`, permettant l'envoi de tous les champs (en ligne comme en mode hors-ligne).
+- **Statut** : Appliqué (nécessite un redémarrage de l'app mobile).
+
+### ✅ Amélioration : Détails des Équipements (Fréon et Nom)
+- **Modifications Mobile** : 
+  - Ajout du champ "Gaz / Fréon" pour la climatisation dans `create_report_screen.dart`.
+  - Mise à jour du récapitulatif technicien et client pour afficher ce nouveau champ et le nom personnalisé.
+- **Modifications Dashboard** :
+  - Mise à jour des types TypeScript dans `interventionReportsService.ts` pour accepter `name` et `freon`.
+  - Modification de `InterventionReportsPage.tsx` pour prioriser le nom personnalisé de l'équipement dans le titre, et ajout du "Fréon" dans le tableau des mesures techniques.
+- **Déploiement VPS** : Diagnostic du fichier Nginx (`/etc/nginx/sites-available/smartmaintenance`) pour identifier le dossier servi par le sous-domaine sandbox (`/var/www/smartmaintenance/mct-maintenance-dashboard/build`) et déploiement du nouveau dashboard via `rsync`.
+- **Statut** : Déployé sur le VPS Sandbox.
+
+---
+
+# Audit technique du 12 juillet 2026 — Recommandations à traiter
+
+## P0 — PRIORITÉ ABSOLUE : corriger le paiement d'abonnement mobile
+
+- [x] **Corriger la double extraction de `data` dans `SubscriptionPaymentScreen`.**
+  - **Fix appliqué (2026-07-12)** : `response['data']?['checkoutUrl']` → `(response['paymentUrl'] ?? response['checkoutUrl']) as String?`
+  - Le repository retourne déjà `decoded['data']` — aligné sur le pattern de `payment_screen`, `contract_payment_screen`, `diagnostic_payment_screen`.
+  - Suppression de l'import mort `payment_webview_screen.dart`, du champ `_isPolling` et de la méthode orpheline `_checkPaymentStatus`.
+  - `flutter analyze` : 0 erreur, 0 warning (2 infos async context préexistantes non bloquantes).
+  - ⚠️ **Test manuel sur Sandbox FineoPay requis** avant de clore définitivement.
+
+## P0 — Sécurité API
+
+- [x] **Authentifier réellement les connexions Socket.IO du chat** : JWT vérifié côté serveur via `jwt.verify()` dans `chat:authenticate`. `userId` et `role` extraits du token (la DB), `sender_role` forcé depuis `socket.userRole`. `mark_read` restreint aux messages dont le socket est le destinataire. (`chatService.js`)
+- [x] **Retirer ou verrouiller les routes de notification de test en production** : `/api/test` monté uniquement si `NODE_ENV !== 'production'` dans `app.js`.
+
+## P1 — Fiabilité et confidentialité
+
+- [x] Remplacer les URLs `http://localhost:3000` de `ComplaintCreate.tsx` — les 3 `fetch()` remplacés par `api.get()` (Axios centralisé, token auto-injecté, logs de debug supprimés).
+- [x] Supprimer des logs du dashboard les headers, JWT, corps de requête/réponse — intercepteurs `api.ts` réécrits : méthode+URL+status uniquement, uniquement en développement.
+- [x] Ajouter aux routes d'upload des contrôles de rôle et de propriété — `requireRole('admin')` créé dans `auth.js` et appliqué sur `/product`, `/equipment`, `/document`, `DELETE /:type/:filename`. Filtre image renforcé : MIME ET extension requis (plus OR).
+- [x] Remplacer `sequelize.sync({ alter: true })` en production — `database.js` : en production, `alter:true` désactivé, connexion seule vérifiée, `FORCE_SYNC=true` interdit avec `process.exit(1)`.
+- [x] Ajouter une limite au polling de `ContractPaymentScreen` — `_pollCount` max 60 × 5s = 5 min, dialog timeout avec bouton "Vérifier maintenant" (relance) et "Fermer".
+
+## P2 — Dette structurelle et tests
+
+- [ ] Unifier le contrat des repositories mobiles : une méthode doit retourner soit l'enveloppe API, soit `data`, jamais un mélange selon le flux.
+- [x] Centraliser les appels HTTP du dashboard — `repairServiceService.ts` et `installationServiceService.ts` réécrits avec l'instance Axios centralisée `api` (token auto-injecté, URL résolue via env var, plus de `localStorage.getItem('token')` manuel).
+- [ ] Ajouter des tests API d'autorisation pour Socket.IO, uploads et routes administrateur. Les suites API actuelles ne fournissent pas encore de couverture exploitable.
+- [ ] Ajouter des tests mobiles sur les paiements abonnement, contrat, diagnostic et commande : `pending`, `partial`, `paid`, `failed`, timeout et réponses mal formées.
+- [ ] Découper progressivement les fichiers de plus de 1 000 lignes en services métier, composants et helpers testables, en commençant par les paiements et la navigation des notifications.
+
+### ✅ Fix : Erreur 400 Multer ("Unexpected field") lors de l'envoi de rapport avec photos
+- **Problème** : Lors de la soumission d'un rapport avec des photos, l'API backend rejetait la requête avec l'erreur `Unexpected field`.
+- **Cause racine** : Dans l'application Flutter (`InterventionRepositoryImpl.dart`), les images étaient ajoutées au payload multipart sous la clé `"photos"`. Or, la configuration `multer` du backend (`upload.array('images', 10)`) exige strictement que le champ de fichier s'appelle `"images"`.
+- **Fix** : Remplacement de la clé `'photos'` par `'images'` dans `http.MultipartFile.fromPath()` pour que le frontend corresponde aux attentes strictes de Multer sur l'API.

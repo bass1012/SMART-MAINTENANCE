@@ -2164,7 +2164,9 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const NewInterventionScreen(),
+                      builder: (context) => const NewInterventionScreen(
+                        preSelectedType: 'installation',
+                      ),
                     ),
                   );
                 },
@@ -2473,7 +2475,9 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const NewInterventionScreen(),
+                      builder: (context) => const NewInterventionScreen(
+                        preSelectedType: 'repair',
+                      ),
                     ),
                   );
                 },

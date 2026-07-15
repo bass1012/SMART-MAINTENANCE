@@ -86,6 +86,7 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     final puissance = reportData['puissance'] ?? '';
     final intensite = reportData['intensite'] ?? '';
     final tension = reportData['tension'] ?? '';
+    final freon = reportData['freon'] ?? '';
 
     // Créer le message de partage
     String materialsText = '';
@@ -102,7 +103,8 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     if (pression.toString().isNotEmpty ||
         puissance.toString().isNotEmpty ||
         intensite.toString().isNotEmpty ||
-        tension.toString().isNotEmpty) {
+        tension.toString().isNotEmpty ||
+        freon.toString().isNotEmpty) {
       measuresText = '\n📊 Mesures techniques:\n';
       if (pression.toString().isNotEmpty) {
         measuresText += '  • Pression: $pression bar\n';
@@ -115,6 +117,9 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
       }
       if (tension.toString().isNotEmpty) {
         measuresText += '  • Tension: $tension V\n';
+      }
+      if (freon.toString().isNotEmpty) {
+        measuresText += '  • Fréon: $freon Kg\n';
       }
     }
 
@@ -657,16 +662,19 @@ Smart Maintenance - Service de qualité
   Widget _buildEquipmentCard(dynamic equipment, int index) {
     final state = equipment['state']?.toString() ?? '';
     final type = equipment['type']?.toString() ?? '';
+    final name = equipment['name']?.toString() ?? '';
     final brand = equipment['brand']?.toString() ?? '';
     final pression = equipment['pression']?.toString() ?? '';
     final puissance = equipment['puissance']?.toString() ?? '';
     final intensite = equipment['intensite']?.toString() ?? '';
     final tension = equipment['tension']?.toString() ?? '';
+    final freon = equipment['freon']?.toString() ?? '';
 
     final hasMeasures = pression.isNotEmpty ||
         puissance.isNotEmpty ||
         intensite.isNotEmpty ||
-        tension.isNotEmpty;
+        tension.isNotEmpty ||
+        freon.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -702,7 +710,11 @@ Smart Maintenance - Service de qualité
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  brand.isNotEmpty ? '$brand - $type' : 'Équipement $index',
+                  name.isNotEmpty
+                      ? name
+                      : brand.isNotEmpty
+                          ? '$brand - $type'
+                          : 'Équipement $index',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
@@ -748,6 +760,8 @@ Smart Maintenance - Service de qualité
                       Icons.electrical_services, 'Intensité', '$intensite A'),
                 if (tension.isNotEmpty)
                   _buildMeasureItem(Icons.bolt, 'Tension', '$tension V'),
+                if (freon.isNotEmpty)
+                  _buildMeasureItem(Icons.cloud, 'Fréon', freon),
               ],
             ),
           ],

@@ -32,14 +32,17 @@ const storage = multer.diskStorage({
 
 // Filtrage des types de fichiers autorisés
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
+  const allowedExts = /jpeg|jpg|png|gif|mp4|mov|avi/;
+  const allowedMimes = /image\/jpeg|image\/png|image\/gif|video\/mp4|video\/quicktime|video\/x-msvideo/;
+  
+  const extname = allowedExts.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedMimes.test(file.mimetype);
 
   if (mimetype && extname) {
     return cb(null, true);
   } else {
-    cb(new Error('Seules les images (JPEG, PNG, GIF) sont autorisées'));
+    console.error(`❌ Multer Rejet: extension=${path.extname(file.originalname)}, mimetype=${file.mimetype}`);
+    cb(new Error('Seules les images (JPEG, PNG, GIF) et courtes vidéos (MP4, MOV, AVI) sont autorisées'));
   }
 };
 
@@ -47,9 +50,9 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max par image
-    files: 10, // Maximum 10 images
-    fieldSize: 10 * 1024 * 1024 // 10MB max pour les champs
+    fileSize: 30 * 1024 * 1024, // 30MB max par fichier
+    files: 10, // Maximum 10 fichiers
+    fieldSize: 30 * 1024 * 1024 // 30MB max pour les champs
   },
   fileFilter: fileFilter
 });

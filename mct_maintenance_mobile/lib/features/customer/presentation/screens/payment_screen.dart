@@ -441,7 +441,7 @@ class _PaymentScreenState extends State<PaymentScreen>
         reference: widget.invoiceNumber,
         paymentStep: widget.paymentStep,
         redirectUrl: 'smartmaintenance://payment-callback',
-        autoRedirect: true,
+        autoRedirect: false,
       );
       final paymentUrl = paymentData['paymentUrl'] as String;
 

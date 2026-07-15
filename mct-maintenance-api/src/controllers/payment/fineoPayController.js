@@ -4,9 +4,9 @@ const { Quote, Order, Intervention, DiagnosticReport, User, TechnicianProfile, C
 
 // Configuration FineoPay - URLs OFFICIELLES de la documentation
 // Sandbox: https://dev.fineopay.com/api/v1/business/dev/
-// Production: https://api.fineopay.com/v1/business/dev/
+// Production: https://api.fineopay.com/api/v1/business/dev/
 const FINEOPAY_BASE_URL = process.env.FINEOPAY_ENV === 'production' 
-  ? 'https://api.fineopay.com/v1/business/dev'
+  ? 'https://api.fineopay.com/api/v1/business/dev'
   : 'https://dev.fineopay.com/api/v1/business/dev';
 
 const FINEOPAY_BUSINESS_CODE = process.env.FINEOPAY_BUSINESS_CODE;

@@ -670,7 +670,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         amount: orderAmount,
         reference: widget.order['reference'],
         redirectUrl: 'smartmaintenance://payment-callback',
-        autoRedirect: true,
+        autoRedirect: false,
       );
       final paymentUrl = paymentData['paymentUrl'] as String;
 

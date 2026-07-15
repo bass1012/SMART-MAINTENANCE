@@ -74,7 +74,6 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                 controller: nameController,
                 decoration: const InputDecoration(
                   labelText: 'Nom de la pièce',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -82,7 +81,6 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                 controller: quantityController,
                 decoration: const InputDecoration(
                   labelText: 'Quantité',
-                  border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -304,7 +302,6 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
               controller: _problemController,
               decoration: const InputDecoration(
                 hintText: 'Décrivez le problème constaté...',
-                border: OutlineInputBorder(),
               ),
               maxLines: 4,
               validator: (value) {
@@ -329,7 +326,6 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
               controller: _solutionController,
               decoration: const InputDecoration(
                 hintText: 'Quelle solution proposez-vous ?',
-                border: OutlineInputBorder(),
               ),
               maxLines: 4,
               validator: (value) {
@@ -403,7 +399,6 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
             DropdownButtonFormField<String>(
               initialValue: _selectedUrgency,
               decoration: const InputDecoration(
-                border: OutlineInputBorder(),
               ),
               items: _urgencyLevels.map((level) {
                 IconData icon;
@@ -469,7 +464,6 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
               controller: _durationController,
               decoration: const InputDecoration(
                 hintText: 'Ex: 2-3 heures',
-                border: OutlineInputBorder(),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -493,7 +487,6 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
               controller: _notesController,
               decoration: const InputDecoration(
                 hintText: 'Informations supplémentaires...',
-                border: OutlineInputBorder(),
               ),
               maxLines: 3,
             ),
@@ -516,8 +509,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Pression (bar)',
                       prefixIcon: Icon(Icons.compress, size: 20),
-                      border: OutlineInputBorder(),
-                    ),
+                        ),
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -528,8 +520,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Puissance (CV)',
                       prefixIcon: Icon(Icons.power, size: 20),
-                      border: OutlineInputBorder(),
-                    ),
+                        ),
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -544,8 +535,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Fréon (Kg)',
                       prefixIcon: Icon(Icons.ac_unit, size: 20),
-                      border: OutlineInputBorder(),
-                    ),
+                        ),
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -562,8 +552,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Intensité (A)',
                       prefixIcon: Icon(Icons.electrical_services, size: 20),
-                      border: OutlineInputBorder(),
-                    ),
+                        ),
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -574,8 +563,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Tension (V)',
                       prefixIcon: Icon(Icons.bolt, size: 20),
-                      border: OutlineInputBorder(),
-                    ),
+                        ),
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -596,7 +584,6 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
               controller: _afterInterventionReportController,
               decoration: const InputDecoration(
                 hintText: 'Travaux effectués, recommandations...',
-                border: OutlineInputBorder(),
               ),
               maxLines: 4,
             ),

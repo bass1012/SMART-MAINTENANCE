@@ -356,7 +356,16 @@ router.post('/interventions/:id/report-unreachable', async (req, res) => {
     const intervention = await Intervention.findOne({
       where: { id, technician_id: technicianId },
       include: [
-        { model: User, as: 'customer', attributes: ['id', 'first_name', 'last_name', 'email', 'fcm_token'] }
+        { 
+          model: CustomerProfile, 
+          as: 'customer', 
+          attributes: ['id', 'user_id', 'first_name', 'last_name'],
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'fcm_token']
+          }]
+        }
       ]
     });
 
@@ -377,19 +386,21 @@ router.post('/interventions/:id/report-unreachable', async (req, res) => {
     await notificationService.notifyAdmins({
       title: '🚨 Client Injoignable',
       message: `Le technicien a signalé le client ${intervention.customer?.first_name || ''} comme injoignable pour l'intervention #${intervention.id}`,
-      type: 'intervention',
+      type: 'alert',
       related_id: intervention.id
     });
 
     // Notifier le client
-    if (intervention.customer) {
+    if (intervention.customer && intervention.customer.user) {
       await notificationService.create({
-        userId: intervention.customer.id,
+        userId: intervention.customer.user.id,
         title: 'Technicien sur place',
         message: "Votre technicien MCT est sur place mais n'arrive pas à vous joindre. Sans réponse, l'intervention sera annulée veillez contacter le service client pour la reprogrammer ou aller sur l'application pour la reprogrammer.",
-        type: 'intervention',
-        relatedId: intervention.id,
-        sendPush: true
+        type: 'alert',
+        data: {
+          relatedId: intervention.id,
+          interventionId: intervention.id
+        }
       });
     }
 

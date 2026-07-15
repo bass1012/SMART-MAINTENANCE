@@ -242,48 +242,9 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         ),
       );
     }
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.info_outline,
-            color: Colors.orange.shade700,
-            size: 24,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Frais de diagnostic obligatoires',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange.shade900,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Les frais de diagnostic sont obligatoires pour tous les clients. Le technicien pourra intervenir après confirmation du paiement.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.orange.shade800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    
+    // On ne retourne plus la boîte 'Frais de diagnostic obligatoires'
+    return const SizedBox.shrink();
   }
 
   Widget _buildFineoPayInfo() {
@@ -427,7 +388,7 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         amount: widget.diagnosticFee,
         reference: 'DIAG-${widget.interventionId}',
         redirectUrl: 'smartmaintenance://payment-callback',
-        autoRedirect: true,
+        autoRedirect: false,
       );
       final paymentUrl =
           (paymentData['paymentUrl'] ?? paymentData['payment_url']) as String?;
