@@ -393,7 +393,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
+
+  Future<void> _deleteNotification(int notificationId) async {
+    try {
+      // Pour l'instant on utilise markNotificationAsRead coté API s'il n'y a pas de delete
+      await _notificationRepository.markNotificationAsRead(notificationId); 
+      setState(() {
+        _notifications.removeWhere((n) => n['id'] == notificationId);
+        _unreadCount = _notifications.where((n) => !(n['is_read'] ?? false)).length;
+      });
+
+      if (mounted) {
+        SnackBarHelper.showSuccess(context, 'Notification supprimée', emoji: '🗑️');
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackBarHelper.showError(context, 'Erreur lors de la suppression');
+      }
+    }
+  }
+
   Widget _buildNotificationCard(Map<String, dynamic> notification) {
+
     final isRead = notification['is_read'] ?? false;
     final type = notification['type'] ?? 'info';
     final createdAt = notification['created_at'] != null
@@ -401,9 +422,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         : DateTime.now();
     final timeAgo = _getTimeAgo(createdAt);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Dismissible(
+        key: Key(notification['id'].toString()),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          decoration: BoxDecoration(
+            color: Colors.red,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(
+            Icons.delete_outline,
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
+        onDismissed: (direction) {
+          _deleteNotification(notification['id']);
+        },
+        child: Container(
+          decoration: BoxDecoration(
         color: isRead
             ? Colors.white
             : const Color(0xFF0a543d)
@@ -524,6 +565,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ),
       ),
+    ),
+    ),
     );
   }
 

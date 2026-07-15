@@ -18,7 +18,7 @@ const generateQuotePdf = async (req, res) => {
     });
     
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=devis-${quote.reference}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename="devis-${quote.reference}.pdf"`);
     doc.pipe(res);
 
     // Path to Logo

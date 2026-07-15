@@ -518,9 +518,14 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
                 onPressed: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const TechnicianNotificationsScreen(),
+                    PageRouteBuilder(
+                      pageBuilder: (context, animation, secondaryAnimation) => const TechnicianNotificationsScreen(),
+                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                        const begin = Offset(-1.0, 0.0);
+                        const end = Offset.zero;
+                        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.easeInOut));
+                        return SlideTransition(position: animation.drive(tween), child: child);
+                      },
                     ),
                   );
                   // Recharger le nombre de notifications après retour

@@ -37,6 +37,22 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
     _refreshQuote();
   }
 
+  String _formatAmount(num amount) {
+    final formatter = NumberFormat('#,##0', 'fr_FR');
+    return formatter.format(amount).replaceAll(' ', ' ').replaceAll(',', ' ');
+  }
+
+  String _formatQuoteReference(String ref) {
+    final RegExp regExp = RegExp(r'(\d{2})(\d{2})(\d{2})');
+    return ref.replaceFirstMapped(regExp, (match) {
+      String yy = match.group(1)!;
+      String mm = match.group(2)!;
+      String dd = match.group(3)!;
+      return '$dd$mm$yy';
+    });
+  }
+
+
   Future<void> _downloadQuotePDF(String quoteId) async {
     showDialog(
       context: context,
@@ -176,7 +192,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                         ),
                                       ),
                                       Text(
-                                        '$halfAmount FCFA maintenant + $halfAmount FCFA après la 3ᵉ intervention',
+                                        '${_formatAmount(halfAmount)} FCFA maintenant + ${_formatAmount(halfAmount)} FCFA après la 3ᵉ intervention',
                                         style: const TextStyle(
                                             fontSize: 11, color: Colors.grey),
                                       ),
@@ -226,7 +242,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                         ),
                                       ),
                                       Text(
-                                        '$totalAmount FCFA en une seule fois',
+                                        '${_formatAmount(totalAmount)} FCFA en une seule fois',
                                         style: const TextStyle(
                                             fontSize: 11, color: Colors.grey),
                                       ),
@@ -610,18 +626,18 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
             amountToPay = _quote.amount;
             paymentStep = 0; // 0 = paiement complet
             print(
-                '💰 Paiement intégral: ${amountToPay.toStringAsFixed(0)} FCFA (100%)');
+                '💰 Paiement intégral: ${_formatAmount(amountToPay)} FCFA (100%)');
           } else if (firstPaymentAmount != null && firstPaymentAmount > 0) {
             amountToPay = firstPaymentAmount;
             paymentStep = 1;
             print(
-                '💰 Paiement split (API): ${amountToPay.toStringAsFixed(0)} FCFA (50% - étape 1)');
+                '💰 Paiement split (API): ${_formatAmount(amountToPay)} FCFA (50% - étape 1)');
           } else if (_quote.paymentType == 'split' &&
               _quote.firstPaymentAmount != null) {
             amountToPay = _quote.firstPaymentAmount!;
             paymentStep = 1;
             print(
-                '💰 Paiement split (quote): ${amountToPay.toStringAsFixed(0)} FCFA (50% - étape 1)');
+                '💰 Paiement split (quote): ${_formatAmount(amountToPay)} FCFA (50% - étape 1)');
           } else {
             // Fallback: utiliser le montant de la commande directement
             // Note: totalAmount de la commande est DÉJÀ le montant 50% pour split payment
@@ -629,12 +645,12 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
             if (orderAmount != null && orderAmount > 0) {
               amountToPay = (orderAmount as num).toDouble();
               print(
-                  '💰 Paiement (order totalAmount): ${amountToPay.toStringAsFixed(0)} FCFA');
+                  '💰 Paiement (order totalAmount): ${_formatAmount(amountToPay)} FCFA');
             } else {
               // Si pas de totalAmount, calculer 50% du total du devis
               amountToPay = (_quote.amount / 2).ceilToDouble();
               print(
-                  '💰 Paiement (quote 50%): ${amountToPay.toStringAsFixed(0)} FCFA');
+                  '💰 Paiement (quote 50%): ${_formatAmount(amountToPay)} FCFA');
             }
             paymentStep = 1;
           }
@@ -907,7 +923,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                             const SizedBox(height: 8),
                             // Référence sur sa propre ligne
                             SelectableText(
-                              _quote.reference,
+                              _formatQuoteReference(_quote.reference),
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -1071,7 +1087,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
-                                                '${item.quantity} × ${item.unitPrice.toStringAsFixed(0)} FCFA',
+                                                '${item.quantity} × ${_formatAmount(item.unitPrice)} FCFA',
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: Colors.grey.shade600,
@@ -1094,7 +1110,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
 
                                         // Total de la ligne
                                         Text(
-                                          '${item.total.toStringAsFixed(0)} FCFA',
+                                          '${_formatAmount(item.total)} FCFA',
                                           style: const TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.bold,
@@ -1199,7 +1215,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                           ),
                                         ),
                                         Text(
-                                          '${(_quote.amount / 2).ceil()} FCFA à l\'acceptation + ${(_quote.amount / 2).ceil()} FCFA après la 3ᵉ intervention',
+                                          '${_formatAmount((_quote.amount / 2).ceil())} FCFA à l\'acceptation + ${_formatAmount((_quote.amount / 2).ceil())} FCFA après la 3ᵉ intervention',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey.shade700,
@@ -1237,7 +1253,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                           ),
                                         ),
                                         Text(
-                                          '${_quote.amount.toInt()} FCFA en une seule fois',
+                                          '${_formatAmount(_quote.amount.toInt())} FCFA en une seule fois',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey.shade700,
@@ -1394,9 +1410,9 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                 label: Text(
                                     (_quote.paymentType == 'split' || _quote.firstPaymentAmount != null || _quote.secondPaymentAmount != null)
                                       ? (_quote.firstPaymentStatus == 'paid' || _quote.secondPaymentStatus == 'paid'
-                                          ? 'Payer le solde (50%) : ${((_quote.secondPaymentAmount ?? (_quote.amount - (_quote.firstPaymentAmount ?? (_quote.amount / 2).ceilToDouble()))).clamp(0, double.infinity)).toStringAsFixed(0)} FCFA'
-                                          : 'Payer l\'acompte (50%) : ${(_quote.firstPaymentAmount ?? (_quote.amount / 2).ceilToDouble()).toStringAsFixed(0)} FCFA')
-                                      : 'Payer le solde : ${_quote.amount.toStringAsFixed(0)} FCFA',
+                                          ? 'Payer le solde (50%) : ${_formatAmount(((_quote.secondPaymentAmount ?? (_quote.amount - (_quote.firstPaymentAmount ?? (_quote.amount / 2).ceilToDouble()))).clamp(0, double.infinity)))} FCFA'
+                                          : 'Payer l\'acompte (50%) : ${_formatAmount((_quote.firstPaymentAmount ?? (_quote.amount / 2).ceilToDouble()))} FCFA')
+                                      : 'Payer le solde : ${_formatAmount(_quote.amount)} FCFA',
                                   style: const TextStyle(fontSize: 16),
                                 ),
                                 style: ElevatedButton.styleFrom(
@@ -1501,7 +1517,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
           ),
         ),
         Text(
-          '${amount.toStringAsFixed(0)} FCFA',
+          '${_formatAmount(amount)} FCFA',
           style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -1572,7 +1588,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
           ),
         ),
         Text(
-          '${amount.toStringAsFixed(0)} FCFA',
+          '${_formatAmount(amount)} FCFA',
           style: TextStyle(
             fontSize: fontSize,
             fontWeight: isBold ? FontWeight.bold : FontWeight.w600,

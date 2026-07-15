@@ -497,33 +497,93 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     }
   }
 
-  Future<void> _pickImageFromGallery() async {
+  Future<void> _pickMediaFromGallery() async {
     if (_selectedImages.length >= _maxImages) {
       SnackBarHelper.showWarning(
         context,
-        'Maximum $_maxImages photos autorisées',
+        'Maximum $_maxImages fichiers (photos/vidéos) autorisés',
       );
       return;
     }
 
     try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final XFile? media = await _imagePicker.pickMedia(
         imageQuality: 80,
         maxWidth: 1920,
         maxHeight: 1080,
       );
 
-      if (image != null) {
+      if (media != null) {
+        final file = File(media.path);
+        
+        // Si c'est une vidéo, vérifier la limite de 30 Mo
+        if (media.path.toLowerCase().endsWith('.mp4') || 
+            media.path.toLowerCase().endsWith('.mov') || 
+            media.path.toLowerCase().endsWith('.avi')) {
+          final sizeInBytes = await file.length();
+          if (sizeInBytes > 30 * 1024 * 1024) {
+            if (mounted) {
+              SnackBarHelper.showWarning(
+                context,
+                'La vidéo dépasse la limite de 30 Mo',
+              );
+            }
+            return;
+          }
+        }
+
         setState(() {
-          _selectedImages.add(File(image.path));
+          _selectedImages.add(file);
         });
       }
     } catch (e) {
       if (mounted) {
         SnackBarHelper.showError(
           context,
-          'Erreur lors de la sélection de l\'image: $e',
+          'Erreur lors de la sélection du fichier: $e',
+        );
+      }
+    }
+  }
+
+  Future<void> _pickVideoFromCamera() async {
+    if (_selectedImages.length >= _maxImages) {
+      SnackBarHelper.showWarning(
+        context,
+        'Maximum $_maxImages fichiers (photos/vidéos) autorisés',
+      );
+      return;
+    }
+
+    try {
+      final XFile? video = await _imagePicker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 2),
+      );
+
+      if (video != null) {
+        final file = File(video.path);
+        final sizeInBytes = await file.length();
+        // 30MB limit check
+        if (sizeInBytes > 30 * 1024 * 1024) {
+          if (mounted) {
+            SnackBarHelper.showWarning(
+              context,
+              'La vidéo dépasse la limite de 30 Mo',
+            );
+          }
+          return;
+        }
+
+        setState(() {
+          _selectedImages.add(file);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackBarHelper.showError(
+          context,
+          'Erreur lors de la sélection de la vidéo: $e',
         );
       }
     }
@@ -818,17 +878,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // Type d'intervention
-                Text(
-                  'Type d\'intervention',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
+                // Type d'intervention (titre retiré)
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.95),
@@ -1433,7 +1483,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                 if (_selectedType == 'installation') ...[
                   const SizedBox(height: 16),
                   Text(
-                    'Service d\'installation',
+                    'Appareils à installer',
                     style: GoogleFonts.poppins(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -1519,7 +1569,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                               return DropdownMenuItem<int>(
                                 value: service.id,
                                 child: Text(
-                                  '${service.title} - ${service.model}',
+                                  service.title,
                                   style: GoogleFonts.poppins(fontSize: 13),
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 1,
@@ -1581,7 +1631,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                 if (_selectedType == 'repair') ...[
                   const SizedBox(height: 16),
                   Text(
-                    'Service de dépannage',
+                    'Appareils concernés',
                     style: GoogleFonts.poppins(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -1667,7 +1717,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                               return DropdownMenuItem<int>(
                                 value: service.id,
                                 child: Text(
-                                  '${service.title} - ${service.model}',
+                                  service.title,
                                   style: GoogleFonts.poppins(fontSize: 13),
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 1,
@@ -2028,12 +2078,31 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                child: Image.file(
-                                  _selectedImages[index],
-                                  width: 120,
-                                  height: 120,
-                                  fit: BoxFit.cover,
-                                ),
+                                child: _selectedImages[index].path.toLowerCase().endsWith('.mp4') ||
+                                       _selectedImages[index].path.toLowerCase().endsWith('.mov') ||
+                                       _selectedImages[index].path.toLowerCase().endsWith('.avi')
+                                    ? Container(
+                                        width: 120,
+                                        height: 120,
+                                        color: Colors.grey.shade200,
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.videocam, size: 40, color: Colors.grey.shade600),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Vidéo',
+                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : Image.file(
+                                        _selectedImages[index],
+                                        width: 120,
+                                        height: 120,
+                                        fit: BoxFit.cover,
+                                      ),
                               ),
                               Positioned(
                                 top: 4,
@@ -2094,9 +2163,9 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                                 onPressed: _selectedImages.length < _maxImages
                                     ? _pickImageFromCamera
                                     : null,
-                                icon: const Icon(Icons.camera_alt, size: 20),
+                                icon: const Icon(Icons.camera_alt, size: 18),
                                 label: const Text('Photo',
-                                    style: TextStyle(fontSize: 13)),
+                                    style: TextStyle(fontSize: 12)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: const Color(0xFF0a543d),
                                   padding:
@@ -2104,15 +2173,31 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: _selectedImages.length < _maxImages
-                                    ? _pickImageFromGallery
+                                    ? _pickMediaFromGallery
                                     : null,
-                                icon: const Icon(Icons.photo_library, size: 20),
+                                icon: const Icon(Icons.image, size: 18),
                                 label: const Text('Galerie',
-                                    style: TextStyle(fontSize: 13)),
+                                    style: TextStyle(fontSize: 12)),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF0a543d),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _selectedImages.length < _maxImages
+                                    ? _pickVideoFromCamera
+                                    : null,
+                                icon: const Icon(Icons.videocam, size: 18),
+                                label: const Text('Vidéo',
+                                    style: TextStyle(fontSize: 12)),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: const Color(0xFF0a543d),
                                   padding:
@@ -2124,7 +2209,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Jusqu\'à $_maxImages photos pour aider le technicien',
+                          'Jusqu\'à $_maxImages fichiers (photos/vidéos) pour aider le technicien',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade600,

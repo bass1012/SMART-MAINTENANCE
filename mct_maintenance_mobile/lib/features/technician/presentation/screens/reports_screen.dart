@@ -251,17 +251,18 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.grey.shade300, Colors.grey.shade100],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0a543d), Color(0xFF0f7d59)],
                 ),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.description_outlined,
-                size: 60,
+                size: 64,
                 color: Colors.white,
               ),
             ),
@@ -270,17 +271,19 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
               'Aucun rapport',
               style: GoogleFonts.poppins(
                 fontSize: 20,
-                color: Colors.grey[700],
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               'Vos rapports d\'intervention apparaîtront ici',
               style: GoogleFonts.poppins(
                 fontSize: 14,
-                color: Colors.grey[500],
+                color: Colors.grey[600],
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

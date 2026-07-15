@@ -578,8 +578,14 @@ class _ManagerMainScreenState extends State<ManagerMainScreen> {
       onPressed: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => const NotificationsScreen(),
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const NotificationsScreen(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(-1.0, 0.0);
+              const end = Offset.zero;
+              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.easeInOut));
+              return SlideTransition(position: animation.drive(tween), child: child);
+            },
           ),
         );
       },

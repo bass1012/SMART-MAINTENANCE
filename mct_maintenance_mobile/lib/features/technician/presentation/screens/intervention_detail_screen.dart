@@ -9,6 +9,7 @@ import 'package:mct_maintenance_mobile/features/technician/presentation/screens/
 import 'package:mct_maintenance_mobile/features/technician/presentation/screens/view_diagnostic_report_screen.dart';
 import 'package:mct_maintenance_mobile/features/technician/presentation/screens/split_scan_screen.dart';
 import 'package:mct_maintenance_mobile/models/split.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -174,6 +175,19 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         default:
           throw Exception('Action inconnue');
       }
+      
+      // Sauvegarder l'heure localement pour le rapport si le backend ne la renvoie pas
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final nowIso = DateTime.now().toIso8601String();
+        if (action == 'start' || action == 'in_progress') {
+          await prefs.setString('intervention_${interventionId}_started_at', nowIso);
+        } else if (action == 'complete') {
+          await prefs.setString('intervention_${interventionId}_completed_at', nowIso);
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('Erreur sauvegarde heure locale: $e');
+      }
 
       if (mounted) {
         // Mettre à jour l'intervention localement
@@ -197,9 +211,9 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
               _intervention['status'] = 'completed';
               break;
           }
-          // Surcharger avec le statut API si disponible
-          if (response['data'] != null && response['data']['status'] != null) {
-            _intervention['status'] = response['data']['status'];
+          // Surcharger avec les données de l'API si disponibles (notamment started_at, completed_at)
+          if (response['data'] != null && response['data'] is Map) {
+            _intervention.addAll(Map<String, dynamic>.from(response['data']));
           }
           _isLoading = false;
         });
@@ -789,10 +803,8 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     final canShowMapButton = [
       'accepted',
       'on_the_way',
-      'arrived',
-      'in_progress',
-      'execution_confirmed'
     ].contains(status);
+
 
     // Bouton principal selon le statut
     Widget? mainButton;

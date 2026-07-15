@@ -36,9 +36,13 @@ class InterventionRepositoryImpl implements InterventionRepository {
     final List<http.MultipartFile> files = [];
     if (images != null) {
       for (final image in images) {
-        final mimeType = image.path.toLowerCase().endsWith('.png')
-            ? 'image/png'
-            : 'image/jpeg';
+        String mimeType = 'image/jpeg'; // default
+        final lowerPath = image.path.toLowerCase();
+        if (lowerPath.endsWith('.png')) mimeType = 'image/png';
+        else if (lowerPath.endsWith('.mp4')) mimeType = 'video/mp4';
+        else if (lowerPath.endsWith('.mov')) mimeType = 'video/quicktime';
+        else if (lowerPath.endsWith('.avi')) mimeType = 'video/x-msvideo';
+
         files.add(await http.MultipartFile.fromPath(
           'images',
           image.path,
@@ -86,23 +90,35 @@ class InterventionRepositoryImpl implements InterventionRepository {
       return {'success': true, 'data': results, 'from_cache': true};
     }
 
-    final endpoint = '/api/interventions${_buildQueryString(queryParams)}';
-    final response = await _apiService.get(endpoint);
-    final responseData = jsonDecode(response.body);
+    try {
+      final endpoint = '/api/interventions${_buildQueryString(queryParams)}';
+      final response = await _apiService.get(endpoint);
+      final responseData = jsonDecode(response.body);
 
-    // Mettre en cache les résultats
-    if (responseData['success'] == true && responseData['data'] != null) {
-      final rawData = responseData['data'];
-      // L'API peut retourner data directement comme List ou comme Map { interventions: [] }
-      final List<dynamic> interventions = rawData is List
-          ? rawData
-          : (rawData is Map ? (rawData['interventions'] as List? ?? []) : []);
-      for (var intervention in interventions) {
-        await _cacheService.cacheIntervention(intervention);
+      // Mettre en cache les résultats
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final rawData = responseData['data'];
+        // L'API peut retourner data directement comme List ou comme Map { interventions: [] }
+        final List<dynamic> interventions = rawData is List
+            ? rawData
+            : (rawData is Map ? (rawData['interventions'] as List? ?? []) : []);
+        for (var intervention in interventions) {
+          await _cacheService.cacheIntervention(intervention);
+        }
       }
-    }
 
-    return responseData;
+      return responseData;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Erreur réseau sur getInterventions, fallback cache: $e');
+      }
+      final cached = await _cacheService.getCachedInterventions();
+      var results = cached;
+      if (status != null) {
+        results = cached.where((i) => i['status'] == status).toList();
+      }
+      return {'success': true, 'data': results, 'from_cache': true, 'offline_fallback': true};
+    }
   }
 
   @override
@@ -111,10 +127,51 @@ class InterventionRepositoryImpl implements InterventionRepository {
     final queryParams = <String, String>{};
     if (status != null) queryParams['status'] = status;
 
-    final endpoint =
-        '/api/technician/interventions${_buildQueryString(queryParams)}';
-    final response = await _apiService.get(endpoint);
-    return jsonDecode(response.body);
+    // Mode Offline
+    if (!_connectivityService.isConnected) {
+      if (kDebugMode) {
+        debugPrint('📦 Mode offline - Lecture interventions technicien depuis cache');
+      }
+      final cached = await _cacheService.getCachedInterventions();
+
+      // Filtrer par status si demandé
+      var results = cached;
+      if (status != null) {
+        results = cached.where((i) => i['status'] == status).toList();
+      }
+
+      return {'success': true, 'data': results, 'from_cache': true};
+    }
+
+    try {
+      final endpoint =
+          '/api/technician/interventions${_buildQueryString(queryParams)}';
+      final response = await _apiService.get(endpoint);
+      final responseData = jsonDecode(response.body);
+
+      // Mettre en cache les résultats
+      if (responseData['success'] == true && responseData['data'] != null) {
+        final rawData = responseData['data'];
+        final List<dynamic> interventions = rawData is List
+            ? rawData
+            : (rawData is Map ? (rawData['interventions'] as List? ?? []) : []);
+        for (var intervention in interventions) {
+          await _cacheService.cacheIntervention(intervention);
+        }
+      }
+
+      return responseData;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Erreur réseau sur getTechnicianInterventions, fallback cache: $e');
+      }
+      final cached = await _cacheService.getCachedInterventions();
+      var results = cached;
+      if (status != null) {
+        results = cached.where((i) => i['status'] == status).toList();
+      }
+      return {'success': true, 'data': results, 'from_cache': true, 'offline_fallback': true};
+    }
   }
 
   @override
@@ -156,14 +213,25 @@ class InterventionRepositoryImpl implements InterventionRepository {
       }
     }
 
-    final response = await _apiService.get('/api/interventions/$id');
-    final responseData = jsonDecode(response.body);
+    try {
+      final response = await _apiService.get('/api/interventions/$id');
+      final responseData = jsonDecode(response.body);
 
-    if (responseData['success'] == true && responseData['data'] != null) {
-      await _cacheService.cacheIntervention(responseData['data']);
+      if (responseData['success'] == true && responseData['data'] != null) {
+        await _cacheService.cacheIntervention(responseData['data']);
+      }
+
+      return responseData;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Erreur réseau sur getInterventionById, fallback cache: $e');
+      }
+      final cached = await _cacheService.getCachedIntervention(id);
+      if (cached != null) {
+        return {'success': true, 'data': cached, 'from_cache': true, 'offline_fallback': true};
+      }
+      rethrow;
     }
-
-    return responseData;
   }
 
   @override
@@ -234,17 +302,33 @@ class InterventionRepositoryImpl implements InterventionRepository {
       return _queueAction(id, 'accept', 'accepted');
     }
     final response = await _apiService.post('/api/interventions/$id/accept');
-    return jsonDecode(response.body);
+    final responseData = jsonDecode(response.body);
+    if (responseData['success'] == true) {
+      try {
+        await _cacheService.updateCachedIntervention(id, {'status': 'in_progress'});
+      } catch (e) {
+        if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
+      }
+    }
+    return responseData;
   }
 
   @override
   Future<Map<String, dynamic>> markInterventionOnTheWay(int id) async {
     if (!_connectivityService.isConnected) {
-      return _queueAction(id, 'on-the-way', 'on_the_way');
+      return _queueAction(id, 'on_the_way', 'on_the_way');
     }
     final response =
         await _apiService.post('/api/interventions/$id/on-the-way');
-    return jsonDecode(response.body);
+    final responseData = jsonDecode(response.body);
+    if (responseData['success'] == true) {
+      try {
+        await _cacheService.updateCachedIntervention(id, {'status': 'on_the_way'});
+      } catch (e) {
+        if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
+      }
+    }
+    return responseData;
   }
 
   @override
@@ -253,7 +337,15 @@ class InterventionRepositoryImpl implements InterventionRepository {
       return _queueAction(id, 'arrived', 'arrived');
     }
     final response = await _apiService.post('/api/interventions/$id/arrived');
-    return jsonDecode(response.body);
+    final responseData = jsonDecode(response.body);
+    if (responseData['success'] == true) {
+      try {
+        await _cacheService.updateCachedIntervention(id, {'status': 'arrived'});
+      } catch (e) {
+        if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
+      }
+    }
+    return responseData;
   }
 
   @override
@@ -262,7 +354,15 @@ class InterventionRepositoryImpl implements InterventionRepository {
       return _queueAction(id, 'start', 'in_progress');
     }
     final response = await _apiService.post('/api/interventions/$id/start');
-    return jsonDecode(response.body);
+    final responseData = jsonDecode(response.body);
+    if (responseData['success'] == true) {
+      try {
+        await _cacheService.updateCachedIntervention(id, {'status': 'in_progress'});
+      } catch (e) {
+        if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
+      }
+    }
+    return responseData;
   }
 
   @override
@@ -271,7 +371,15 @@ class InterventionRepositoryImpl implements InterventionRepository {
       return _queueAction(id, 'complete', 'completed');
     }
     final response = await _apiService.post('/api/interventions/$id/complete');
-    return jsonDecode(response.body);
+    final responseData = jsonDecode(response.body);
+    if (responseData['success'] == true) {
+      try {
+        await _cacheService.updateCachedIntervention(id, {'status': 'completed'});
+      } catch (e) {
+        if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
+      }
+    }
+    return responseData;
   }
 
   @override
@@ -303,11 +411,18 @@ class InterventionRepositoryImpl implements InterventionRepository {
     }
 
     // Online submission
-    final fields = <String, String>{
-      'work_description': reportData['work_description']?.toString() ?? '',
-      'duration': reportData['duration']?.toString() ?? '0',
-      'observations': reportData['observations']?.toString() ?? '',
-    };
+    final fields = <String, String>{};
+    reportData.forEach((key, value) {
+      if (value != null) {
+        if (key == 'photos') {
+          // Géré séparément
+        } else if (value is List || value is Map) {
+          fields[key] = jsonEncode(value);
+        } else {
+          fields[key] = value.toString();
+        }
+      }
+    });
 
     final List<http.MultipartFile> files = [];
     final List<String> imagePaths = (reportData['photos'] as List<dynamic>?)
@@ -318,10 +433,14 @@ class InterventionRepositoryImpl implements InterventionRepository {
     for (final path in imagePaths) {
       final file = File(path);
       if (await file.exists()) {
-        final mimeType =
-            path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+        String mimeType = 'image/jpeg'; // default
+        final lowerPath = path.toLowerCase();
+        if (lowerPath.endsWith('.png')) mimeType = 'image/png';
+        else if (lowerPath.endsWith('.mp4')) mimeType = 'video/mp4';
+        else if (lowerPath.endsWith('.mov')) mimeType = 'video/quicktime';
+        else if (lowerPath.endsWith('.avi')) mimeType = 'video/x-msvideo';
         files.add(await http.MultipartFile.fromPath(
-          'photos',
+          'images',
           path,
           contentType: http_parser.MediaType.parse(mimeType),
         ));

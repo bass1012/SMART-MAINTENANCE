@@ -49,7 +49,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Cette application a besoin d'accéder à votre caméra pour prendre une photo de profil.</string>
+	<string>Cette application a besoin d'accéder à votre caméra pour prendre une photo de profil ou filmer une intervention.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Cette application a besoin d'accéder à votre microphone pour enregistrer le son des vidéos d'intervention.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Cette application a besoin d'accéder au réseau local pour le débogage et les notifications.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

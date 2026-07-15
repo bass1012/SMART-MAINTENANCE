@@ -8,6 +8,7 @@ import 'package:mct_maintenance_mobile/features/technician/presentation/screens/
 import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CreateReportScreen extends StatefulWidget {
   final Map<String, dynamic> intervention;
@@ -62,12 +63,61 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     _initializeEquipments();
     _loadCurrentUser();
     _loadExistingReportData();
+    _loadTimesFromPrefs();
+  }
+
+  Future<void> _loadTimesFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = widget.intervention['id'];
+
+    if (mounted) {
+      setState(() {
+        if (_startTime == null) {
+          String? startedAtStr = widget.intervention['started_at'] ??
+              prefs.getString('intervention_${id}_started_at');
+          if (startedAtStr != null) {
+            try {
+              final startedAt = DateTime.parse(startedAtStr).toLocal();
+              _startTime =
+                  TimeOfDay(hour: startedAt.hour, minute: startedAt.minute);
+            } catch (e) {
+              _startTime = TimeOfDay.now();
+            }
+          } else {
+            _startTime = TimeOfDay.now();
+            final now = DateTime.now();
+            prefs.setString(
+                'intervention_${id}_started_at', now.toIso8601String());
+          }
+        }
+
+        if (_endTime == null) {
+          String? completedAtStr = widget.intervention['completed_at'] ??
+              prefs.getString('intervention_${id}_completed_at');
+          if (completedAtStr != null) {
+            try {
+              final completedAt = DateTime.parse(completedAtStr).toLocal();
+              _endTime =
+                  TimeOfDay(hour: completedAt.hour, minute: completedAt.minute);
+            } catch (e) {
+              _endTime = TimeOfDay.now();
+            }
+          } else {
+            _endTime = TimeOfDay.now();
+            final now = DateTime.now();
+            prefs.setString(
+                'intervention_${id}_completed_at', now.toIso8601String());
+          }
+        }
+      });
+    }
   }
 
   void _initializeEquipments() {
     // Déterminer le nombre d'équipements depuis l'intervention
     final equipmentCount = widget.intervention['equipment_count'] ?? 1;
-    if (kDebugMode) debugPrint('📦 Initialisation de $equipmentCount équipement(s)');
+    if (kDebugMode)
+      debugPrint('📦 Initialisation de $equipmentCount équipement(s)');
 
     for (int i = 0; i < equipmentCount; i++) {
       _equipments.add(_createEmptyEquipment(i + 1));
@@ -78,12 +128,14 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     return {
       'index': index,
       'state': null,
+      'name': '',
       'type': '',
       'brand': '',
       'pression': '',
       'puissance': '',
       'intensite': '',
       'tension': '',
+      'freon': '',
     };
   }
 
@@ -101,7 +153,8 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     if (widget.intervention['report_data'] != null) {
       try {
         final reportData = widget.intervention['report_data'];
-        if (kDebugMode) debugPrint('🔍 Type de report_data: ${reportData.runtimeType}');
+        if (kDebugMode)
+          debugPrint('🔍 Type de report_data: ${reportData.runtimeType}');
 
         Map<String, dynamic> data = {};
 
@@ -118,19 +171,22 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               (data['equipments'] as List)
                   .map((e) => Map<String, dynamic>.from(e)),
             );
-            if (kDebugMode) debugPrint('✅ ${_equipments.length} équipement(s) chargé(s)');
+            if (kDebugMode)
+              debugPrint('✅ ${_equipments.length} équipement(s) chargé(s)');
           } else {
             // Ancienne structure mono-équipement - migrer
             if (_equipments.isNotEmpty) {
               _equipments[0] = {
                 'index': 1,
                 'state': data['equipment_state'],
+                'name': data['equipment_name'] ?? '',
                 'type': data['equipment_type'] ?? '',
                 'brand': data['equipment_brand'] ?? '',
                 'pression': data['pression']?.toString() ?? '',
                 'puissance': data['puissance']?.toString() ?? '',
                 'intensite': data['intensite']?.toString() ?? '',
                 'tension': data['tension']?.toString() ?? '',
+                'freon': data['freon']?.toString() ?? '',
               };
             }
           }
@@ -172,14 +228,17 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                   return {'name': item.toString(), 'quantity': 1};
                 }),
               );
-              if (kDebugMode) debugPrint('✅ ${_spareParts.length} pièces de rechange chargées');
+              if (kDebugMode)
+                debugPrint(
+                    '✅ ${_spareParts.length} pièces de rechange chargées');
             }
           }
 
           setState(() {});
         }
       } catch (e, stackTrace) {
-        if (kDebugMode) debugPrint('❌ Erreur lors du chargement des données du rapport: $e');
+        if (kDebugMode)
+          debugPrint('❌ Erreur lors du chargement des données du rapport: $e');
         if (kDebugMode) debugPrint('❌ Stack trace: $stackTrace');
       }
     }
@@ -286,7 +345,35 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     } catch (e) {
       if (mounted) {
         SnackBarHelper.showError(
-            context, 'Erreur lors de la prise de photo: \$e');
+            context, 'Erreur lors de la prise de photo: $e');
+      }
+    }
+  }
+
+  Future<void> _takeVideo() async {
+    try {
+      final XFile? video = await _picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 2),
+      );
+      if (video != null) {
+        final file = File(video.path);
+        final sizeInBytes = await file.length();
+        if (sizeInBytes > 30 * 1024 * 1024) {
+          if (mounted) {
+            SnackBarHelper.showWarning(
+                context, 'La vidéo dépasse la limite de 30 Mo');
+          }
+          return;
+        }
+        setState(() {
+          _photos.add(video);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackBarHelper.showError(
+            context, 'Erreur lors de la prise de vidéo: $e');
       }
     }
   }
@@ -399,12 +486,14 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       'equipment_count': _equipments.length,
       // Compatibilité avec l'ancienne structure (premier équipement)
       'equipment_state': firstEquipment['state'] ?? '',
+      'equipment_name': firstEquipment['name'] ?? '',
       'equipment_type': firstEquipment['type'] ?? '',
       'equipment_brand': firstEquipment['brand'] ?? '',
       'pression': firstEquipment['pression'] ?? '',
       'puissance': firstEquipment['puissance'] ?? '',
       'intensite': firstEquipment['intensite'] ?? '',
       'tension': firstEquipment['tension'] ?? '',
+      'freon': firstEquipment['freon'] ?? '',
       // Détail intervention
       'technician_name': _getTechnicianName(),
       'intervention_date': _interventionDate?.toIso8601String(),
@@ -445,7 +534,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0a543d).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
@@ -495,9 +584,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                equipment['brand']?.isNotEmpty == true
-                    ? '${equipment['brand']} - ${equipment['type']}'
-                    : 'Équipement ${index + 1}',
+                equipment['name']?.isNotEmpty == true
+                    ? equipment['name']
+                    : (equipment['brand']?.isNotEmpty == true
+                        ? '${equipment['brand']} - ${equipment['type']}'
+                        : 'Équipement ${index + 1}'),
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
             ),
@@ -524,9 +615,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: equipment['state'],
                   decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    filled: true,
-                    fillColor: Colors.white,
                     hintText: 'Sélectionner l\'état',
                   ),
                   items: _equipmentStates.map((state) {
@@ -540,6 +628,31 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       _equipments[index]['state'] = value;
                     });
                   },
+                ),
+                const SizedBox(height: 16),
+
+                // Désignation / Nom
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Désignation / Nom',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      initialValue: equipment['name'],
+                      decoration: const InputDecoration(
+                        hintText: 'Ex: Split Bureau Directeur',
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _equipments[index]['name'] = value;
+                        });
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
@@ -559,13 +672,12 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                           TextFormField(
                             initialValue: equipment['type'],
                             decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Colors.white,
                               hintText: 'Ex: Climatiseur mural',
                             ),
                             onChanged: (value) {
-                              _equipments[index]['type'] = value;
+                              setState(() {
+                                _equipments[index]['type'] = value;
+                              });
                             },
                           ),
                         ],
@@ -585,13 +697,12 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                           TextFormField(
                             initialValue: equipment['brand'],
                             decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Colors.white,
                               hintText: 'Ex: LK, Carrier',
                             ),
                             onChanged: (value) {
-                              _equipments[index]['brand'] = value;
+                              setState(() {
+                                _equipments[index]['brand'] = value;
+                              });
                             },
                           ),
                         ],
@@ -617,9 +728,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                             keyboardType: const TextInputType.numberWithOptions(
                                 decimal: true),
                             decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Colors.white,
                               hintText: 'Ex: 12.5',
                               suffixText: 'bar',
                             ),
@@ -644,9 +752,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                             keyboardType: const TextInputType.numberWithOptions(
                                 decimal: true),
                             decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Colors.white,
                               hintText: 'Ex: 2.5',
                               suffixText: 'CV',
                             ),
@@ -676,9 +781,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                             keyboardType: const TextInputType.numberWithOptions(
                                 decimal: true),
                             decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Colors.white,
                               hintText: 'Ex: 5.2',
                               suffixText: 'A',
                             ),
@@ -703,9 +805,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                             keyboardType: const TextInputType.numberWithOptions(
                                 decimal: true),
                             decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              filled: true,
-                              fillColor: Colors.white,
                               hintText: 'Ex: 220',
                               suffixText: 'V',
                             ),
@@ -716,6 +815,37 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                         ],
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Fréon',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w500, fontSize: 14)),
+                          const SizedBox(height: 8),
+                          TextFormField(
+                            initialValue: equipment['freon'],
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: const InputDecoration(
+                              hintText: 'Ex: 1.2',
+                              suffixText: 'Kg',
+                            ),
+                            onChanged: (value) {
+                              _equipments[index]['freon'] = value;
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: const SizedBox()),
                   ],
                 ),
               ],
@@ -816,8 +946,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
                                   color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.grey[300]!),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border:
+                                      Border.all(color: Colors.grey.shade200),
                                 ),
                                 child: Row(
                                   children: [
@@ -849,10 +980,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(16),
                                     border:
-                                        Border.all(color: Colors.grey[400]!),
+                                        Border.all(color: Colors.grey.shade200),
                                   ),
                                   child: Row(
                                     children: [
@@ -893,11 +1024,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                             width: double.infinity,
                                             padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
-                                              color: Colors.white,
+                                              color: Colors.grey.shade50,
                                               borderRadius:
-                                                  BorderRadius.circular(8),
+                                                  BorderRadius.circular(16),
                                               border: Border.all(
-                                                  color: Colors.grey[400]!),
+                                                  color: Colors.grey.shade200),
                                             ),
                                             child: Row(
                                               children: [
@@ -938,11 +1069,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                             width: double.infinity,
                                             padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
-                                              color: Colors.white,
+                                              color: Colors.grey.shade50,
                                               borderRadius:
-                                                  BorderRadius.circular(8),
+                                                  BorderRadius.circular(16),
                                               border: Border.all(
-                                                  color: Colors.grey[400]!),
+                                                  color: Colors.grey.shade200),
                                             ),
                                             child: Row(
                                               children: [
@@ -970,7 +1101,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                 const SizedBox(height: 8),
                                 Center(
                                   child: Text(
-                                    'Durée: \${_calculateDuration()} min',
+                                    'Durée: ${_calculateDuration()} min',
                                     style: TextStyle(
                                       color: Colors.grey[600],
                                       fontStyle: FontStyle.italic,
@@ -993,9 +1124,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                 decoration: const InputDecoration(
                                   hintText:
                                       'Décrivez en détail le travail effectué...',
-                                  border: OutlineInputBorder(),
-                                  filled: true,
-                                  fillColor: Colors.white,
                                 ),
                                 validator: (value) {
                                   if (value == null || value.trim().isEmpty) {
@@ -1019,9 +1147,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                 decoration: const InputDecoration(
                                   hintText:
                                       'Observations, recommandations pour le client...',
-                                  border: OutlineInputBorder(),
-                                  filled: true,
-                                  fillColor: Colors.white,
                                 ),
                               ),
                             ],
@@ -1070,8 +1195,8 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                   padding: const EdgeInsets.all(24),
                                   decoration: BoxDecoration(
                                     border:
-                                        Border.all(color: Colors.grey[300]!),
-                                    borderRadius: BorderRadius.circular(8),
+                                        Border.all(color: Colors.grey.shade200),
+                                    borderRadius: BorderRadius.circular(16),
                                     color: Colors.grey[50],
                                   ),
                                   child: const Center(
@@ -1118,7 +1243,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       // ============================================
                       // SECTION 4: PHOTOS
                       // ============================================
-                      _buildSectionTitle('Photos', Icons.camera_alt),
+                      _buildSectionTitle('Photos/Vidéos', Icons.camera_alt),
                       const SizedBox(height: 16),
                       Card(
                         elevation: 2,
@@ -1126,19 +1251,28 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                           padding: const EdgeInsets.all(16.0),
                           child: Column(
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.center,
                                 children: [
                                   ElevatedButton.icon(
                                     onPressed: _takePicture,
                                     icon:
                                         const Icon(Icons.camera_alt, size: 18),
-                                    label: const Text('Prendre photo'),
+                                    label: const Text('Photo'),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.blue,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
+                                  ElevatedButton.icon(
+                                    onPressed: _takeVideo,
+                                    icon: const Icon(Icons.videocam, size: 18),
+                                    label: const Text('Vidéo'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blueGrey,
+                                    ),
+                                  ),
                                   ElevatedButton.icon(
                                     onPressed: _pickImages,
                                     icon: const Icon(Icons.photo_library,
@@ -1157,13 +1291,13 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                   padding: const EdgeInsets.all(24),
                                   decoration: BoxDecoration(
                                     border:
-                                        Border.all(color: Colors.grey[300]!),
-                                    borderRadius: BorderRadius.circular(8),
+                                        Border.all(color: Colors.grey.shade200),
+                                    borderRadius: BorderRadius.circular(16),
                                     color: Colors.grey[50],
                                   ),
                                   child: const Center(
                                     child: Text(
-                                      'Aucune photo ajoutée',
+                                      'Aucun média ajouté',
                                       style: TextStyle(color: Colors.grey),
                                     ),
                                   ),
@@ -1184,13 +1318,49 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                       children: [
                                         ClipRRect(
                                           borderRadius:
-                                              BorderRadius.circular(8),
-                                          child: Image.file(
-                                            File(_photos[index].path),
-                                            fit: BoxFit.cover,
-                                            width: double.infinity,
-                                            height: double.infinity,
-                                          ),
+                                              BorderRadius.circular(16),
+                                          child: _photos[index]
+                                                      .path
+                                                      .toLowerCase()
+                                                      .endsWith('.mp4') ||
+                                                  _photos[index]
+                                                      .path
+                                                      .toLowerCase()
+                                                      .endsWith('.mov') ||
+                                                  _photos[index]
+                                                      .path
+                                                      .toLowerCase()
+                                                      .endsWith('.avi')
+                                              ? Container(
+                                                  width: double.infinity,
+                                                  height: double.infinity,
+                                                  color: Colors.grey.shade200,
+                                                  child: Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Icon(Icons.videocam,
+                                                          size: 40,
+                                                          color: Colors
+                                                              .grey.shade600),
+                                                      const SizedBox(height: 8),
+                                                      Text(
+                                                        'Vidéo',
+                                                        style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Colors
+                                                                .grey.shade600),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                )
+                                              : Image.file(
+                                                  File(_photos[index].path),
+                                                  fit: BoxFit.cover,
+                                                  width: double.infinity,
+                                                  height: double.infinity,
+                                                ),
                                         ),
                                         Positioned(
                                           top: 4,

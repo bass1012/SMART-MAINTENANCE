@@ -147,9 +147,16 @@ class NotificationNavigationService {
         _navigateToContractWithReplace(navigator, notificationData);
         break;
 
-      // Alerte adresse requise - naviguer vers le profil
+      // Alerte - naviguer vers l'intervention si un ID est fourni, sinon vers le profil (adresse requise)
       case 'alert':
-        _navigateToProfileWithReplace(navigator, notificationData);
+        if (notificationData['relatedId'] != null || 
+            notificationData['related_id'] != null ||
+            notificationData['interventionId'] != null ||
+            notificationData['intervention_id'] != null) {
+          _navigateToInterventionWithReplace(navigator, notificationData);
+        } else {
+          _navigateToProfileWithReplace(navigator, notificationData);
+        }
         break;
 
       // Contrat activé - naviguer vers le contrat
@@ -171,7 +178,10 @@ class NotificationNavigationService {
     if (kDebugMode) debugPrint('   intervention_id brut: ${data['intervention_id']}');
 
     final int? interventionId =
-        _parseId(data['interventionId']) ?? _parseId(data['intervention_id']);
+        _parseId(data['interventionId']) ?? 
+        _parseId(data['intervention_id']) ??
+        _parseId(data['relatedId']) ??
+        _parseId(data['related_id']);
     final String? role = data['role'];
 
     if (kDebugMode) debugPrint('   interventionId parsé: $interventionId');
@@ -678,7 +688,14 @@ class NotificationNavigationService {
 
       // Alerte adresse requise - naviguer vers le profil
       case 'alert':
-        _navigateToProfile(context, notificationData);
+        if (notificationData['relatedId'] != null || 
+            notificationData['related_id'] != null ||
+            notificationData['interventionId'] != null ||
+            notificationData['intervention_id'] != null) {
+          _navigateToInterventionDetails(context, notificationData);
+        } else {
+          _navigateToProfile(context, notificationData);
+        }
         break;
 
       // Notifications générales
@@ -700,7 +717,10 @@ class NotificationNavigationService {
       BuildContext context, Map<String, dynamic> data) async {
     // Support both interventionId and intervention_id keys
     final int? interventionId =
-        _parseId(data['interventionId']) ?? _parseId(data['intervention_id']);
+        _parseId(data['interventionId']) ?? 
+        _parseId(data['intervention_id']) ??
+        _parseId(data['relatedId']) ??
+        _parseId(data['related_id']);
     final String? role = data['role'];
 
     if (interventionId == null) {
@@ -1246,8 +1266,14 @@ class NotificationNavigationService {
     if (kDebugMode) debugPrint('→ Navigation vers notifications');
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const NotificationsScreen(),
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => const NotificationsScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(-1.0, 0.0);
+          const end = Offset.zero;
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.easeInOut));
+          return SlideTransition(position: animation.drive(tween), child: child);
+        },
       ),
     );
   }

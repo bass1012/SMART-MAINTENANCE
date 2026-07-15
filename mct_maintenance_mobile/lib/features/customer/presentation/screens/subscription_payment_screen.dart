@@ -5,7 +5,7 @@ import 'package:mct_maintenance_mobile/features/customer/domain/repositories/pay
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'payment_webview_screen.dart';
+
 import 'new_intervention_screen.dart';
 
 class SubscriptionPaymentScreen extends StatefulWidget {
@@ -30,7 +30,7 @@ class SubscriptionPaymentScreen extends StatefulWidget {
 class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
   late final PaymentRepository _paymentRepository;
   bool _isProcessing = false;
-  bool _isPolling = false;
+
   int _pollCount = 0;
   static const int _maxPolls = 60; // 5 minutes max (60 x 5s)
   Timer? _pollTimer;
@@ -50,13 +50,11 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
   void _stopPolling() {
     _pollTimer?.cancel();
     _pollTimer = null;
-    if (mounted) setState(() => _isPolling = false);
   }
 
   void _startPaymentPolling() {
     if (_pollTimer != null) return; // déjà en cours
     setState(() {
-      _isPolling = true;
       _pollCount = 0;
     });
 
@@ -167,39 +165,7 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
     }
   }
 
-  /// Vérifier le statut du paiement après le WebView
-  Future<void> _checkPaymentStatus() async {
-    if (!mounted) return;
 
-    // Attendre un court délai pour laisser le webhook FineoPay se traiter
-    await Future.delayed(const Duration(seconds: 2));
-
-    try {
-      final response = await _paymentRepository.verifySubscriptionPayment(
-        widget.subscriptionId,
-      );
-
-      final paymentStatus = response['data']?['payment_status'];
-      if (kDebugMode) {
-        debugPrint('📊 Vérification statut paiement: $paymentStatus');
-      }
-
-      if (paymentStatus == 'paid') {
-        _showPaymentSuccess();
-      } else {
-        // Paiement pas encore confirmé - démarrer le polling
-        if (mounted) {
-          _startPaymentPolling();
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('❌ Erreur vérification paiement: $e');
-      // En cas d'erreur, démarrer le polling quand même
-      if (mounted) {
-        _startPaymentPolling();
-      }
-    }
-  }
 
   void _showPaymentSuccess() {
     if (!mounted) return;
@@ -580,20 +546,20 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
         amount: widget.amount,
         reference: 'SUB-${widget.subscriptionId}',
         redirectUrl: 'smartmaintenance://payment-callback',
-        autoRedirect: true,
+        autoRedirect: false,
       );
 
       if (mounted) {
-        // Vérifier si on a un lien de paiement FineoPay
-        final checkoutUrl = response['data']?['checkoutUrl'];
+        // Le repository retourne déjà decoded['data'] — lire directement la clé FineoPay
+        final paymentUrl = (response['paymentUrl'] ?? response['checkoutUrl']) as String?;
 
-        if (checkoutUrl != null && checkoutUrl.isNotEmpty) {
+        if (paymentUrl != null && paymentUrl.isNotEmpty) {
           if (kDebugMode) {
-            debugPrint('🔗 Ouverture du paiement dans le navigateur externe: $checkoutUrl');
+            debugPrint('🔗 Ouverture du paiement dans le navigateur externe: $paymentUrl');
           }
 
           // Ouvrir le paiement dans le navigateur externe
-          final Uri uri = Uri.parse(checkoutUrl);
+          final Uri uri = Uri.parse(paymentUrl);
           await launchUrl(uri, mode: LaunchMode.externalApplication);
 
           // Lancer directement le polling pour vérifier le statut du paiement
