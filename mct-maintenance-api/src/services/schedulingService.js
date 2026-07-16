@@ -523,8 +523,20 @@ class SchedulingService {
       const bestTechnician = result.suggestions[0];
 
       // 2. Assigner intervention
-      const intervention = await Intervention.findByPk(interventionId);
+      const intervention = await Intervention.findByPk(interventionId, {
+        include: [
+          {
+            model: require('../models').Customer,
+            as: 'customer',
+            include: [{ model: require('../models').User, as: 'user' }]
+          }
+        ]
+      });
       
+      if (!intervention) {
+        throw new Error('Intervention introuvable');
+      }
+
       if (intervention.technician_id) {
         throw new Error('Intervention déjà assignée');
       }
@@ -534,7 +546,41 @@ class SchedulingService {
         status: 'assigned'
       });
 
-      // 3. Retourner résultat
+      // 3. Envoyer les notifications
+      const notificationService = require('./notificationService');
+      
+      // Notification au technicien
+      await notificationService.create({
+        userId: bestTechnician.technician_id,
+        type: 'intervention_assigned',
+        title: '🔧 Nouvelle intervention assignée (Auto)',
+        message: `Une intervention vous a été assignée automatiquement à ${intervention.address}.`,
+        data: {
+          intervention_id: intervention.id,
+          role: 'technician'
+        },
+        priority: 'high',
+        actionUrl: `/interventions/${intervention.id}`
+      });
+
+      // Notification au client
+      if (intervention.customer && intervention.customer.user_id) {
+        await notificationService.create({
+          userId: intervention.customer.user_id,
+          type: 'technician_found',
+          title: '✅ Technicien assigné',
+          message: `Bonne nouvelle ! Le technicien ${bestTechnician.name} a été assigné à votre demande d'intervention.`,
+          data: {
+            intervention_id: intervention.id,
+            technician_id: bestTechnician.technician_id,
+            role: 'client'
+          },
+          priority: 'high',
+          actionUrl: `/interventions/${intervention.id}`
+        });
+      }
+
+      // 4. Retourner résultat
       return {
         intervention_id: interventionId,
         assigned_technician: {

@@ -653,6 +653,29 @@ const handleCallback = async (req, res) => {
               actionUrl: `/interventions/${intervention.id}`
             });
             console.log(`📲 Notification envoyée au technicien (user_id: ${intervention.technician_id})`);
+          } else {
+            // Assignation automatique si aucun technicien n'est assigné
+            try {
+              const schedulingService = require('../../services/schedulingService');
+              await schedulingService.autoAssignIntervention(intervention.id);
+            } catch (err) {
+              console.error(`⚠️ Assignation automatique échouée pour l'intervention ${intervention.id}:`, err.message);
+              
+              // Notifier le client qu'on cherche une équipe
+              if (intervention.customer && intervention.customer.user_id) {
+                await notificationService.create({
+                  userId: intervention.customer.user_id,
+                  type: 'technician_search',
+                  title: '🔍 Recherche d\'équipe',
+                  message: `Votre demande est confirmée ! Nous recherchons actuellement l'équipe la plus proche et vous tiendrons informé.`,
+                  data: { intervention_id: intervention.id, role: 'client' },
+                  priority: 'high'
+                });
+              }
+
+              // TODO: Notifier les managers (Nécessite la liste des managers ou un broadcast)
+              // Pour l'instant, c'est tracé dans les logs
+            }
           }
         }
       }
@@ -690,6 +713,26 @@ const handleCallback = async (req, res) => {
               actionUrl: `/interventions/${intervention.id}`
             });
             console.log(`📲 Notification envoyée au technicien pour exécution immédiate (user_id: ${intervention.technician_id})`);
+          } else {
+            // Assignation automatique si aucun technicien n'est assigné
+            try {
+              const schedulingService = require('../../services/schedulingService');
+              await schedulingService.autoAssignIntervention(intervention.id);
+            } catch (err) {
+              console.error(`⚠️ Assignation automatique échouée pour l'intervention ${intervention.id}:`, err.message);
+              
+              // Notifier le client qu'on cherche une équipe
+              if (intervention.customer && intervention.customer.user_id) {
+                await notificationService.create({
+                  userId: intervention.customer.user_id,
+                  type: 'technician_search',
+                  title: '🔍 Recherche d\'équipe',
+                  message: `Votre demande est confirmée ! Nous recherchons actuellement l'équipe la plus proche et vous tiendrons informé.`,
+                  data: { intervention_id: intervention.id, role: 'client' },
+                  priority: 'high'
+                });
+              }
+            }
           }
         }
       }

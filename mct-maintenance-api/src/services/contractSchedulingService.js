@@ -307,6 +307,17 @@ class ContractSchedulingService {
       equipment_count: subscription.equipment_count
     });
 
+    // Tentative d'assignation automatique (peut échouer si c'est trop loin dans le futur, ce qui est normal)
+    try {
+      const schedulingService = require('./schedulingService');
+      await schedulingService.autoAssignIntervention(intervention.id);
+      console.log(`✅ Assignation automatique réussie pour la visite ${visit_number} de l'abonnement ${subscription.id}`);
+    } catch (err) {
+      console.log(`ℹ️ Assignation automatique différée pour l'intervention ${intervention.id} (date prévue: ${scheduled_date}) - Raison: ${err.message}`);
+      // On ne notifie pas d'alerte urgente car pour un abonnement c'est souvent dans le futur
+      // Le script Cron balayera ces interventions 'pending' à l'approche de la date
+    }
+
     return intervention;
   }
 
