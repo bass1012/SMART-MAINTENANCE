@@ -55,9 +55,9 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Cette application a besoin d'accéder au réseau local pour le débogage et les notifications.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Cette application a besoin d'accéder à votre position pour remplir automatiquement votre adresse de livraison.</string>
+	<string>Cette application a besoin d'accéder à votre position pour remplir automatiquement votre adresse ou pour le suivi des techniciens en temps réel (si vous êtes technicien).</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Cette application a besoin d'accéder à votre position pour remplir automatiquement votre adresse de livraison.</string>
+	<string>Cette application a besoin d'accéder à votre position pour remplir automatiquement votre adresse ou pour le suivi des techniciens en temps réel (si vous êtes technicien).</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Cette application a besoin d'accéder à votre galerie pour enregistrer des photos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -67,6 +67,8 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>location</string>
+		<string>fetch</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

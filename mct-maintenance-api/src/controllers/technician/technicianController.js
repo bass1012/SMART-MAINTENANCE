@@ -130,10 +130,102 @@ const updateAvailability = async (req, res) => {
   }
 };
 
+const updateLocation = async (req, res) => {
+  try {
+    const { latitude, longitude } = req.body;
+    const userId = req.user.id;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude et longitude sont requises'
+      });
+    }
+
+    const [updatedCount] = await TechnicianProfile.update(
+      { 
+        current_location_lat: latitude,
+        current_location_lng: longitude,
+        last_location_update: new Date()
+      },
+      { where: { user_id: userId } }
+    );
+
+    if (updatedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Profil technicien non trouvé'
+      });
+    }
+
+    // Emettre l'événement Socket.io
+    const notificationService = require('../../services/notificationService');
+    if (notificationService.io) {
+      notificationService.io.emit('technician_moved', {
+        user_id: userId,
+        latitude,
+        longitude,
+        last_location_update: new Date()
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Location updated successfully'
+    });
+  } catch (error) {
+    console.error('❌ Erreur updateLocation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur lors de la mise à jour de la localisation'
+    });
+  }
+};
+
+const getAllTechnicianLocations = async (req, res) => {
+  try {
+    const technicians = await User.findAll({
+      where: { role: 'technician', status: 'active' },
+      attributes: ['id', 'first_name', 'last_name', 'profile_image'],
+      include: [{
+        model: TechnicianProfile,
+        as: 'technicianProfile',
+        attributes: ['current_location_lat', 'current_location_lng', 'last_location_update', 'availability_status']
+      }]
+    });
+
+    const locations = technicians
+      .filter(t => t.technicianProfile && t.technicianProfile.current_location_lat)
+      .map(t => ({
+        user_id: t.id,
+        first_name: t.first_name,
+        last_name: t.last_name,
+        profile_image: t.profile_image,
+        latitude: t.technicianProfile.current_location_lat,
+        longitude: t.technicianProfile.current_location_lng,
+        last_location_update: t.technicianProfile.last_location_update,
+        availability_status: t.technicianProfile.availability_status
+      }));
+
+    res.status(200).json({
+      success: true,
+      data: locations
+    });
+  } catch (error) {
+    console.error('❌ Erreur getAllTechnicianLocations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur lors de la récupération des localisations'
+    });
+  }
+};
+
 module.exports = {
   getTechnicianProfile,
   updateTechnicianProfile,
   getTechnicianInterventions,
   getAvailableInterventions,
-  updateAvailability
+  updateAvailability,
+  updateLocation,
+  getAllTechnicianLocations
 };

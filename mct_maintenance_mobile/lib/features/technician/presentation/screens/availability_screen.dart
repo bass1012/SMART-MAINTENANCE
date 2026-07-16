@@ -3,6 +3,7 @@ import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_re
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
+import 'package:mct_maintenance_mobile/services/location_tracking_service.dart';
 
 class TechnicianAvailabilityScreen extends StatefulWidget {
   const TechnicianAvailabilityScreen({super.key});
@@ -45,6 +46,21 @@ class _TechnicianAvailabilityScreenState
   Future<void> _updateStatus(String newStatus) async {
     try {
       await _interventionRepository.updateTechnicianAvailability(newStatus);
+      
+      // Gérer le tracking GPS selon la disponibilité
+      try {
+        final trackingService = LocationTrackingService();
+        if (newStatus == 'offline') {
+          await trackingService.stopTracking();
+          debugPrint('Tracking GPS arrêté (hors service)');
+        } else {
+          await trackingService.startTracking();
+          debugPrint('Tracking GPS démarré (en service)');
+        }
+      } catch (e) {
+        debugPrint('Erreur tracking GPS: $e');
+      }
+
       if (mounted) {
         setState(() => _status = newStatus);
 
@@ -68,7 +84,7 @@ class _TechnicianAvailabilityScreenState
           case 'offline':
             SnackBarHelper.showWarning(
               context,
-              'Vous êtes hors ligne - Aucune nouvelle intervention ne vous sera assignée',
+              'Vous êtes hors ligne - Suivi GPS arrêté',
               duration: const Duration(seconds: 3),
             );
             break;
