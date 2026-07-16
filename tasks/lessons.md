@@ -242,3 +242,23 @@ R# Leçons Apprises
 [2026-07-15] | Erreur de syntaxe inattendue lors de l'intégration de Widget wrapper | Lors de l'enveloppement d'un gros bloc de code Flutter existant avec un nouveau parent (ex: `Container` encapsulé dans `Padding` > `Dismissible`), les remplacements automatiques ou regex risquent souvent de décaler les parenthèses de fermeture, causant des erreurs `Expected ')'` distantes de la zone de modification (en fin de fonction). Préférer faire le remplacement précis des blocs d'ouverture et de fermeture avec un outil de remplacement multiple, ou confier la manipulation à un IDE, plutôt que d'utiliser des injections textuelles simplistes.
 
 [2026-07-16] | sequelize.sync({alter: true}) echoue souvent sur SQLite lorsqu'il y a des changements de colonnes ou contraintes uniques sur d'autres tables non liees (ex: users). | Regle: Utiliser des ALTER TABLE natifs (via sqlite3 CLI ou raw queries) pour modifier le schema de production sur SQLite plutot que d'appeler sync({alter: true}) qui recrée les tables de maniere instable.
+
+[2026-07-16] | Le serveur Socket.io n'est pas accessible via le sous-chemin /api | Lorsque l'on configure `socket.io` côté Node.js avec les paramètres par défaut, il s'attache à la racine du serveur HTTP (souvent `/`). Même si nos requêtes REST passent par un proxy `/api`, l'URL de connexion du client `socket.io-client` doit pointer vers la racine du serveur, sans le `/api` à la fin, sous peine d'erreurs de connexion et requêtes bloquées.
+
+[2026-07-16] | Filtre strict sur la disponibilité pour les suggestions d'assignation | Il ne suffit pas de vérifier si un utilisateur a le statut "actif" (compte non suspendu). L'algorithme d'assignation doit impérativement filtrer la colonne d'état de disponibilité en temps réel (`availability_status`). Un technicien "occupé" ou "hors ligne" ne doit pas être suggéré pour une urgence immédiate, sinon cela fausse les propositions de planification.
+
+[2026-07-16] | Problèmes de permissions (403) sur de nouvelles routes | L'ajout d'une fonctionnalité comme la géolocalisation des techniciens demande souvent un point de terminaison "mixte" : les techniciens écrivent leur position, mais les admins/agents/managers doivent pouvoir la lire. Veillez à ne pas placer de telles routes sous un middleware global restrictif (ex: `authorize('technician')`). Placez-les avant, avec des autorisations étendues.
+
+### 🚀 Méthodologie de Déploiement en Production (VPS 77.42.22.25)
+*(Toujours vérifier que le SSH depuis la machine de dev n'est pas bloqué par un pare-feu)*
+- **Déploiement Backend (API)** :
+  ```bash
+  rsync -avz /Users/bassoued/Documents/MAINTENANCE/mct-maintenance-api/src/ root@77.42.22.25:/var/www/smartmaintenance/mct-maintenance-api/src/
+  ssh root@77.42.22.25 "pm2 restart smartmaintenance-api"
+  ```
+- **Déploiement Frontend (Dashboard)** :
+  ```bash
+  cd /Users/bassoued/Documents/MAINTENANCE/mct-maintenance-dashboard
+  npm run build
+  rsync -avz build/ root@77.42.22.25:/var/www/smartmaintenance/mct-maintenance-dashboard/build/
+  ```
