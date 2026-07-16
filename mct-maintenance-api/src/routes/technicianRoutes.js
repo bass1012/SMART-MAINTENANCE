@@ -11,8 +11,8 @@ console.log('🔧 TechnicianRoutes chargé - VERSION AVEC LOGS DEBUG');
 // All technician routes require authentication
 router.use(authenticate);
 
-// Dashboard needs to fetch locations (admin/agent)
-router.get('/locations', authorize('admin', 'agent', 'technician', 'superadmin'), technicianController.getAllTechnicianLocations);
+// Dashboard needs to fetch locations (admin/agent/manager)
+router.get('/locations', authorize('admin', 'agent', 'technician', 'superadmin', 'manager'), technicianController.getAllTechnicianLocations);
 
 // Require technician role for the rest
 router.use(authorize('technician'));
