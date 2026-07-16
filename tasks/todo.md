@@ -78,6 +78,38 @@
   - **Animation de Slide** : Mise à jour de `NotificationNavigationService` et des `main_screen` pour utiliser un `PageRouteBuilder` avec `SlideTransition` ayant un `Offset(-1.0, 0.0)`, de sorte que l'écran glisse depuis la gauche.
   - **Swipe-to-delete** : Intégration du Widget `Dismissible` dans `_buildNotificationCard` de `notifications_screen.dart` côté client/manager. Appel à l'API `markNotificationAsRead` pour archiver virtuellement la notification au swipe, complété par la mise à jour de l'état (retrait de la liste locale avec `setState`).
 
+## Terminé dans la session actuelle (16 juillet 2026)
+
+### ✅ Tracking GPS des Techniciens en Temps Réel
+- **Modifications Backend** :
+  - Création de la colonne `last_location_update` via `ALTER TABLE technician_profiles` sur la BDD de production (VPS).
+  - Ajustement des permissions dans `technicianRoutes.js` : ouverture de la route `GET /api/technicians/locations` aux rôles `admin`, `agent` et `manager` (retrait du blocage global).
+  - Émission de l'événement Socket.io `technician_status_changed` depuis `technicianController.js` lors du changement de disponibilité (En ligne / Occupé / Hors ligne).
+- **Modifications Dashboard (React)** :
+  - Ajustement de l'URL de connexion Socket.io pour retirer le suffixe `/api` (connexion à la racine).
+  - Écoute des événements `technician_moved` et `technician_status_changed` sur la carte pour mise à jour en direct sans rafraîchissement de la page.
+  - Ajout d'un bouton "Localiser" dans le tableau des techniciens permettant de centrer et zoomer automatiquement la carte sur un technicien sélectionné.
+
+### ✅ Assignation Automatique - Filtrage des Techniciens Non-Disponibles
+- **Problème** : L'algorithme d'assignation automatique (`schedulingService.js`) suggérait des techniciens qui étaient "hors ligne" (fin de service) ou "occupés" (en intervention).
+- **Modifications Backend** :
+  - Modification de la requête SQL directe dans `suggestTechnicians` pour filtrer de manière stricte sur `tp.availability_status = 'available'`.
+  - Seuls les techniciens réellement disponibles pour une nouvelle tâche sont maintenant suggérés.
+
+### 🚀 Méthodologie de Déploiement en Production (VPS 77.42.22.25)
+*(Rappel essentiel pour éviter que les modifications ne tournent qu'en local)*
+- **Déploiement Backend (API)** :
+  ```bash
+  rsync -avz /Users/bassoued/Documents/MAINTENANCE/mct-maintenance-api/src/ root@77.42.22.25:/var/www/smartmaintenance/mct-maintenance-api/src/
+  ssh root@77.42.22.25 "pm2 restart smartmaintenance-api"
+  ```
+- **Déploiement Frontend (Dashboard)** :
+  ```bash
+  cd /Users/bassoued/Documents/MAINTENANCE/mct-maintenance-dashboard
+  npm run build
+  rsync -avz build/ root@77.42.22.25:/var/www/smartmaintenance/mct-maintenance-dashboard/build/
+  ```
+
 ## Terminé dans les sessions précédentes (13 juillet 2026)
 
 ### ✅ Upload de Vidéos pour les Rapports d'Intervention (Limite 30 Mo)
