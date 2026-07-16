@@ -60,7 +60,7 @@ class SchedulingService {
         throw new Error('Intervention déjà assignée');
       }
 
-      // 2. Récupérer tous les techniciens actifs avec coordonnées (SQL directe)
+      // 2. Récupérer tous les techniciens actifs et en ligne avec coordonnées (SQL directe)
       const technicians = await sequelize.query(`
         SELECT 
           u.id, 
@@ -70,10 +70,13 @@ class SchedulingService {
           u.phone, 
           u.profile_image,
           tp.current_location_lat AS latitude,
-          tp.current_location_lng AS longitude
+          tp.current_location_lng AS longitude,
+          tp.availability_status
         FROM users u
         LEFT JOIN technician_profiles tp ON tp.user_id = u.id
-        WHERE u.role = 'technician' AND u.status = 'active'
+        WHERE u.role = 'technician' 
+          AND u.status = 'active'
+          AND tp.availability_status != 'offline'
       `, {
         type: sequelize.QueryTypes.SELECT
       });
