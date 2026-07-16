@@ -8,12 +8,16 @@ import 'core/app.dart';
 import 'services/fcm_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/location_tracking_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialiser le service de Deep Link pour FineoPay
   DeepLinkService().initialize();
+
+  // Initialiser le service de suivi GPS en arrière-plan
+  LocationTrackingService().initializeService();
 
   if (kDebugMode) debugPrint('🚀 DÉMARRAGE APP');
 

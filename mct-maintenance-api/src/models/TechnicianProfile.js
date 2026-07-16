@@ -85,6 +85,10 @@ const TechnicianProfile = sequelize.define('TechnicianProfile', {
       max: 180
     }
   },
+  last_location_update: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   service_area: {
     type: DataTypes.JSON,
     allowNull: true,

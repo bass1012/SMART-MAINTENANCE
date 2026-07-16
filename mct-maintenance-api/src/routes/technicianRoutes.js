@@ -26,12 +26,8 @@ router.put('/profile', (req, res) => {
 router.put('/availability', technicianController.updateAvailability);
 
 // Technician location routes
-router.put('/location', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Location updated successfully'
-  });
-});
+router.put('/location', technicianController.updateLocation);
+router.get('/locations', technicianController.getAllTechnicianLocations);
 
 // Technician assignments routes
 router.get('/assignments', (req, res) => {

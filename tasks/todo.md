@@ -1,3 +1,41 @@
+# TODO - Système de Suivi GPS (Tracking des Techniciens en Temps Réel)
+
+## 1. Backend (API & Socket)
+- [x] Mettre à jour la table `technician_profiles` avec un timestamp `last_location_update`.
+- [x] Implémenter la route `PUT /api/technicians/location` pour enregistrer les coordonnées en DB.
+- [x] Émettre un événement Socket.io (`technician_moved`) à chaque mise à jour.
+- [x] Créer une route `GET /api/technicians/locations` pour récupérer l'état initial des techniciens.
+
+## 2. Application Mobile (Technicien)
+- [x] Ajouter les permissions de Localisation en Arrière-plan (Always Allow).
+- [x] Intégrer un package de Background Location (`flutter_background_geolocation` ou equivalent).
+- [x] Créer le `LocationTrackingService` pour envoyer les coordonnées au backend périodiquement.
+- [x] Ajouter un système de "Pointage" (Début/Fin de service) ou utiliser les heures planifiées pour s'assurer que le technicien **n'est suivi QUE pendant ses heures de travail**. Le tracking s'arrête automatiquement en dehors de ces heures.
+
+## 3. Dashboard Web
+- [x] Installer React-Leaflet (OpenStreetMap) pour éviter les coûts de Google Maps.
+- [x] Créer le composant Carte sur la page de gestion des techniciens (ou accueil).
+- [x] Gérer la connexion Socket.io pour déplacer l'icône du technicien en temps réel sur la carte.
+
+---
+
+# TODO - Assignation Automatique des Interventions (Planification)
+
+## Étude de Faisabilité
+- **Faisabilité** : Très Haute (100%).
+- **Justification** : Le backend possède déjà la fonction complète `schedulingService.autoAssignIntervention(interventionId)`. Elle inclut l'algorithme de scoring, sélectionne le meilleur candidat, et l'assigne en base de données. Actuellement elle n'est déclenchable que manuellement via une route API côté Dashboard. L'objectif est simplement de l'automatiser (déclenchement piloté par l'événement ou le temps).
+
+## Étapes pour la mise en place
+- [ ] **Déclencheur Temps Réel (Paiement/Création)** : Appeler `autoAssignIntervention` dans `fineoPayController.js` et `interventionController.js` immédiatement après le paiement ou la confirmation d'une demande. Gérer via un bloc `try/catch` asynchrone pour ne pas ralentir le retour HTTP au client.
+- [ ] **Déclencheur Abonnements** : Ajouter le même appel dans `contractSchedulingService.js` une fois que les interventions périodiques d'un abonnement sont générées en base.
+- [ ] **Notifications de Succès** : S'assurer que le service envoie un Push FCM au technicien (Nouvelle intervention) et au client (Technicien trouvé) dès que l'assignation est effectuée avec succès.
+- [ ] **Gestion des cas critiques (Option 1 - Escalade Manager)** : Si aucun technicien n'est disponible (limite atteinte ou conflit), l'intervention reste en `pending`. 
+  - **Action Manager** : Envoyer une alerte (Push/Socket) sur le Dashboard : *"Attention : Aucune équipe disponible pour la nouvelle intervention #ID. Assignation manuelle requise."*
+  - **Action Client** : Envoyer une notification rassurante : *"Votre demande est confirmée ! Nous recherchons actuellement l'équipe la plus proche et vous tiendrons informé."*
+- [ ] **Fallback Cron (Optionnel)** : Créer un petit script Cron s'exécutant toutes les heures pour balayer les interventions restées en `pending` et relancer l'algorithme, au cas où des techniciens se seraient libérés entre temps.
+
+---
+
 # TODO - Session 15 juillet 2026 - Fixes Hors Ligne & Interface Rapport
 
 ## Terminé dans cette session (15 juillet 2026)

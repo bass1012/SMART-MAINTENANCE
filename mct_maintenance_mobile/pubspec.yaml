@@ -68,6 +68,7 @@ dependencies:
 
   webview_flutter_wkwebview: any
   http_parser: any
+  flutter_background_service: ^5.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
