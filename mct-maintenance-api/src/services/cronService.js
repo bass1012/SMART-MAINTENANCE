@@ -129,6 +129,29 @@ class CronService {
       job: subscriptionExpiryJob
     });
 
+    // Job 6: Tenter d'assigner automatiquement les interventions en attente (toutes les heures)
+    const { processPendingAssignments } = require('../jobs/pendingAssignmentCron');
+    const autoAssignmentJob = cron.schedule('0 * * * *', async () => {
+      console.log('\n🤖 [Cron] Vérification des assignations automatiques en attente...');
+      const result = await processPendingAssignments();
+      if (result.success) {
+        if (result.processed > 0) {
+          console.log(`✅ [Cron] ${result.assigned}/${result.processed} intervention(s) assignée(s) avec succès`);
+        }
+      } else {
+        console.error('❌ [Cron] Erreur lors de l\'assignation:', result.error);
+      }
+    }, {
+      scheduled: true,
+      timezone: "Africa/Abidjan"
+    });
+
+    this.jobs.push({
+      name: 'auto-assignment-retry',
+      schedule: 'Toutes les heures',
+      job: autoAssignmentJob
+    });
+
     console.log(`✅ [Cron] ${this.jobs.length} tâche(s) planifiée(s):`);
     this.jobs.forEach(job => {
       console.log(`   - ${job.name}: ${job.schedule}`);

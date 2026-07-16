@@ -1,3 +1,4 @@
+
 const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage, MaintenanceOffer, RepairService, InstallationService, Subscription, DiagnosticReport, Quote, SystemConfig, Order, TechnicianProfile } = require('../../models');
 const { Op, sequelize } = require('sequelize');
 const { sequelize: db } = require('../../config/database');
@@ -676,6 +677,27 @@ const createIntervention = [
           // 4. Notifier aussi le client que le technicien a été assigné
           await notifyTechnicianAssignedToCustomer(createdIntervention, customer, createdIntervention.technician);
           console.log('✅ Notification client - technicien assigné');
+        } else if (!createdIntervention.technician_id && (isFreeDiagnosis || diagnosticFee === 0)) {
+          // 5. Assignation automatique pour les interventions qui ne nécessitent pas de paiement
+          try {
+            const schedulingService = require('../../services/schedulingService');
+            // L'assignation envoie ses propres notifications de succès
+            await schedulingService.autoAssignIntervention(createdIntervention.id);
+            console.log(`✅ Assignation automatique réussie pour l'intervention sans frais initiaux ${createdIntervention.id}`);
+          } catch (err) {
+            console.error(`⚠️ Assignation automatique échouée pour l'intervention ${createdIntervention.id}:`, err.message);
+            // Notifier le client qu'on cherche une équipe
+            if (customer && customer.id) {
+              await notificationService.create({
+                userId: customer.id,
+                type: 'technician_search',
+                title: '🔍 Recherche d\'équipe',
+                message: `Votre demande est confirmée ! Nous recherchons actuellement l'équipe la plus proche et vous tiendrons informé.`,
+                data: { intervention_id: createdIntervention.id, role: 'client' },
+                priority: 'high'
+              });
+            }
+          }
         }
       } catch (notifError) {
         console.error('❌ ERREUR NOTIFICATION/EMAIL DÉTAILLÉE:', {
