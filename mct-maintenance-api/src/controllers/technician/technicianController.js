@@ -116,6 +116,15 @@ const updateAvailability = async (req, res) => {
 
     console.log(`✅ Disponibilité technicien ${userId} mise à jour: ${availability_status}`);
 
+    // Emettre l'événement Socket.io pour la mise à jour en temps réel
+    const notificationService = require('../../services/notificationService');
+    if (notificationService.io) {
+      notificationService.io.emit('technician_status_changed', {
+        user_id: userId,
+        availability_status
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: 'Disponibilité mise à jour avec succès',
