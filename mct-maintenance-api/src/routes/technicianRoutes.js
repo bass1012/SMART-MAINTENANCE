@@ -8,8 +8,13 @@ const router = express.Router();
 
 console.log('🔧 TechnicianRoutes chargé - VERSION AVEC LOGS DEBUG');
 
-// All technician routes require authentication and technician role
+// All technician routes require authentication
 router.use(authenticate);
+
+// Dashboard needs to fetch locations (admin/agent)
+router.get('/locations', authorize('admin', 'agent', 'technician', 'superadmin'), technicianController.getAllTechnicianLocations);
+
+// Require technician role for the rest
 router.use(authorize('technician'));
 
 // Technician profile routes
@@ -27,7 +32,6 @@ router.put('/availability', technicianController.updateAvailability);
 
 // Technician location routes
 router.put('/location', technicianController.updateLocation);
-router.get('/locations', technicianController.getAllTechnicianLocations);
 
 // Technician assignments routes
 router.get('/assignments', (req, res) => {
