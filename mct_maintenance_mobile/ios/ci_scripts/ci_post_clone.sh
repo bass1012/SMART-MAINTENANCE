@@ -27,15 +27,26 @@ flutter --version
 echo "=== Precache Flutter iOS ==="
 flutter precache --ios
 
-# ── 4. flutter pub get ────────────────────────────────────────────────────────
+# ── 4. flutter pub get (génère pubspec.lock, .dart_tool) ─────────────────────
 echo "=== flutter pub get ==="
 cd "$FLUTTER_ROOT"
 flutter pub get
 
-# ── 5. CocoaPods (déjà installé sur les agents Xcode Cloud) ──────────────────
+# ── 5. Générer les fichiers natifs iOS (GeneratedPluginRegistrant, xcconfig) ─
+# Cette commande génère:
+#   - ios/Runner/GeneratedPluginRegistrant.m (liste tous les plugins)
+#   - ios/Flutter/Generated.xcconfig (FLUTTER_ROOT, chemins)
+#   - ios/.symlinks/ (liens symboliques vers les plugins)
+echo "=== Génération des fichiers iOS natifs ==="
+flutter build ios --config-only --no-codesign || true
+
+echo "=== Vérification de GeneratedPluginRegistrant.m ==="
+ls -la "$FLUTTER_ROOT/ios/Runner/GeneratedPluginRegistrant.m" || echo "ATTENTION: GeneratedPluginRegistrant.m absent!"
+
+# ── 6. CocoaPods (1.17.0 pré-installé sur les agents Xcode Cloud) ────────────
 echo "=== CocoaPods version: $(pod --version) ==="
 
-# ── 6. pod install ────────────────────────────────────────────────────────────
+# ── 7. pod install ────────────────────────────────────────────────────────────
 echo "=== pod install dans $FLUTTER_ROOT/ios ==="
 cd "$FLUTTER_ROOT/ios"
 pod install --repo-update
