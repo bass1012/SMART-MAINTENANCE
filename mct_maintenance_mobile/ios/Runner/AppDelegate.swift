@@ -12,24 +12,15 @@ import FirebaseMessaging
     // Configurer Firebase
     FirebaseApp.configure()
     
-    // Enregistrer pour les notifications à distance
+    // Permettre aux plugins Flutter de s'enregistrer
+    GeneratedPluginRegistrant.register(with: self)
+    
+    // Laisser flutter_local_notifications et firebase_messaging gérer l'enregistrement
+    // de UNUserNotificationCenter. FlutterAppDelegate s'occupe de router les événements.
     if #available(iOS 10.0, *) {
-      UNUserNotificationCenter.current().delegate = self
-      let authOptions: UNAuthorizationOptions = [.alert, .badge, .sound]
-      UNUserNotificationCenter.current().requestAuthorization(
-        options: authOptions,
-        completionHandler: { _, _ in }
-      )
-    } else {
-      let settings: UIUserNotificationSettings =
-        UIUserNotificationSettings(types: [.alert, .badge, .sound], categories: nil)
-      application.registerUserNotificationSettings(settings)
+      UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
     }
     
-    application.registerForRemoteNotifications()
-    Messaging.messaging().delegate = self
-    
-    GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
   
@@ -38,21 +29,16 @@ import FirebaseMessaging
                             didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
     Messaging.messaging().apnsToken = deviceToken
     print("📱 APNs token enregistré")
+    
+    // CRITIQUE : Il faut impérativement appeler super pour que firebase_messaging 
+    // côté Flutter reçoive le token APNs. Sinon les notifs échouent sur iOS 15/16.
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
   }
   
   // Gérer les erreurs d'enregistrement
   override func application(_ application: UIApplication,
                             didFailToRegisterForRemoteNotificationsWithError error: Error) {
     print("❌ Erreur enregistrement APNs: \(error.localizedDescription)")
-  }
-}
-
-// Extension pour gérer les callbacks Firebase Messaging
-extension AppDelegate: MessagingDelegate {
-  func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-    if let token = fcmToken {
-      print("🔔 FCM Token iOS: \(token)")
-      // Le token sera automatiquement envoyé au backend via le service FCM Flutter
-    }
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
   }
 }
