@@ -36,7 +36,8 @@ flutter pub get
 # Install CocoaPods dependencies.
 echo "=== Installation des pods iOS ==="
 cd ios
-# Use the pre-installed cocoapods on Xcode Cloud
+export HOMEBREW_NO_AUTO_UPDATE=1
+brew install cocoapods
 pod install --repo-update
 
 echo "=== Script terminé avec succès ==="
