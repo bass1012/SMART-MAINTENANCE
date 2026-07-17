@@ -32,24 +32,25 @@ echo "=== Precache Flutter iOS ==="
 flutter precache --ios
 
 # ── 4. Installer les dépendances Dart (génère les .symlinks iOS) ─────────────
-echo "=== Installation des dépendances Flutter (flutter pub get) ==="
+echo "=== Installation des dépendances Flutter ==="
 flutter pub get
 
-# Vérifier que les symlinks Firebase existent
-echo "=== Vérification des symlinks Firebase ==="
-ls "$FLUTTER_ROOT/ios/.symlinks/plugins/firebase_core/ios"
-ls "$FLUTTER_ROOT/ios/.symlinks/plugins/firebase_messaging/ios"
-echo "=== Symlinks OK ==="
-
-# ── 5. Installer CocoaPods via gem (Ruby est toujours dispo sur Xcode Cloud) ─
-echo "=== Installation de CocoaPods via gem ==="
-gem install cocoapods --no-document
-echo "=== Version de CocoaPods ==="
-pod --version
+# ── 5. Installer CocoaPods ────────────────────────────────────────────────────
+# Essayer la version déjà installée en premier, puis fallback sur gem
+echo "=== Vérification de CocoaPods ==="
+if command -v pod &>/dev/null; then
+    echo "CocoaPods déjà disponible: $(pod --version)"
+else
+    echo "=== Installation de CocoaPods via sudo gem ==="
+    sudo gem install cocoapods --no-document
+    echo "CocoaPods installé: $(pod --version)"
+fi
 
 # ── 6. Installer les pods iOS ─────────────────────────────────────────────────
 echo "=== Installation des pods iOS ==="
 cd "$FLUTTER_ROOT/ios"
+echo "Contenu du dossier ios:"
+ls -la
 pod install --repo-update
 
 echo "=== Script terminé avec succès ==="
