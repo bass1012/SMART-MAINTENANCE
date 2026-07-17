@@ -18,7 +18,9 @@ else
 fi
 
 echo "=== FLUTTER_ROOT résolu: $FLUTTER_ROOT ==="
-ls "$FLUTTER_ROOT"
+
+# Vérifications non-bloquantes (|| true = n'arrête pas le script si ça rate)
+ls "$FLUTTER_ROOT" || true
 
 # ── 2. Installer Flutter ──────────────────────────────────────────────────────
 echo "=== Installation de Flutter ==="
@@ -35,32 +37,31 @@ echo "=== flutter pub get dans: $FLUTTER_ROOT ==="
 cd "$FLUTTER_ROOT"
 flutter pub get
 
-# Vérifier que les symlinks sont créés
-echo "=== Vérification des symlinks Flutter ==="
-ls "$FLUTTER_ROOT/ios/.symlinks/plugins/" | head -20
+# Diagnostic non-bloquant
+echo "=== Contenu ios/.symlinks (diagnostic) ==="
+ls "$FLUTTER_ROOT/ios/.symlinks/plugins/" || echo "ATTENTION: .symlinks non trouvé"
 
 # ── 5. CocoaPods ─────────────────────────────────────────────────────────────
-echo "=== Pod version disponible ==="
-pod --version || echo "pod non disponible"
-
-echo "=== Chemin du pod ==="
-which pod || echo "pod non trouvé dans PATH"
-
-echo "=== Installation/mise à jour de CocoaPods via sudo gem ==="
-sudo gem install cocoapods --no-document
-which pod
-pod --version
+echo "=== Recherche de CocoaPods ==="
+POD_PATH=$(which pod 2>/dev/null || echo "")
+if [ -n "$POD_PATH" ]; then
+    echo "CocoaPods déjà disponible: $POD_PATH - $(pod --version)"
+else
+    echo "=== CocoaPods non trouvé, installation via sudo gem ==="
+    sudo gem install cocoapods --no-document
+    echo "CocoaPods installé: $(pod --version)"
+fi
 
 # ── 6. Pod install ────────────────────────────────────────────────────────────
 IOS_DIR="$FLUTTER_ROOT/ios"
 echo "=== pod install dans: $IOS_DIR ==="
 cd "$IOS_DIR"
-ls -la
+ls -la || true
 
 pod install --repo-update
 
-# Vérifier que Pods est bien créé
-echo "=== Vérification que les Pods sont installés ==="
-ls -la "$IOS_DIR/Pods/" | head -20
+# Vérification non-bloquante
+echo "=== Vérification Pods installés ==="
+ls "$IOS_DIR/Pods/" | head -10 || echo "ATTENTION: Pods non créés!"
 
 echo "=== Script terminé avec succès ==="
