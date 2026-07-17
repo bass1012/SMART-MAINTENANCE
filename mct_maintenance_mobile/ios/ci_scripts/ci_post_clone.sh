@@ -33,8 +33,6 @@ flutter precache --ios
 echo "=== Installation des dépendances Flutter ==="
 flutter pub get
 
-echo "=== Génération des configs Xcode ==="
-flutter build ios --config-only --no-codesign
 
 # Install CocoaPods dependencies.
 echo "=== Installation des pods iOS ==="
