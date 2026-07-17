@@ -21,24 +21,23 @@ cd "$FLUTTER_ROOT"
 
 # ── 2. Installer Flutter ──────────────────────────────────────────────────────
 echo "=== Installation de Flutter ==="
-git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
+git clone https://github.com/flutter/flutter.git --depth 1 -b stable "$HOME/flutter"
 export PATH="$PATH:$HOME/flutter/bin"
 
-echo "=== Version de Flutter ==="
 flutter --version
 
 # ── 3. Précacher les artefacts iOS ───────────────────────────────────────────
 echo "=== Precache Flutter iOS ==="
 flutter precache --ios
 
-# ── 4. Installer les dépendances Dart (génère les .symlinks iOS) ─────────────
-echo "=== Installation des dépendances Flutter ==="
+# ── 4. Installer les dépendances Dart ─────────────────────────────────────────
+echo "=== flutter pub get ==="
 flutter pub get
 
-# ── 5. Installer CocoaPods ────────────────────────────────────────────────────
-# Essayer la version déjà installée en premier, puis fallback sur gem
+# ── 5. Installer CocoaPods si nécessaire ──────────────────────────────────────
+# NOTE: &> n'est pas supporté par /bin/sh. Utiliser >/dev/null 2>&1
 echo "=== Vérification de CocoaPods ==="
-if command -v pod &>/dev/null; then
+if pod --version >/dev/null 2>&1; then
     echo "CocoaPods déjà disponible: $(pod --version)"
 else
     echo "=== Installation de CocoaPods via sudo gem ==="
@@ -47,10 +46,8 @@ else
 fi
 
 # ── 6. Installer les pods iOS ─────────────────────────────────────────────────
-echo "=== Installation des pods iOS ==="
+echo "=== pod install ==="
 cd "$FLUTTER_ROOT/ios"
-echo "Contenu du dossier ios:"
-ls -la
 pod install --repo-update
 
 echo "=== Script terminé avec succès ==="
