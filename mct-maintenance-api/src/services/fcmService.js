@@ -129,10 +129,14 @@ class FCMService {
           }
         },
         apns: {
+          headers: {
+            'apns-priority': '10'
+          },
           payload: {
             aps: {
               sound: 'default',
-              badge: 1
+              badge: 1,
+              'content-available': 1
             }
           }
         }
@@ -205,6 +209,18 @@ class FCMService {
             sound: 'default',
             color: '#0a543d',
             channelId: 'default_channel'
+          }
+        },
+        apns: {
+          headers: {
+            'apns-priority': '10'
+          },
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+              'content-available': 1
+            }
           }
         }
       };
