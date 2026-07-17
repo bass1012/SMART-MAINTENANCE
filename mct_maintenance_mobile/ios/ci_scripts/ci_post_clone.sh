@@ -7,38 +7,49 @@ echo "=== Démarrage du script ci_post_clone.sh ==="
 echo "Current directory: $(pwd)"
 echo "CI_PRIMARY_REPOSITORY_PATH: $CI_PRIMARY_REPOSITORY_PATH"
 
-# Go to the Flutter project root
+# ── 1. Localiser le dossier Flutter ──────────────────────────────────────────
 if [ -f "$CI_PRIMARY_REPOSITORY_PATH/mct_maintenance_mobile/pubspec.yaml" ]; then
-    cd "$CI_PRIMARY_REPOSITORY_PATH/mct_maintenance_mobile"
+    FLUTTER_ROOT="$CI_PRIMARY_REPOSITORY_PATH/mct_maintenance_mobile"
 elif [ -f "$CI_PRIMARY_REPOSITORY_PATH/pubspec.yaml" ]; then
-    cd "$CI_PRIMARY_REPOSITORY_PATH"
+    FLUTTER_ROOT="$CI_PRIMARY_REPOSITORY_PATH"
 else
-    # Fallback to finding it
-    PROJECT_DIR=$(dirname $(find "$CI_PRIMARY_REPOSITORY_PATH" -name "pubspec.yaml" | head -n 1))
-    cd "$PROJECT_DIR"
+    FLUTTER_ROOT=$(dirname $(find "$CI_PRIMARY_REPOSITORY_PATH" -name "pubspec.yaml" | head -n 1))
 fi
 
-echo "=== Working directory is now: $(pwd) ==="
+echo "=== Flutter project root: $FLUTTER_ROOT ==="
+cd "$FLUTTER_ROOT"
 
-# Install Flutter using git.
+# ── 2. Installer Flutter ──────────────────────────────────────────────────────
 echo "=== Installation de Flutter ==="
 git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
 export PATH="$PATH:$HOME/flutter/bin"
 
-# Install Flutter artifacts for iOS
+echo "=== Version de Flutter ==="
+flutter --version
+
+# ── 3. Précacher les artefacts iOS ───────────────────────────────────────────
 echo "=== Precache Flutter iOS ==="
 flutter precache --ios
 
-# Install Flutter dependencies.
-echo "=== Installation des dépendances Flutter ==="
+# ── 4. Installer les dépendances Dart (génère les .symlinks iOS) ─────────────
+echo "=== Installation des dépendances Flutter (flutter pub get) ==="
 flutter pub get
 
+# Vérifier que les symlinks Firebase existent
+echo "=== Vérification des symlinks Firebase ==="
+ls "$FLUTTER_ROOT/ios/.symlinks/plugins/firebase_core/ios"
+ls "$FLUTTER_ROOT/ios/.symlinks/plugins/firebase_messaging/ios"
+echo "=== Symlinks OK ==="
 
-# Install CocoaPods dependencies.
+# ── 5. Installer CocoaPods via gem (Ruby est toujours dispo sur Xcode Cloud) ─
+echo "=== Installation de CocoaPods via gem ==="
+gem install cocoapods --no-document
+echo "=== Version de CocoaPods ==="
+pod --version
+
+# ── 6. Installer les pods iOS ─────────────────────────────────────────────────
 echo "=== Installation des pods iOS ==="
-cd ios
-export HOMEBREW_NO_AUTO_UPDATE=1
-brew install cocoapods
+cd "$FLUTTER_ROOT/ios"
 pod install --repo-update
 
 echo "=== Script terminé avec succès ==="
