@@ -45,10 +45,18 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
   String _formatQuoteReference(String ref) {
     final RegExp regExp = RegExp(r'(\d{2})(\d{2})(\d{2})');
     return ref.replaceFirstMapped(regExp, (match) {
-      String yy = match.group(1)!;
-      String mm = match.group(2)!;
-      String dd = match.group(3)!;
-      return '$dd$mm$yy';
+      int p1 = int.parse(match.group(1)!);
+      int p3 = int.parse(match.group(3)!);
+
+      // Si p1 est l'année (ex: 24..35) et p3 est le jour (1..31), c'est du AAMMJJ -> convertir en JJMMAA
+      if (p1 >= 24 && p1 <= 35 && p3 >= 1 && p3 <= 31) {
+        String yy = match.group(1)!;
+        String mm = match.group(2)!;
+        String dd = match.group(3)!;
+        return '$dd$mm$yy';
+      }
+      // Sinon c'est déjà au format JJMMAA
+      return match.group(0)!;
     });
   }
 
@@ -565,13 +573,8 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
               debugPrint('💰 Paiement split (quote): ${_formatAmount(amountToPay)} FCFA (50% - étape 1)');
             }
           } else {
-            // Fallback: utiliser le montant de la commande directement
-            final orderAmount = recentOrder['totalAmount'];
-            if (orderAmount != null && orderAmount > 0) {
-              amountToPay = (orderAmount as num).toDouble();
-            } else {
-              amountToPay = (_quote.amount / 2).ceilToDouble();
-            }
+            // Fallback pour acompte 50%: calculer (_quote.amount / 2).ceilToDouble()
+            amountToPay = (_quote.amount / 2).ceilToDouble();
             paymentStep = 1;
           }
 

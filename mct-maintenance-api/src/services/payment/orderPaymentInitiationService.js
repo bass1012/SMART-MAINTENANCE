@@ -63,9 +63,10 @@ const resolveSplitPayment = (order, quote) => {
   }
 
   const quoteTotal = numericValue(quote.total);
-  const firstAmount = numericValue(quote.first_payment_amount)
-    ?? numericValue(order.totalAmount)
-    ?? (quoteTotal !== null ? Math.ceil(quoteTotal / 2) : null);
+  const calculatedFirstAmount = quoteTotal !== null ? Math.ceil(quoteTotal / 2) : null;
+  const firstAmount = calculatedFirstAmount
+    ?? numericValue(quote.first_payment_amount)
+    ?? numericValue(order.totalAmount);
 
   if (firstStatus !== 'paid') {
     if (order.status !== 'pending') {

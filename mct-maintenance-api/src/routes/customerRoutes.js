@@ -396,7 +396,7 @@ router.get('/payments/history', authenticate, async (req, res) => {
       const total = parseFloat(quote.total) || 0;
       const isSplit = quote.payment_type === 'split';
       const firstAmount = isSplit
-        ? parseFloat(quote.first_payment_amount) || Math.floor(total / 2)
+        ? parseFloat(quote.first_payment_amount) || Math.ceil(total / 2)
         : total;
       const secondAmount = isSplit
         ? parseFloat(quote.second_payment_amount) || (total - firstAmount)
