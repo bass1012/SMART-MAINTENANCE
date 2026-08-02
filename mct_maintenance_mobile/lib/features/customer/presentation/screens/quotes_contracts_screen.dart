@@ -382,7 +382,7 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    quote.reference,
+                    _formatQuoteReference(quote.reference),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -857,8 +857,10 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
             // éventuel paiement en plusieurs étapes (split)
             double amountToPay = (recentOrder['totalAmount'] ?? 0).toDouble();
             int paymentStep = 0;
+            QuoteContract? targetQuote;
             try {
               final quoteDetails = await _contractRepository.getQuoteDetails(quoteId);
+              targetQuote = quoteDetails;
               final double quoteAmount = (quoteDetails.amount ?? 0).toDouble();
               final double firstPaymentAmount = (quoteDetails.firstPaymentAmount ?? (quoteAmount / 2).ceilToDouble()).toDouble();
               final double secondPaymentAmount = (quoteDetails.secondPaymentAmount ?? (quoteAmount - firstPaymentAmount)).toDouble();
@@ -888,7 +890,7 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
 
             // Naviguer directement vers l'écran de paiement
             if (kDebugMode) debugPrint('➡️ Payment navigation: amount=$amountToPay, step=$paymentStep, order=${recentOrder['id']}');
-            Navigator.push(
+            final paymentSuccess = await Navigator.push<bool>(
               context,
               MaterialPageRoute(
                 builder: (context) => PaymentScreen(
@@ -898,7 +900,20 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
                   paymentStep: paymentStep,
                 ),
               ),
-            ).then((_) => _loadQuotes()); // Rafraîchir après retour du paiement
+            );
+
+            if (mounted) {
+              await _loadQuotes();
+              if (paymentSuccess == true && targetQuote != null) {
+                // Rediriger le client directement vers le devis en question
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => QuoteDetailScreen(quote: targetQuote!),
+                  ),
+                );
+              }
+            }
           } else {
             if (kDebugMode) debugPrint('⚠️  Aucune commande trouvée, rafraîchissement normal');
             // Si pas de commande trouvée, rafraîchir normalement
@@ -932,6 +947,24 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
       default:
         return Colors.grey;
     }
+  }
+
+  String _formatQuoteReference(String ref) {
+    final RegExp regExp = RegExp(r'(\d{2})(\d{2})(\d{2})');
+    return ref.replaceFirstMapped(regExp, (match) {
+      int p1 = int.parse(match.group(1)!);
+      int p3 = int.parse(match.group(3)!);
+
+      // Si p1 est l'année (ex: 24..35) et p3 est le jour (1..31), c'est du AAMMJJ -> convertir en JJMMAA
+      if (p1 >= 24 && p1 <= 35 && p3 >= 1 && p3 <= 31) {
+        String yy = match.group(1)!;
+        String mm = match.group(2)!;
+        String dd = match.group(3)!;
+        return '$dd$mm$yy';
+      }
+      // Sinon c'est déjà au format JJMMAA
+      return match.group(0)!;
+    });
   }
 
   String _formatStatus(String status) {
