@@ -1152,7 +1152,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                 // ─────────────────────────────────────
                 _buildPhaseHeader(
                   'AVANT INTERVENTION — Équipement ${index + 1}',
-                  const Color(0xFF0a543d),
+                  Colors.orange.shade800,
                   Icons.assignment_outlined,
                 ),
                 const SizedBox(height: 16),
@@ -1274,15 +1274,15 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0a543d).withValues(alpha: 0.07),
+                    color: Colors.orange.shade50,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Données techniques — AVANT intervention',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      color: Color(0xFF0a543d),
+                      color: Colors.orange.shade900,
                     ),
                   ),
                 ),
@@ -1332,7 +1332,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                   // ─────────────────────────────────────
                   _buildPhaseHeader(
                     'APRÈS INTERVENTION — Équipement ${index + 1}',
-                    Colors.orange.shade700,
+                    const Color(0xFF0a543d),
                     Icons.check_circle_outline,
                   ),
                   const SizedBox(height: 16),
@@ -1341,15 +1341,15 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
+                      color: const Color(0xFF0a543d).withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text(
+                    child: const Text(
                       'Données techniques — APRÈS intervention',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
-                        color: Colors.orange.shade800,
+                        color: Color(0xFF0a543d),
                       ),
                     ),
                   ),
@@ -1432,7 +1432,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       // ════════════════════════════════════════
                       _buildPhaseHeader(
                         'AVANT INTERVENTION — Constat Initial',
-                        const Color(0xFF0a543d),
+                        Colors.orange.shade800,
                         Icons.assignment_outlined,
                       ),
                       const SizedBox(height: 20),
@@ -1494,7 +1494,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                       if (!isInitial) ...[
                         _buildPhaseHeader(
                           'APRÈS INTERVENTION',
-                          Colors.orange.shade700,
+                          const Color(0xFF0a543d),
                           Icons.check_circle_outline,
                         ),
                         const SizedBox(height: 20),
