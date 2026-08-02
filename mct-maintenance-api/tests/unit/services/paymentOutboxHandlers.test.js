@@ -5,7 +5,9 @@ jest.mock('../../../src/services/notificationService', () => ({
 
 const {
   handleShopPaymentConfirmed,
-  handleDiagnosticPaymentConfirmed
+  handleDiagnosticPaymentConfirmed,
+  handleSubscriptionPaymentConfirmed,
+  handleQuotePaymentConfirmed
 } = require('../../../src/services/outboxHandlers/paymentHandlers');
 
 describe('handlers outbox paiement', () => {
@@ -161,6 +163,90 @@ describe('handlers outbox paiement', () => {
     expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({
       title: '✅ Solde confirmé',
       data: expect.objectContaining({ payment_step: 2 })
+    }));
+  });
+
+  test('active un contrat programmé et notifie via des clés idempotentes', async () => {
+    const notifications = { create: jest.fn(), notifyAdmins: jest.fn() };
+    const contractScheduler = { activateContractAfterPayment: jest.fn() };
+    const models = {
+      Subscription: {
+        findByPk: jest.fn().mockResolvedValue({
+          id: 5,
+          customer_id: 7,
+          contract_type: 'scheduled',
+          customer: { id: 7, first_name: 'Awa', last_name: 'Koné' }
+        })
+      },
+      User: {}
+    };
+
+    await handleSubscriptionPaymentConfirmed(
+      { subscriptionId: 5, reference: 'TRX-SUB', amount: 5000, paymentStep: 1 },
+      { idempotencyKey: 'fineopay:TRX-SUB:subscription-effects' },
+      { models, notifications, contractScheduler }
+    );
+
+    expect(contractScheduler.activateContractAfterPayment).toHaveBeenCalledWith(5, 'TRX-SUB');
+    expect(notifications.notifyAdmins).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: 'fineopay:TRX-SUB:subscription-effects:admins'
+    }));
+  });
+
+  test('produit les effets devis par l’outbox sans notification en double', async () => {
+    const notifications = { create: jest.fn(), notifyAdmins: jest.fn() };
+    const scheduler = {
+      autoAssignIntervention: jest.fn().mockResolvedValue({
+        assigned_technician: { id: 12 }
+      })
+    };
+    const notifyQuote = jest.fn();
+    const intervention = {
+      id: 4,
+      technician_id: null,
+      customer: { id: 9, user_id: 7 }
+    };
+    const quote = {
+      id: 7,
+      reference: 'DEV-7',
+      execute_now: true,
+      intervention
+    };
+    const models = {
+      Order: {
+        findByPk: jest.fn().mockResolvedValue({ id: 12, reference: 'CMD-12', quote })
+      },
+      Quote: {},
+      Intervention: {},
+      DiagnosticReport: {},
+      CustomerProfile: {},
+      User: {},
+      TechnicianProfile: {}
+    };
+
+    await handleQuotePaymentConfirmed(
+      {
+        orderId: 12,
+        quoteId: 7,
+        interventionId: 4,
+        reference: 'TRX-QUOTE',
+        amount: 10000,
+        paymentStep: 0,
+        executionActivated: true
+      },
+      { idempotencyKey: 'fineopay:TRX-QUOTE:quote-effects' },
+      { models, notifications, scheduler, notifyQuote }
+    );
+
+    expect(notifyQuote).toHaveBeenCalledWith(quote, intervention.customer, {
+      idempotencyKey: 'fineopay:TRX-QUOTE:quote-effects:quote-accepted'
+    });
+    expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 12,
+      idempotencyKey: 'fineopay:TRX-QUOTE:quote-effects:technician'
+    }));
+    expect(notifications.notifyAdmins).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: 'fineopay:TRX-QUOTE:quote-effects:admins'
     }));
   });
 });

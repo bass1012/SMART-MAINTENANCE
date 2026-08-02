@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
+import 'package:mct_maintenance_mobile/widgets/common/authenticated_network_image.dart';
 
 class ViewDiagnosticReportScreen extends StatefulWidget {
   final Map<String, dynamic> intervention;
@@ -473,7 +474,7 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
                       width: 120,
                       height: 120,
                       color: Colors.grey[200],
-                      child: Image.network(
+                      child: AuthenticatedNetworkImage(
                         url,
                         fit: BoxFit.cover,
                         loadingBuilder: (context, child, loadingProgress) {
@@ -527,7 +528,7 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
               maxScale: 4.0,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.network(
+                child: AuthenticatedNetworkImage(
                   imageUrl,
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {

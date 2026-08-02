@@ -2,6 +2,7 @@ const { DiagnosticReport, Intervention, User, CustomerProfile, Quote } = require
 const { sequelize } = require('../config/database');
 const { Op } = require('sequelize');
 const notificationService = require('../services/notificationService');
+const { isInternalUser } = require('../policies/resourceOwnershipPolicy');
 
 /**
  * Technicien soumet un rapport de diagnostic
@@ -51,7 +52,7 @@ exports.submitReport = async (req, res) => {
 
     if (intervention.technician_id !== technician_id) {
       await transaction.rollback();
-      return res.status(403).json({ message: 'Cette intervention ne vous est pas assignée' });
+      return res.status(404).json({ message: 'Intervention non trouvée' });
     }
 
     // Calculer le total estimé si les pièces ont des prix unitaires
@@ -173,12 +174,12 @@ exports.getReportById = async (req, res) => {
 
     // Vérifier les permissions
     const user = req.user;
-    const isAdmin = user.role === 'admin';
+    const isAdmin = user.role === 'admin' || user.role === 'manager';
     const isTechnician = report.technician_id === user.id;
     const isCustomer = report.intervention?.customer?.user_id === user.id;
 
     if (!isAdmin && !isTechnician && !isCustomer) {
-      return res.status(403).json({ message: 'Accès non autorisé' });
+      return res.status(404).json({ message: 'Rapport non trouvé' });
     }
 
     // Parser parts_needed et equipments si c'est un string JSON
@@ -228,6 +229,18 @@ exports.listReports = async (req, res) => {
     // Si technicien, ne voir que ses rapports
     if (user.role === 'technician') {
       where.technician_id = user.id;
+    } else if (user.role === 'customer') {
+      const profile = await CustomerProfile.findOne({
+        where: { user_id: user.id },
+        attributes: ['id']
+      });
+      const interventions = profile ? await Intervention.findAll({
+        where: { customer_id: profile.id },
+        attributes: ['id']
+      }) : [];
+      where.intervention_id = { [Op.in]: interventions.map((item) => item.id) };
+    } else if (!isInternalUser(user)) {
+      where.id = -1;
     }
 
     const offset = (page - 1) * limit;

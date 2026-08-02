@@ -4,6 +4,7 @@ const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const { body, query, param, validationResult } = require('express-validator');
 const interventionController = require('../controllers/intervention/interventionController');
 const upload = require('../config/multer');
+const { validateUploadedFileSignatures } = require('../middleware/fileSignatureValidation');
 
 // Middleware pour valider les erreurs
 const validate = (req, res, next) => {
@@ -313,6 +314,7 @@ router.post('/:id/start',
   authenticate, 
   authorize('technician'), 
   upload.array('images', 10),
+  validateUploadedFileSignatures,
   interventionController.startIntervention
 );
 
@@ -341,6 +343,7 @@ router.post('/:id/report',
     }
     next();
   },
+  validateUploadedFileSignatures,
   interventionController.submitReport
 );
 

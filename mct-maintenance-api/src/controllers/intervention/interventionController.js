@@ -24,6 +24,7 @@ const {
   sendInterventionRatingEmail
 } = require('../../services/emailHelper');
 const upload = require('../../config/multer');
+const { validateUploadedFileSignatures } = require('../../middleware/fileSignatureValidation');
 const schedulingService = require('../../services/schedulingService');
 const contractSchedulingService = require('../../services/contractSchedulingService');
 const {
@@ -335,6 +336,7 @@ const getInterventionById = async (req, res) => {
 const createIntervention = [
   // Middleware multer pour gérer l'upload d'images (max 5)
   upload.array('images', 5),
+  validateUploadedFileSignatures,
   
   async (req, res) => {
     const transaction = await Intervention.sequelize.transaction();

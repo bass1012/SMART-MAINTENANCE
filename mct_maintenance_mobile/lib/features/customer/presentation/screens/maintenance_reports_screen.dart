@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/widgets/common/support_fab_wrapper.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
+import 'package:mct_maintenance_mobile/widgets/common/authenticated_network_image.dart';
 
 class MaintenanceReportsScreen extends StatefulWidget {
   const MaintenanceReportsScreen({super.key});
@@ -337,7 +338,7 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
             padding: const EdgeInsets.only(right: 8),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.network(
+              child: AuthenticatedNetworkImage(
                 urls[index],
                 width: 80,
                 height: 80,

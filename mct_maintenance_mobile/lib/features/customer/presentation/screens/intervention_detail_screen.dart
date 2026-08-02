@@ -8,6 +8,7 @@ import 'package:mct_maintenance_mobile/features/interventions/domain/repositorie
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
 import 'package:mct_maintenance_mobile/utils/avatar_helper.dart';
+import 'package:mct_maintenance_mobile/widgets/common/authenticated_network_image.dart';
 import 'diagnostic_payment_screen.dart';
 import 'payment_screen.dart';
 import 'contract_payment_screen.dart';
@@ -2050,7 +2051,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                                   maxScale: 4.0,
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
-                                    child: Image.network(
+                                    child: AuthenticatedNetworkImage(
                                       imageUrl,
                                       fit: BoxFit.contain,
                                       errorBuilder: (context, error, stackTrace) {
@@ -2092,7 +2093,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                           width: 120,
                           height: 120,
                           color: Colors.grey[200],
-                          child: Image.network(
+                          child: AuthenticatedNetworkImage(
                             imageUrl,
                             fit: BoxFit.cover,
                             loadingBuilder: (context, child, loadingProgress) {

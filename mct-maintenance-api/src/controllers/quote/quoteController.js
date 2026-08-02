@@ -3,7 +3,7 @@ const generateQuotePdf = async (req, res) => {
   try {
     const { id } = req.params;
     const quote = await Quote.findByPk(id, { include: [{ model: QuoteItem, as: 'items' }] });
-    if (!quote) {
+    if (!quote || !(await canReadQuote({ quote, user: req.user }))) {
       return res.status(404).json({ success: false, message: 'Devis non trouvé' });
     }
     
@@ -269,7 +269,9 @@ const generateQuotePdf = async (req, res) => {
 };
 // Quote Controller - Placeholder implementation
 
-const { Quote, QuoteItem, CustomerProfile, User, Order, OrderItem } = require('../../models');
+const { Quote, QuoteItem, CustomerProfile, User, Order, OrderItem, Intervention } = require('../../models');
+const { Op } = require('sequelize');
+const { canReadQuote, isInternalUser } = require('../../policies/resourceOwnershipPolicy');
 const { 
   notifyNewQuote,
   notifyQuoteSent,
@@ -315,7 +317,24 @@ const mapQuoteItems = (quote) => {
 const getAllQuotes = async (req, res) => {
   try {
     console.log(`📋 Récupération de tous les devis...`);
+    const where = {};
+    if (req.user.role === 'customer') {
+      const profile = await CustomerProfile.findOne({
+        where: { user_id: req.user.id },
+        attributes: ['id']
+      });
+      where.customerId = profile?.id ?? -1;
+    } else if (req.user.role === 'technician') {
+      const interventions = await Intervention.findAll({
+        where: { technician_id: req.user.id },
+        attributes: ['id']
+      });
+      where.intervention_id = { [Op.in]: interventions.map((item) => item.id) };
+    } else if (!isInternalUser(req.user)) {
+      where.id = -1;
+    }
     const quotes = await Quote.findAll({
+      where,
       include: [{ model: QuoteItem, as: 'items' }],
       order: [['created_at', 'DESC']]
     });
@@ -334,7 +353,7 @@ const getQuoteById = async (req, res) => {
     const quote = await Quote.findByPk(req.params.id, {
       include: [{ model: QuoteItem, as: 'items' }]
     });
-    if (!quote) {
+    if (!quote || !(await canReadQuote({ quote, user: req.user }))) {
       return res.status(404).json({ success: false, message: 'Devis non trouvé' });
     }
     const mappedQuote = mapQuoteItems(quote);

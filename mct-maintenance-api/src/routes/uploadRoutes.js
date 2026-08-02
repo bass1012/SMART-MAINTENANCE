@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { validateUploadedFileSignatures } = require('../middleware/fileSignatureValidation');
 const {
   uploadAvatar,
   uploadProductImage,
@@ -124,11 +125,11 @@ const handleEquipmentImage = (req, res, next) => {
 
 // Routes d'upload
 // - Avatar : tout utilisateur authentifié peut changer son propre avatar
-router.post('/avatar', authenticate, uploadImage.single('avatar'), uploadAvatar);
+router.post('/avatar', authenticate, uploadImage.single('avatar'), validateUploadedFileSignatures, uploadAvatar);
 // - Produit, équipement, document : réservés aux admins
-router.post('/product', authenticate, requireRole('admin'), handleProductImage, uploadProductImage);
-router.post('/equipment', authenticate, requireRole('admin'), handleEquipmentImage, uploadEquipmentImage);
-router.post('/document', authenticate, requireRole('admin'), uploadDoc.single('document'), uploadDocument);
+router.post('/product', authenticate, requireRole('admin'), handleProductImage, validateUploadedFileSignatures, uploadProductImage);
+router.post('/equipment', authenticate, requireRole('admin'), handleEquipmentImage, validateUploadedFileSignatures, uploadEquipmentImage);
+router.post('/document', authenticate, requireRole('admin'), uploadDoc.single('document'), validateUploadedFileSignatures, uploadDocument);
 
 // Route de suppression — admin uniquement
 router.delete('/:type/:filename', authenticate, requireRole('admin'), deleteUploadedFile);

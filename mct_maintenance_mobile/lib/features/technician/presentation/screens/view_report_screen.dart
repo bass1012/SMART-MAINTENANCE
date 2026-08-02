@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:share_plus/share_plus.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
+import 'package:mct_maintenance_mobile/widgets/common/authenticated_network_image.dart';
 
 class ViewReportScreen extends StatelessWidget {
   final Map<String, dynamic> intervention;
@@ -572,7 +573,7 @@ class ViewReportScreen extends StatelessWidget {
                       width: 120,
                       height: 120,
                       color: Colors.grey[200],
-                      child: Image.network(
+                      child: AuthenticatedNetworkImage(
                         url,
                         fit: BoxFit.cover,
                         loadingBuilder: (context, child, loadingProgress) {
@@ -626,7 +627,7 @@ class ViewReportScreen extends StatelessWidget {
               maxScale: 4.0,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.network(
+                child: AuthenticatedNetworkImage(
                   imageUrl,
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {

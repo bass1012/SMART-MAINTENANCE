@@ -2,6 +2,10 @@ const { Order, Payment, User, Subscription, CustomerProfile } = require('../mode
 const paymentService = require('../services/paymentService');
 const { generateInvoicePDF } = require('../services/pdfService');
 const { sendInvoiceEmail, sendPaymentConfirmationEmail } = require('../services/emailService');
+const {
+  canReadOrder,
+  canReadUserOwnedResource
+} = require('../policies/resourceOwnershipPolicy');
 
 /**
  * Initier un paiement
@@ -26,7 +30,7 @@ const initiatePayment = async (req, res, next) => {
       ]
     });
 
-    if (!order) {
+    if (!order || !(await canReadOrder({ order, user: req.user }))) {
       return res.status(404).json({
         success: false,
         message: 'Commande non trouvée'
@@ -179,7 +183,7 @@ const confirmPayment = async (req, res, next) => {
       ]
     });
 
-    if (!payment) {
+    if (!payment || !(await canReadOrder({ order: payment.order, user: req.user }))) {
       return res.status(404).json({
         success: false,
         message: 'Paiement non trouvé'
@@ -236,6 +240,11 @@ const getOrderPayments = async (req, res, next) => {
   try {
     const { orderId } = req.params;
 
+    const order = await Order.findByPk(orderId);
+    if (!order || !(await canReadOrder({ order, user: req.user }))) {
+      return res.status(404).json({ success: false, message: 'Commande non trouvée' });
+    }
+
     const payments = await Payment.findAll({
       where: { orderId },
       order: [['createdAt', 'DESC']]
@@ -287,7 +296,7 @@ const downloadInvoice = async (req, res, next) => {
       ]
     });
 
-    if (!order) {
+    if (!order || !(await canReadOrder({ order, user: req.user }))) {
       console.error('❌ Commande non trouvée:', orderId);
       return res.status(404).json({
         success: false,
@@ -377,7 +386,7 @@ const emailInvoice = async (req, res, next) => {
       ]
     });
 
-    if (!order) {
+    if (!order || !(await canReadOrder({ order, user: req.user }))) {
       return res.status(404).json({
         success: false,
         message: 'Commande non trouvée'
@@ -456,7 +465,7 @@ const initiateSubscriptionPayment = async (req, res, next) => {
       ]
     });
 
-    if (!subscription) {
+    if (!subscription || !canReadUserOwnedResource({ resource: subscription, user: req.user })) {
       return res.status(404).json({
         success: false,
         message: 'Souscription non trouvée'
@@ -631,7 +640,7 @@ const confirmSubscriptionPayment = async (req, res, next) => {
       ]
     });
 
-    if (!payment) {
+    if (!payment || !canReadUserOwnedResource({ resource: payment.subscription, user: req.user })) {
       return res.status(404).json({
         success: false,
         message: 'Paiement non trouvé'

@@ -11,6 +11,7 @@ import 'package:mct_maintenance_mobile/features/interventions/domain/repositorie
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mct_maintenance_mobile/widgets/common/authenticated_network_image.dart';
 
 class CreateReportScreen extends StatefulWidget {
   final Map<String, dynamic> intervention;
@@ -935,7 +936,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           final fullUrl = rawPath.startsWith('/uploads/')
               ? '${AppConfig.baseUrl}$rawPath'
               : rawPath;
-          imageWidget = Image.network(
+          imageWidget = AuthenticatedNetworkImage(
             fullUrl,
             fit: BoxFit.cover,
             width: double.infinity,

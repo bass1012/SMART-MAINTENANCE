@@ -1,76 +1,76 @@
 const fs = require('fs');
 const path = require('path');
+const Sequelize = require('sequelize');
 const { sequelize } = require('../src/config/database');
 
-async function runMigrations() {
+const migrationsDirectory = path.join(__dirname, '../migrations');
+
+const discoverMigrations = () => fs.readdirSync(migrationsDirectory)
+  .filter((filename) => filename.endsWith('.js'))
+  .sort();
+
+const loadMigration = (filename) => {
+  const migration = require(path.join(migrationsDirectory, filename));
+  if (!migration || typeof migration.up !== 'function' || typeof migration.down !== 'function') {
+    throw new TypeError(`Migration invalide ${filename}: les fonctions up et down sont obligatoires`);
+  }
+  return migration;
+};
+
+const ensureHistoryTable = async (database) => {
+  await database.query(`
+    CREATE TABLE IF NOT EXISTS migration_history (
+      filename VARCHAR(255) PRIMARY KEY,
+      executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+};
+
+const getExecutedMigrations = async (database) => {
+  const [rows] = await database.query('SELECT filename FROM migration_history');
+  return new Set(rows.map((row) => row.filename));
+};
+
+async function runMigrations({ database = sequelize, statusOnly = false, closeConnection = true } = {}) {
   try {
-    console.log('🔄 Démarrage des migrations...');
-    
-    // Connecter à la base de données
-    await sequelize.authenticate();
-    console.log('✅ Connexion à la base de données établie.');
-    
-    // Obtenir la liste des fichiers de migration
-    const migrationsDir = path.join(__dirname, '../migrations');
-    const migrationFiles = fs.readdirSync(migrationsDir)
-      .filter(file => file.endsWith('.js'))
-      .sort(); // Trier par nom de fichier (ordre chronologique)
-    
-    console.log(`📁 ${migrationFiles.length} fichiers de migration trouvés.`);
-    
-    // Créer la table de suivi des migrations si elle n'existe pas
-    const [results] = await sequelize.query(`
-      CREATE TABLE IF NOT EXISTS migration_history (
-        filename VARCHAR(255) PRIMARY KEY,
-        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    // Obtenir la liste des migrations déjà exécutées
-    const [executedMigrations] = await sequelize.query(
-      'SELECT filename FROM migration_history'
-    );
-    const executedSet = new Set(executedMigrations.map(row => row.filename));
-    
-    // Exécuter les migrations non encore appliquées
-    for (const file of migrationFiles) {
-      if (executedSet.has(file)) {
-        console.log(`⏭️  Migration ${file} déjà exécutée, passage à la suivante.`);
-        continue;
-      }
-      
-      console.log(`🔄 Exécution de la migration: ${file}`);
-      
-      try {
-        const migration = require(path.join(migrationsDir, file));
-        await migration.up(sequelize.getQueryInterface(), sequelize.constructor);
-        
-        // Marquer la migration comme exécutée
-        await sequelize.query(
-          'INSERT INTO migration_history (filename) VALUES (?)',
-          { replacements: [file] }
-        );
-        
-        console.log(`✅ Migration ${file} exécutée avec succès.`);
-      } catch (error) {
-        console.error(`❌ Erreur lors de l'exécution de la migration ${file}:`, error);
-        throw error;
-      }
+    await database.authenticate();
+    await ensureHistoryTable(database);
+
+    const migrationFiles = discoverMigrations();
+    const executedMigrations = await getExecutedMigrations(database);
+    const pendingMigrations = migrationFiles.filter((filename) => !executedMigrations.has(filename));
+
+    console.log(`📁 ${migrationFiles.length} migrations JS versionnées, ${pendingMigrations.length} en attente.`);
+    if (statusOnly) {
+      for (const filename of pendingMigrations) console.log(`⏳ ${filename}`);
+      return { total: migrationFiles.length, pending: pendingMigrations };
     }
-    
-    console.log('🎉 Toutes les migrations ont été exécutées avec succès!');
-    
-  } catch (error) {
-    console.error('❌ Erreur lors des migrations:', error);
-    process.exit(1);
+
+    for (const filename of pendingMigrations) {
+      console.log(`🔄 Exécution de la migration: ${filename}`);
+      const migration = loadMigration(filename);
+      await migration.up(database.getQueryInterface(), Sequelize);
+      await database.query(
+        'INSERT INTO migration_history (filename) VALUES (?)',
+        { replacements: [filename] }
+      );
+      console.log(`✅ Migration ${filename} exécutée.`);
+    }
+
+    return { total: migrationFiles.length, executed: pendingMigrations.length };
   } finally {
-    await sequelize.close();
+    if (closeConnection) await database.close();
   }
 }
 
-// Exécuter si appelé directement
 if (require.main === module) {
-  runMigrations();
+  runMigrations({ statusOnly: process.argv.includes('--status') })
+    .catch((error) => {
+      console.error(`❌ Erreur lors des migrations: ${error.message}`);
+      process.exitCode = 1;
+    });
 }
 
 module.exports = runMigrations;
+module.exports.discoverMigrations = discoverMigrations;
+module.exports.loadMigration = loadMigration;
