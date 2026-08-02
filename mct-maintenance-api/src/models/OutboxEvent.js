@@ -52,6 +52,7 @@ OutboxEvent.init({
   tableName: 'outbox_events',
   underscored: true,
   timestamps: true,
+  paranoid: false,
   indexes: [
     {
       name: 'outbox_events_idempotency_key_uq',
