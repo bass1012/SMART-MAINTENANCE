@@ -307,15 +307,10 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         intervention: _intervention,
       );
     } else {
-      // Utiliser l'écran d'entretien pour maintenance et autres types
-      final reportData = _intervention['report_data'];
-      final bool isInitialCompleted = _intervention['initial_completed'] == true ||
-          (reportData is Map && reportData['initial_completed'] == true) ||
-          (_intervention['initial_report'] != null);
-
+      // Pour toute intervention en cours, ouvrir le rapport d'intervention (isInitialStep = false)
       reportScreen = CreateReportScreen(
         intervention: _intervention,
-        isInitialStep: !isInitialCompleted,
+        isInitialStep: false,
       );
     }
 
@@ -979,39 +974,12 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
             ),
           );
         } else {
-          final reportData = _intervention['report_data'];
-          final bool isInitialCompleted = _intervention['initial_completed'] == true ||
-              (reportData is Map && reportData['initial_completed'] == true) ||
-              (_intervention['initial_report'] != null);
-
-          final bool isMaintenance = !(rawType.contains('diagnostic') ||
-              rawType.contains('depannage') ||
-              rawType.contains('dépannage') ||
-              rawType.contains('reparation') ||
-              rawType.contains('réparation') ||
-              rawType.contains('installation') ||
-              rawType.contains('repair'));
-
-          final String buttonLabel;
-          final IconData buttonIcon;
-          final Color buttonColor;
-
-          if (isMaintenance && !isInitialCompleted) {
-            buttonLabel = 'Constat avant intervention (1-6)';
-            buttonIcon = Icons.assignment_outlined;
-            buttonColor = Colors.orange.shade800;
-          } else {
-            buttonLabel = 'Rédiger le rapport';
-            buttonIcon = Icons.assignment;
-            buttonColor = const Color(0xFF0a543d);
-          }
-
           mainButton = ElevatedButton.icon(
             onPressed: _isLoading ? null : _goToReport,
-            icon: Icon(buttonIcon),
-            label: Text(buttonLabel),
+            icon: const Icon(Icons.assignment),
+            label: const Text('Rédiger le rapport'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: buttonColor,
+              backgroundColor: const Color(0xFF0a543d),
               minimumSize: const Size(double.infinity, 50),
             ),
           );
