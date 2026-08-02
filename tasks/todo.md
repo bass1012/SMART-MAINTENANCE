@@ -1,3 +1,184 @@
+# Revue d'architecture et recommandations — 1 août 2026
+
+- [x] Cartographier les applications, services et flux métier principaux.
+- [x] Évaluer l'architecture, la maintenabilité, la sécurité et la cohérence des données.
+- [x] Examiner la couverture de tests, l'automatisation et la préparation à la production.
+- [x] Classer les recommandations par impact, risque et effort.
+
+---
+
+# TODO - Session 31 juillet 2026 - Paiements Split, Isolation Sécurité Client & Cache Mobile
+
+## Terminé dans cette session (31 juillet 2026) :
+- [x] **21. Correction de l'Affichage du Bloc de Paiement Intervention (Dashboard `InterventionsPage.tsx`)** :
+  - **Interventions Gratuites** : Masquage du solde 50% et affichage d'un bloc bleu unique `✓ Gratuit (Montant: 0 F CFA)`.
+  - **Paiement Intégral 100%** : Masquage du solde 50% et affichage d'un bloc unique `✓ Payé à 100%` ou `⏳ En attente de paiement`.
+  - **Paiements Échelonnés 50/50** : Affichage séparé et clair du Premier acompte (50%) et du Solde (50% restant) uniquement lorsque le solde est réel (`second_payment_amount > 0`).
+- [x] **22. Attribution Stricte du 1er Acompte vs 2nd Solde (`fineoPayController.js` & `app.js`)** :
+  - Correction de l'attribution du 1er paiement d'acompte 50% : Vérifier en priorité `if (intervention.diagnostic_paid !== true)` pour marquer le premier acompte comme payé sans impacter le statut du 2ème solde (`second_payment_status: 'pending'`).
+  - Auto-correction au démarrage du serveur (`app.js`) pour réinitialiser à `'pending'` les 2èmes paiements des interventions split non terminées qui avaient été prématurément marqués `paid`.
+- [x] **23. Sécurisation Étanche de l'Isolation des Données Client (`customerRoutes.js`, `interventionController.js`, `quoteController.js`)** :
+  - Correction de la résolution d'identifiant client : Génération systématique du tableau d'identifiants valides `customerIds = [User.id, CustomerProfile.id]` et application de `where: { customer_id: { [Op.in]: customerIds } }` dans `getAllInterventions`, `GET /customer/interventions`, `GET /customer/quotes`, `GET /customer/maintenance-reports`, garantissant qu'un client ne peut accéder qu'à ses propres données.
+  - Attribution propre de `CustomerProfile.id` lors de la création d'une intervention (`POST /customer/interventions`).
+- [x] **24. Correction de la Détection de Connectivité & Vidage du Cache Local SQLite (`connectivity_service.dart`, `local_cache_service.dart`, `intervention_repository_impl.dart`, `auth_repository_impl.dart`)** :
+  - Suppression du faux positif "Mode offline" sur les émulateurs/simulateurs (`connectivity_plus`) en validant la connexion avec `results.isNotEmpty && !results.contains(ConnectivityResult.none)`.
+  - Ajout de `clearCachedInterventions()` dans `LocalCacheService` pour purger le cache SQLite des interventions à l'arrivée de données fraîches du serveur et vidage complet (`clearAllData()`) lors de la déconnexion (`logout`).
+
+---
+
+# TODO - Session 30 juillet 2026 - Refonte Rapport Diagnostic (Dépannage & Installation)
+
+## Terminé dans cette session (30 juillet 2026) :
+- [x] **1. Refonte du Formulaire de Diagnostic Mobile (`diagnostic_report_screen.dart`)** :
+  - Restructuration du rapport de diagnostic selon les 7 points spécifiés :
+    - **1/ Type & Marque de l'équipement** (Mural, Cassette, Armoire, Central, etc. + Marque).
+    - **2/ Emplacement de l'équipement** (Champ texte libre : Salon, Chambre 1, Bureau, etc.).
+    - **3/ État de l'équipement** (Champ texte libre sans valeur par défaut - 'Usagé' supprimé).
+    - **4/ Test équipement** (Sélection Oui / Non avec ChoiceChips).
+    - **5/ Données techniques (Constantes avant intervention)** : Intensité (A), Tension (V), Type de Fréon, Pression (bar), Puissance (CV).
+    - Support multi-équipements dynamique (Ajout / Suppression d'équipements avec cartes numérotées).
+    - **6/ Décrire la panne** (Champ texte grand format pour le constat du technicien).
+    - **7/ Matériels nécessaires pour le dépannage / L'installation** (Champ texte / liste des pièces nécessaires).
+  - Design premium & ergonomie : Harmonisation des bordures arrondies (`borderRadius: 14px-18px`), fonds gris très doux (`#F6F8F6` et `filled: true`), réorganisation claire des étiquettes 1/ Type, 2/ Emplacement et 3/ État.
+- [x] **2. Refonte des Vues Récapitulatives Mobile (`view_diagnostic_report_screen.dart`)** :
+  - Affichage clair et moderne des 7 points : Cartes d'équipements structurées (Type, Marque, Emplacement, État texte libre, Test Oui/Non), bloc Données techniques 🟢 (Constantes avant intervention), constat de panne 📌, matériels nécessaires 🛠️ et galerie photo.
+- [x] **3. Backend API (`mct-maintenance-api`)** :
+  - Mise à jour du modèle `DiagnosticReport.js` et du contrôleur `diagnosticReportController.js` pour stocker, sérialiser et parser `equipments` (tableau d'équipements) et `materials_needed`.
+- [x] **4. Web Dashboard (`mct-maintenance-dashboard`)** :
+  - Mise à jour de la modale de détails dans `DiagnosticReportsPage.tsx` pour afficher les cartes d'équipements avec Type, Marque, Emplacement, État texte libre, Test Oui/Non, 🟢 Données techniques constantes avant intervention, 📌 Description de la Panne et 🛠️ Matériels Nécessaires.
+- [x] **5. Correction du Bouton d'Action du Workflow d'Exécution Mobile (`intervention_detail_screen.dart`)** :
+  - Ajustement du bouton pour le statut `execution_confirmed` (devis payé) : affichage du bouton **`▶ Démarrer l'intervention`** au lieu de sauter directement à "Terminer".
+  - Une fois l'intervention démarrée (passage à `in_progress`), le bouton passe à **`✓ Terminer l'intervention`** pour valider la réalisation des travaux d'exécution post-devis.
+- [x] **7. Refonte de l'Affichage du Rapport 2-Étapes (AVANT vs APRÈS Intervention) Côté Client** :
+  - **Backend API (`customerRoutes.js`)** : Enrichissement de `GET /api/customer/maintenance-reports` pour renvoyer `photos_before`, `photos_after`, `imageUrls`, `work_description`, ainsi que la structure 2-étapes (`before_pression`, `after_pression`, etc.) pour chaque équipement.
+  - **Modèles Flutter (`maintenance_report_model.dart`)** : Mise à jour de `ReportEquipment` et `MaintenanceReport` pour parser les mesures AVANT (Constat initial) et APRÈS (Clôture finale), les tests fonctionnels et les photos distinctes.
+  - **Interface Client (`maintenance_reports_screen.dart`)** : Affichage restructuré avec blocs séparés 🟢 AVANT Intervention (Constat initial), 📷 Photos AVANT, 🟠 APRÈS Intervention (Clôture finale), et 📸 Photos APRÈS.
+- [x] **6. Correction de la Récupération du Rapport de Diagnostic Côté Technicien** :
+  - **Backend API (`interventionController.js`)** : Ajout de la relation `DiagnosticReport` (`as: 'diagnosticReports'`) dans `getTechnicianInterventions` et création de l'alias `diagnostic_report` dans la réponse JSON.
+  - **Application Mobile (`view_diagnostic_report_screen.dart`)** : Transformation de l'écran en `StatefulWidget` avec rechargement automatique depuis l'API (`getInterventionById`) dès l'ouverture et bouton de rafraîchissement.
+- [x] **7. Correction de l'Onglet "Mes Rapports" Mobile (`technicianRoutes.js`)** :
+  - Enrichissement de la route `GET /api/technician/reports` pour croiser les rapports de diagnostic par `technician_id` ET via l'intervention parente (`$intervention.technician_id$`).
+  - Décodage JSON sécurisé et structuration de la liste des équipements (`equipments`).
+- [x] **8. Verification & Déploiement VPS** :
+  - Déploiement sur le serveur VPS via `./deploy/deploy.sh api` et redémarrage PM2 validé.
+- [x] **9. Photo de Profil & Carte Technicien Assigné** :
+  - **Backend API (`interventionController.js` et `customerRoutes.js`)** : Récupération des attributs `profile_image`, `first_name`, `last_name`, `phone` pour la relation `technician` dans tous les endpoints d'interventions.
+  - **Application Mobile (`intervention_detail_screen.dart`)** : Intégration de `AvatarHelper.buildImageProvider` pour l'avatar, garantie d'affichage via `_shouldShowTechnicianCard()` si le statut est `assigned` (ou au-delà), et sécurisation avec nom de secours.
+- [x] **10. Verrouillage du Type d'Intervention depuis "Nos Services"** :
+  - **Application Mobile (`new_intervention_screen.dart`)** : Implémentation du getter `_isTypeLocked` et de la désactivation dynamique de `onChanged` lorsque `preSelectedType` est transmis depuis l'onglet *"Nos Services"* (Maintenance, Installation, Réparation/Dépannage).
+- [x] **11. Intégration du Champ Code Promo dans le Formulaire de Création d'Intervention** :
+  - **Application Mobile (`new_intervention_screen.dart`)** : Ajout de la section UI **"Code promotionnel"** 🏷️ avec le contrôleur `_promoCodeController`, bouton **Appliquer**, appel de validation vers `/api/promotions/validate`, badge de confirmation vert avec le montant de la réduction, et transmission de `promo_code` et `discount_amount` dans le payload de la demande d'intervention.
+- [x] **12. Correction du Calcul et Paiement Diagnostic avec Code Promo** :
+  - **Backend API (`interventionController.js`)** : Déclarations de variables corrigées et application de la réduction `discount_amount` sur le montant du diagnostic et le total.
+  - **Application Mobile (`new_intervention_screen.dart`)** : Utilisation directe de `diagnosticFeeFromServer` pour transmettre le montant exact au paiement de diagnostic sans double déduction.
+- [x] **13. Système de Cartes de Rapport Déroulantes / Réductibles** :
+  - **Application Mobile (`maintenance_reports_screen.dart`)** : Implémentation du système d'accordéon (`isExpanded`) avec flèche interactive (`keyboard_arrow_down` / `keyboard_arrow_up`) dans l'en-tête et barre de basculement au bas des cartes. Le premier rapport s'affiche ouvert par défaut pour un accès rapide.
+- [x] **14. Suppression du Bloc "Options de paiement" dans le Détail du Devis** :
+  - **Application Mobile (`quote_detail_screen.dart`)** : Suppression intégrale du conteneur bleu encadré *"Options de paiement"* situé au-dessus des boutons *"Accepter le devis"* et *"Refuser le devis"*.
+- [x] **15. Isolation Stricte des Interventions par Client Connecté** :
+  - **Backend API (`interventionController.js` & `customerRoutes.js`)** : Sécurisation absolue de `getAllInterventions` et `/api/customer/interventions`. Si l'utilisateur a le rôle `customer`, la requête résout automatiquement son `CustomerProfile.id` à partir de son `user_id` et applique le filtre `where.customer_id = customerProfile.id`. Un client ne peut plus recevoir aucune intervention d'un autre client.
+- [x] **16. Nettoyage de l'Espacement & Suppression du Vide dans l'Écran de Paiement Diagnostic** :
+  - **Application Mobile (`diagnostic_payment_screen.dart`)** : Conditionnement de l'élément `_buildImportantNote()` et suppression du double `SizedBox(height: 24)` intermédiaire lorsque la note d'acompte n'est pas applicable. Enveloppement du conteneur dans `SafeArea` avec dimensions explicites `width: double.infinity` et `height: double.infinity`.
+- [x] **17. Clarification & Gestion Intégrale des Statuts de Paiement Devis (Acompte 50% & Solde 100%)** :
+  - **Application Mobile (`quote_detail_screen.dart`)** : Restructuration de la carte verte du devis accepté pour évaluer en priorité si le devis est 100% payé (`paymentStatus == 'paid'` ou `secondPaymentStatus == 'paid'`). Si les 2 paiements sont faits, l'écran affiche « 🟢 Premier paiement (acompte 50%) effectué » et « 🟢 Deuxième paiement (solde 50%) effectué » (ou « 🟢 Paiement intégral (100%) effectué »). Si seul l'acompte a été réglé, il affiche « 🟢 Premier paiement (acompte 50%) effectué » et « ⌛ Paiement du solde (50%) en attente ».
+- [x] **18. Paiement Préalable Obligatoire & Notifications Post-Paiement lors de l'Acceptation du Devis** :
+  - **Application Mobile (`quote_detail_screen.dart`)** : Exiger le paiement immédiat de l'option choisie (50% ou 100%) sur `PaymentScreen` pour toute acceptation de devis (*Exécuter immédiatement* ou *Planifier pour plus tard*) avant d'afficher la confirmation et d'émettre les notifications.
+  - **Backend API (`customerRoutes.js` & `quoteController.js`)** : Assurer que le `payment_status` initial est fixé à `'pending'` et que les notifications d'exécution/planification sont déclenchées après confirmation du paiement.
+- [x] **19. Correction du Polling du Pop-up de Vérification de Paiement** :
+  - **Application Mobile (`diagnostic_payment_screen.dart`, `payment_screen.dart`, `subscription_payment_screen.dart`)** : Mise à jour des conditions de détection de succès dans le polling pour reconnaître les statuts `partial` et `first_payment_status == 'paid'` (paiements d'acompte 50%), empêchant le dialogue de tourner dans le vide après confirmation du paiement.
+- [x] **20. Distinction Stricte Étape 1 (Acompte 50%) vs Étape 2 (Solde 50%) lors de la Vérification de Paiement** :
+  - **Application Mobile (`payment_screen.dart`, `diagnostic_payment_screen.dart`, `subscription_payment_screen.dart`)** : Correction du bug d'auto-validation instantanée. Lorsqu'un client paie le solde (étape 2), la vérification n'évalue plus `first_payment_status == 'paid'` ou `payment_status == 'partial'`, mais exige strictement `second_payment_status == 'paid'` ou `payment_status == 'paid'`, empêchant toute fausse validation avant paiement réel sur FineoPay.
+
+---
+
+# TODO - Session 29 juillet 2026 - Refonte Rapport Maintenance
+
+## Terminé dans cette session (29 juillet 2026) :
+- [x] **Refonte et découpage du rapport de maintenance en 2 étapes** :
+  - **Étape 1 (Au Démarrage / Statut `arrived`)** : Au clic sur *"Démarrer"*, ouverture du formulaire **Constat Initial / AVANT intervention** (Points 1 à 6 : Photos avant, Type/Marque, Emplacement, État texte libre, Test Oui/Non, Données techniques avant). La validation appelle `startIntervention(id, reportData)` et passe l'intervention au statut `in_progress`.
+  - **Étape 2 (À la Fin / Statut `in_progress`)** : Au clic sur *"Terminer l'intervention"*, ouverture du **Rapport de Fin / APRÈS intervention** (Points 7 à 9 : Travaux 7 checkboxes, Photos après/vidéo, Données techniques après) + Détail (heures, nature, observations, pièces). La validation appelle `submitReport` et passe l'intervention au statut `completed`.
+  - **Gestion du clavier & Persistance Étape 1 ➔ Étape 2** : Implémentation de `TextEditingController` dédiés par équipement. Suppression des recompilations de formulaires qui causaient la fermeture intempestive du clavier à chaque frappe. Chargement automatique et persistance intégrale de tous les champs et photos de l'étape 1 lors de l'ouverture de l'étape 2.
+  - **Analyse statique Dart** : 0 erreur, 0 warning (`flutter analyze` → No issues found).
+
+---
+
+
+## Terminé dans cette session (29 juillet 2026) :
+- [x] **1. Démarrage et Notifications QU'APRÈS PAIEMENT (Dashboard & Technicien)** :
+  - **`quoteWorkflowController.js` (`acceptQuote`)** : L'acceptation d'un devis conserve l'intervention au statut `quote_accepted` (attente de règlement). Ne passe plus à l'état `in_progress` immédiatement.
+  - **Suppression des notifications pré-paiement** : Ni le dashboard (admins/managers) ni le technicien ne reçoivent d'alerte lors de la simple acceptation sans paiement.
+  - **`fineoPayController.js` (Confirmation Paiement)** : La validation du paiement du devis par FineoPay déclenche à la fois le passage en `in_progress` (ou `execution_confirmed`) et l'envoi des notifications d'exécution au technicien et aux administrateurs sur le Dashboard (*"✅ Devis payé - Exécution autorisée"*).
+- [x] **4. Restauration des boutons d'étapes du workflow technicien** :
+  - **`intervention_detail_screen.dart`** : Restauration intégrale des boutons d'action pour toutes les étapes du workflow technicien (`accepted` -> *"Je suis en route"*, `on_the_way` -> *"Je suis arrivé"*, `arrived` -> *"Démarrer"* / *"Injoignable"*, `quote_accepted` -> *"En attente du paiement"*, `execution_confirmed` / `in_progress` -> *"Terminer l'intervention"* / *"Rédiger le rapport"*).
+
+---
+
+# TODO - Session 29 juillet 2026 - Fix Upload Avatar (MIME Type & Extension)
+
+## Terminé dans cette session (29 juillet 2026) :
+- [x] **Fix Upload Avatar (Erreur 500 "Seules les images sont autorisées...")** :
+  - **Mobile (`auth_repository_impl.dart`)** : Ajout du paramètre `contentType: MediaType.parse(mimeType)` lors de la construction du `http.MultipartFile.fromPath('avatar', imagePath)` dans `uploadAvatar`. Extraction améliorée des messages d'erreur API (`data['error']`).
+  - **Backend (`uploadRoutes.js` & `multer.js`)** : Mise à jour des filtres Multer `imageFilter` et `fileFilter` pour supporter `image/jpg`, `image/pjpeg`, `image/webp` et autoriser `application/octet-stream` lorsque l'extension de fichier est une extension d'image valide (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`).
+- [x] **Fix Échec Validation du 2ème Paiement Échelonné (50% Solde)** :
+  - **Diagnostic** : `initializeDiagnosticPayment` dans `fineoPayController.js` créait toujours un lien FineoPay basé sur `diagnostic_fee` (50% acompte), ignorant `second_payment_status === 'pending'`, tandis que `verifyDiagnosticPayment` vérifiait `expectedAmount` (50% solde). L'écart de montant (ex: 3 FCFA vs 2 FCFA) empêchait l'association de la transaction FineoPay.
+  - **Correction Backend (`fineoPayController.js`)** : Prise en compte de `second_payment_amount` dans `initializeDiagnosticPayment` lors du second versement et assouplissement de la correspondance des montants dans `verifyDiagnosticPayment`. Déploiement et redémarrage PM2 sur le VPS.
+
+---
+
+# TODO - Session 28 juillet 2026 - Flux 50/50 Split Payment & Corrections Générales
+
+## Terminé dans cette session (28 juillet 2026) :
+- [x] **Flux complet de Paiement Échelonné 50/50 (Acompte & Solde à la fin d'intervention)** :
+  - **Model & Database** : Ajout des colonnes `payment_option`, `total_price`, `second_payment_amount`, `second_payment_status`, `second_payment_date` sur le modèle `Intervention.js` avec auto-migration au démarrage dans `app.js`.
+  - **Création d'intervention (`createIntervention`)** : Pour les demandes avec acompte 50% (`payment_option: 'split'`), calcul du solde 50% (`second_payment_amount`) et initialisation du statut `second_payment_status: 'pending'`.
+  - **Confirmation de fin d'intervention (`confirmInterventionCompletion`)** : Détection automatique des 50% solde en attente (intervention directe, devis ou contrat), injection de `payment_required: true` et envoi de notification push au client.
+  - **Validation de paiement (`fineoPayController.js`)** : Prise en compte de l'étape 2 (solde 50%), basculement de `second_payment_status` à `'paid'`.
+- [x] **Fix Redirection 404 au clic sur les notifications d'intervention** :
+  - Ajout de la route `/interventions/:id` dans `App.tsx` et gestion `useParams<{ id?: string }>()` dans `InterventionsPage.tsx` pour l'ouverture directe du modal.
+- [x] **Fix Erreur 500 `/suggest-technicians`** :
+  - Fallback automatique vers tous les techniciens actifs si aucun n'est marqué disponible.
+- [x] **Affichage & Tri En Ligne / Hors Ligne des Techniciens** :
+  - Badges d'état et tri prioritaire des techniciens en ligne sur le dashboard.
+- [x] **Notification de paiement dynamique** :
+  - Libellés adaptés ("Demande d'intervention confirmée", "Paiement d'intervention confirmé").
+
+---
+
+# TODO - Session 27 juillet 2026 - Contrôle de Disponibilité des Techniciens par le Back-Office
+
+## Terminé dans cette session (27 juillet 2026) :
+- [x] **Backend (`mct-maintenance-api`)** :
+  - Création de la méthode `updateTechnicianAvailabilityByAdmin` dans `technicianController.js`.
+  - Enregistrement des routes `PATCH/PUT /api/admin/technicians/:id/availability` et `PATCH/PUT /api/technicians/:id/availability`.
+  - Émission de l'événement Socket.io (`technician_status_changed`) et notification du technicien.
+- [x] **Dashboard Web (`mct-maintenance-dashboard`)** :
+  - Ajout de `availability_status` dans `ApiUser` (`usersService.ts`).
+  - Ajout d'une colonne interactive **"Disponibilité (En ligne)"** dans `TechniciansPage.tsx` avec un sélecteur coloré (🟢 En ligne / Disponible, 🟡 En intervention, ⚪ Hors ligne).
+  - Validation et compilation de la version de production web (`npm run build` : Succès ✅).
+
+---
+
+# TODO - Session 18 juillet 2026 - Correction Enregistrement et Affichage Évaluations Techniciens
+
+## Terminé dans cette session (18 juillet 2026)
+
+### ✅ Correction de l'Affichage et la Persistance des Évaluations Techniciens
+- **Problème** : Les évaluations des techniciens ne s'affichaient pas sur l'application mobile et semblaient disparaître.
+- **Cause racine** :
+  1. Côté Mobile Technicien (`reviews_screen.dart`) : les avis clients (`_reviews`) étaient récupérés en état mais omis de la `ListView` (`_buildReviewCard` n'était jamais appelé).
+  2. Côté Backend API (`technicianRoutes.js`) : la route `GET /api/technicians/reviews` n'incluait pas le commentaire textuel `review` ni la relation client `CustomerProfile`.
+  3. Côté Backend Admin (`adminRoutes.js`) : la liste des techniciens pour l'admin omettait `rating` et `total_reviews`.
+- **Modifications réalisées** :
+  - **Backend** (`technicianRoutes.js`) : inclusion de `CustomerProfile` (`customer`) et ajout des champs `review`, `comment`, et `customer_name` dans le JSON de réponse de `GET /api/technicians/reviews`.
+  - **Backend** (`adminRoutes.js`) : ajout des champs `rating` et `total_reviews` à la liste des techniciens retournée pour l'administration.
+  - **Mobile** (`reviews_screen.dart`) : affichage ultra-épuré des évaluations (uniquement le titre de l'intervention, la date formatée `JJ/MM/AAAA` et la note sous forme d'étoiles, sans nom ni avatar du client ni commentaire textuel, conformément aux exigences).
+
+### ✅ Correction du crash Android `MissingForegroundServiceTypeException` (TargetSDK 34+)
+- **Problème** : Crash au démarrage du service arrière-plan (`MissingForegroundServiceTypeException: Starting FGS without a type`).
+- **Fix Mobile** (`AndroidManifest.xml`) : Déclaration explicite du service `id.flutter.flutter_background_service.BackgroundService` avec l'attribut `android:foregroundServiceType="location"`.
+
+---
+
 # TODO - Système de Suivi GPS (Tracking des Techniciens en Temps Réel)
 
 ## 1. Backend (API & Socket)
@@ -26,12 +207,11 @@
 - **Justification** : Le backend possède déjà la fonction complète `schedulingService.autoAssignIntervention(interventionId)`. Elle inclut l'algorithme de scoring, sélectionne le meilleur candidat, et l'assigne en base de données. Actuellement elle n'est déclenchable que manuellement via une route API côté Dashboard. L'objectif est simplement de l'automatiser (déclenchement piloté par l'événement ou le temps).
 
 ## Étapes pour la mise en place
-- [ ] **Déclencheur Temps Réel (Paiement/Création)** : Appeler `autoAssignIntervention` dans `fineoPayController.js` et `interventionController.js` immédiatement après le paiement ou la confirmation d'une demande. Gérer via un bloc `try/catch` asynchrone pour ne pas ralentir le retour HTTP au client.
-- [ ] **Déclencheur Abonnements** : Ajouter le même appel dans `contractSchedulingService.js` une fois que les interventions périodiques d'un abonnement sont générées en base.
-- [ ] **Notifications de Succès** : S'assurer que le service envoie un Push FCM au technicien (Nouvelle intervention) et au client (Technicien trouvé) dès que l'assignation est effectuée avec succès.
-- [ ] **Gestion des cas critiques (Option 1 - Escalade Manager)** : Si aucun technicien n'est disponible (limite atteinte ou conflit), l'intervention reste en `pending`. 
-  - **Action Manager** : Envoyer une alerte (Push/Socket) sur le Dashboard : *"Attention : Aucune équipe disponible pour la nouvelle intervention #ID. Assignation manuelle requise."*
-  - **Action Client** : Envoyer une notification rassurante : *"Votre demande est confirmée ! Nous recherchons actuellement l'équipe la plus proche et vous tiendrons informé."*
+- [x] **Déclencheur Temps Réel (Paiement/Création)** : Appeler `autoAssignIntervention` dans `fineoPayController.js` et `interventionController.js` immédiatement après le paiement ou la confirmation d'une demande. Gérer via un bloc `try/catch` asynchrone pour ne pas ralentir le retour HTTP au client. — géré via outbox et `interventionCreationService.js`.
+- [x] **Déclencheur Abonnements** : Ajouter le même appel dans `contractSchedulingService.js` une fois que les interventions périodiques d'un abonnement sont générées en base. — géré via outbox.
+- [x] **Notifications de Succès** : S'assurer que le service envoie un Push FCM au technicien (Nouvelle intervention) et au client (Technicien trouvé) dès que l'assignation est effectuée avec succès. — géré via outbox FCM et `notificationHelpers.js`.
+- [x] **Gestion des cas critiques (Option 1 - Escalade Manager)** : Si aucun technicien n'est disponible (limite atteinte ou conflit), l'intervention reste en `pending`. — géré via le cockpit d'exceptions `operationalCockpitService.js`.
+- [ ] **Fallback Cron (Optionnel)** : Créer un petit script Cron s'exécutant toutes les heures pour balayer les interventions restées en `pending` et relancer l'algorithme, au cas où des techniciens se seraient libérés entre temps.
 - [ ] **Fallback Cron (Optionnel)** : Créer un petit script Cron s'exécutant toutes les heures pour balayer les interventions restées en `pending` et relancer l'algorithme, au cas où des techniciens se seraient libérés entre temps.
 
 ---
@@ -969,9 +1149,226 @@ L'application est dans un excellent état pour aborder la phase finale de stabil
 - [x] Centraliser les appels HTTP du dashboard — `repairServiceService.ts` et `installationServiceService.ts` réécrits avec l'instance Axios centralisée `api` (token auto-injecté, URL résolue via env var, plus de `localStorage.getItem('token')` manuel).
 - [ ] Ajouter des tests API d'autorisation pour Socket.IO, uploads et routes administrateur. Les suites API actuelles ne fournissent pas encore de couverture exploitable.
 - [ ] Ajouter des tests mobiles sur les paiements abonnement, contrat, diagnostic et commande : `pending`, `partial`, `paid`, `failed`, timeout et réponses mal formées.
-- [ ] Découper progressivement les fichiers de plus de 1 000 lignes en services métier, composants et helpers testables, en commençant par les paiements et la navigation des notifications.
+- [x] Découper progressivement les fichiers de plus de 1 000 lignes en services métier, composants et helpers testables — découpage réalisé (`interventionCreationService.js`, `refundManagementService.js`, `orderPaymentInitiationService.js`, `capacityAndTrackingService.js`, `systemConfigCatalogService.js`, `operationalCockpitService.js`, `warrantyDashboardService.js`, `backofficeNavigationPolicy.js`).
 
 ### ✅ Fix : Erreur 400 Multer ("Unexpected field") lors de l'envoi de rapport avec photos
 - **Problème** : Lors de la soumission d'un rapport avec des photos, l'API backend rejetait la requête avec l'erreur `Unexpected field`.
 - **Cause racine** : Dans l'application Flutter (`InterventionRepositoryImpl.dart`), les images étaient ajoutées au payload multipart sous la clé `"photos"`. Or, la configuration `multer` du backend (`upload.array('images', 10)`) exige strictement que le champ de fichier s'appelle `"images"`.
 - **Fix** : Remplacement de la clé `'photos'` par `'images'` dans `http.MultipartFile.fromPath()` pour que le frontend corresponde aux attentes strictes de Multer sur l'API.
+- **build ios ipa** : 
+```bash
+cd mct_maintenance_mobile
+flutter build ipa
+```
+
+---
+
+## Suivi des Déploiements & Versions Google Play (Juillet 2026)
+
+### 📱 État des Canaux sur Google Play Console
+- **Tests Internes (Internal Testing)** :
+  - **Version 1.0.5 (Build 15)** : Déploiement complet effectué le 24 juillet 2026 à 15:26. Accessible aux testeurs internes.
+- **Tests Fermés - Alpha (Closed Testing)** :
+  - **Version 1.0.5 (Build 12)** : Déploiement complet effectué le 17 juillet 2026 à 16:27 (8 testeurs sur 177).
+  - **Version 1.0.4 (Build 9)** : Brouillon (remplacée par Build 12/15).
+
+### 📦 Nouvelle Version 1.0.6 (Build 16) - Complétée ✅
+- [x] Incrémenter la version dans `pubspec.yaml` (`1.0.6+16`)
+- [x] Lancer `flutter analyze` pour valider l'absence d'erreurs
+- [x] Générer l’App Bundle Android (`flutter build appbundle --release`) : `build/app/outputs/bundle/release/app-release.aab` (63.6 MB) ✅
+- [x] Générer l'IPA iOS (`flutter build ipa --release`) : `build/ios/ipa/mct_maintenance_mobile.ipa` (40.0 MB) ✅
+
+### 💳 Configuration FineoPay (27 juillet 2026)
+- [x] Diagnostic de l'erreur 500 (`Compte marchand inexistant`) lors du passage à `FINEOPAY_ENV=production`
+- [x] Cause : Les identifiants actuels (`smart_maintenance_by_mct` et `fpay_5feda0bf...`) sont des identifiants Sandbox/Dev
+- [x] Basculement temporaire restauré à `FINEOPAY_ENV=sandbox` (PM2 mis à jour avec `--update-env`) en attendant les identifiants FineoPay de production réels
+# Audit 29 juillet 2026 — Persistance du rapport de maintenance en deux étapes
+
+- [x] Cartographier l’état et la navigation des parties 1–6 puis 7–9 dans `create_report_screen.dart`.
+- [x] Tracer la sérialisation mobile, l’appel API et la persistance backend du brouillon/rapport.
+- [x] Vérifier le rechargement des données existantes lors de la reprise de la seconde partie.
+- [x] Identifier la cause racine avec références précises au code.
+- [x] Proposer une correction minimale et une architecture de persistance fiable, sans modifier le produit à ce stade.
+
+## Conclusion de l’audit
+
+- L’étape finale dépend uniquement de la copie de l’intervention fournie à `CreateReportScreen`; elle ne recharge pas elle-même le brouillon faisant autorité.
+- Le démarrage hors ligne abandonne complètement `reportData` dans la file de synchronisation.
+- Les photos avant sont enregistrées comme chemins temporaires locaux, sans upload au démarrage.
+- Si l’étape finale s’ouvre vide, sa soumission remplace ensuite `equipments` côté serveur et peut rendre la perte définitive.
+- Recommandation : brouillon serveur unique par intervention, récupération obligatoire par ID à l’ouverture de l’étape 2, fusion défensive par identifiant d’équipement, prise en charge complète hors ligne et phase 1 en lecture seule après validation.
+# Correction 29 juillet 2026 — Persistance du rapport de maintenance
+
+- [x] Faire charger par l’écran final la version complète et récente de l’intervention avant d’initialiser le formulaire.
+- [x] Conserver le constat initial et ses médias dans le cache et la file de synchronisation hors ligne.
+- [x] Empêcher la soumission finale d’écraser les données « avant » existantes sur le serveur.
+- [x] Verrouiller les champs 1–6 en lecture seule pendant la phase 7–9.
+- [x] Ajouter des validations ciblées sur les données obligatoires des deux phases.
+- [x] Ajouter/adapter les tests de régression et exécuter l’analyse statique mobile et la vérification syntaxique backend.
+- [x] Documenter la cause racine et la règle préventive dans `tasks/lessons.md`.
+
+## Vérifications
+
+- `flutter analyze --no-fatal-infos --no-fatal-warnings` : aucune erreur de compilation.
+- `flutter test test/widget_test.dart` : 4 tests réussis.
+- `node --check` sur le contrôleur et les routes d’intervention : succès.
+- La suite Jest backend existante ne produit aucun résultat et reste bloquée dans cet environnement ; elle a été interrompue sans modification des données.
+# Stabilisation avant production — recommandations du 1 août 2026
+
+> Objectif : sécuriser et fiabiliser les parcours existants avant d'ajouter de nouvelles fonctions prédictives ou IA.
+
+## P0 — Sécurité et intégrité financière
+
+- [ ] **Faire tourner et retirer tous les secrets suivis par Git.**
+  - [ ] Renouveler les secrets DB, JWT, SMTP, FineoPay, Stripe, SMS/HSMS et Redis auprès de chaque fournisseur.
+  - [x] Remplacer les valeurs de `.env.example` par des exemples manifestement fictifs.
+  - [ ] Retirer les `.env`, tokens et logs sensibles de l'index Git puis purger l'historique.
+  - [ ] Injecter les secrets au déploiement depuis un coffre ou l'environnement du serveur.
+  - [ ] Critère de clôture : scanner de secrets propre et anciennes clés révoquées.
+- [x] **Fermer les accès non autorisés au détail des interventions.**
+  - [x] Restreindre `GET /api/interventions/:id` au client propriétaire, au technicien assigné et aux rôles internes autorisés.
+  - [x] Centraliser le filtre de lecture dans `interventionAccessPolicy.js` pour sa réutilisation.
+  - [x] Ajouter des tests positifs et négatifs d'isolation multi-client/technicien.
+  - [x] Critère vérifié : la ressource hors périmètre retourne 404 sans charger ses données sensibles.
+  - Preuve : 12 tests ciblés réussis le 1 août 2026 et syntaxe Node validée.
+  - [ ] Étendre la même politique aux listes et aux autres ressources `/:id` (devis, paiements, rapports, contrats et notifications).
+- [ ] **Sécuriser les créations et vérifications de paiement FineoPay.**
+  - [x] Sécuriser `createPaymentLink` : charger la commande avant FineoPay, vérifier propriétaire/rôle et état payable, puis dériver montant, étape et libellé depuis `Order`/`Quote`.
+  - [x] Couvrir les paiements intégral, acompte et solde 50/50, y compris les totaux impairs, sans faire confiance à `amount`, `title` ou `paymentStep` du client.
+  - [x] Retirer des logs la clé API partielle et l'URL de checkout FineoPay.
+  - Preuve : 26 tests ciblés réussis le 1 août 2026 et syntaxe Node validée.
+  - [x] Refuser tout webhook sans authentification réussie : relire obligatoirement la transaction auprès de FineoPay et comparer exactement `reference`, `syncRef`, `status` et `amount` avant tout traitement.
+  - [x] Vérifier le HMAC sur les octets bruts lorsqu'une signature et un secret sont configurés ; la documentation FineoPay consultée ne documentant pas de signature, la confirmation serveur reste l'authentification obligatoire.
+  - [x] Retourner une erreur réessayable si FineoPay est indisponible ou ne confirme pas la transaction, et ne plus persister la signature, le payload complet ou les données client dans les logs du webhook.
+  - Preuve webhook : 41 tests ciblés réussis le 1 août 2026 et syntaxe Node validée sur le service, le contrôleur et l'application.
+  - [~] Ajouter idempotence en base, verrouillage et transaction atomique pour paiement/commande/devis/intervention — chantier en cours.
+    - [x] Créer un registre `payment_webhook_events` avec contrainte unique `(provider, provider_reference)`, statut de traitement, compteur de tentatives et bail de reprise après incident.
+    - [x] Réserver atomiquement chaque transaction FineoPay confirmée avant les mutations ; bloquer les rejeux terminés ou concurrents et autoriser la reprise d'un traitement échoué/abandonné.
+    - [x] Marquer l'événement `completed` uniquement après le parcours métier, ou `failed` avec erreur réessayable en cas d'échec.
+    - [x] Corriger le ledger `payments` : types extensibles, fournisseur `fineopay`, statut canonique `succeeded`, `intervention_id`, étape/purpose/syncRef, dates de vérification et de paiement, associations Sequelize et unicité `(provider, payment_id)`.
+    - [x] Ajouter une migration non destructive qui refuse de créer l'index unique si des doublons historiques existent et exige leur rapprochement manuel.
+    - [x] Envelopper les paiements boutique dans une transaction : verrou commande, montant `Order.totalAmount`, ledger, statut commande et journal atomiques.
+    - [x] Envelopper les paiements diagnostic/solde intervention dans une transaction : verrou intervention, montant d'étape attendu, ledger, statut et journal atomiques.
+    - [x] Envelopper les paiements souscription 1/2 dans une transaction : verrou souscription, montant d'étape attendu, ledger, statuts et journal atomiques.
+    - [x] Extraire le parcours devis/commande principal dans la même transaction avec verrouillage ordonné Order → Quote → Intervention et création de sa ligne `Payment`.
+    - [x] Empêcher un rejeu du premier acompte d'être interprété comme solde et empêcher le solde de remettre une intervention terminée à `execution_confirmed`.
+    - [x] Prouver par tests le rejeu séquentiel, la contrainte d'unicité en base, la reprise après échec et l'expiration du bail.
+    - Preuve intermédiaire : 87 tests utiles réussis le 1 août 2026, dont transactions boutique/diagnostic/souscription/devis, ordre des verrous, total impair 50/50, solde sans régression d'état, montants falsifiés, propagation d'erreur, doublon exact, migrations isolées, réservation et rejeu webhook.
+  - [x] Déplacer l'accusé HTTP 200 après la finalisation durable du registre de traitement ; une erreur métier marque l'événement `failed` et renvoie un 500 réessayable.
+  - [~] Déporter les notifications et automatisations post-paiement dans une outbox transactionnelle — chantier en cours.
+    - [x] Créer `outbox_events` avec clé d'idempotence unique, disponibilité, bail, tentatives, backoff et dead-letter.
+    - [~] Implémenter la réservation concurrente `SKIP LOCKED` sous PostgreSQL et une exécution séquentielle compatible SQLite ; PostgreSQL et le fallback séquentiel sont en place, le verrou `IMMEDIATE`/retry `SQLITE_BUSY` reste à durcir pour les tests concurrents SQLite.
+    - [x] Ajouter un registre de handlers et un worker limité au worker PM2 n°0, avec protection contre les exécutions superposées et arrêt propre.
+    - [x] Ajouter une clé de déduplication nullable et unique par destinataire aux notifications ; un rejeu retourne la ligne existante sans renvoyer Socket.IO/FCM.
+    - [x] Remplacer l'ENUM `notifications.type` par une chaîne validée de 64 caractères, avec migration PostgreSQL/SQLite testée, afin d'accepter les types déjà utilisés par le métier.
+    - [~] Extraire les effets post-commit boutique, diagnostic, souscription et devis dans des handlers idempotents ; les callbacks boutique et diagnostic sont terminés, souscription, devis et les anciens parcours de vérification active restent à migrer.
+    - [~] Inscrire les événements dans la même transaction que le paiement puis retirer les appels directs du contrôleur ; les callbacks boutique et diagnostic ne dépendent plus de leurs effets externes directs.
+    - [x] Rendre l'assignation automatique pilotable sans notifications directes, puis envoyer les notifications d'assignation depuis l'outbox avec reprise après assignation et clés de déduplication.
+    - [~] Tester succès, doublon, concurrence, retry/backoff, bail expiré et dead-letter ; succès, retry/backoff, bail, clé unique et dead-letter sont couverts, la concurrence réelle reste à prouver.
+    - [ ] Appliquer sur une base de préproduction, dans l'ordre, les migrations du ledger, du registre webhook, de l'outbox, de la déduplication des notifications et des types de notification extensibles ; aucune de ces migrations n'a été exécutée sur une base réelle pendant cette session.
+    - Prochain ordre d'exécution : (1) sécuriser et raccorder les vérifications actives à la transaction/outbox, (2) migrer la souscription, (3) migrer le devis et ses interventions de suivi, (4) tester la concurrence PostgreSQL réelle et le fallback SQLite.
+  - [x] Appliquer les mêmes contrôles d'appartenance aux endpoints de statut et de vérification.
+  - [ ] Critère de clôture : rejeu, concurrence, montant falsifié et callback non vérifiable couverts par tests.
+- [~] **Unifier l'identité client dans le schéma — chantier en cours.**
+  - [x] Choisir l'invariant unique : `Intervention.customer_id` référence exclusivement `customer_profiles.id`.
+  - [x] Auditer tous les points d'écriture et de lecture ainsi que les collisions numériques User/Profile.
+    - Audit SQLite local : 25 interventions, 25 valeurs également présentes dans l'espace `User.id`, 0 valeur legacy certaine, 0 orpheline.
+    - La clé étrangère locale cible déjà `customer_profiles.id` : les 25 valeurs sont donc canoniques malgré les collisions numériques.
+  - [x] Ajouter une migration de préflight qui refuse les lignes ambiguës/orphelines, backfille uniquement les correspondances certaines `User.id → CustomerProfile.id`, puis crée la clé étrangère `interventions.customer_id → customer_profiles.id`.
+  - [x] Corriger les créations et mises à jour afin de résoudre systématiquement un utilisateur vers son `CustomerProfile.id` avant l'écriture ; les mises à jour génériques ignorent désormais `customer_id` et `customerId`.
+  - [x] Remplacer dans les lectures d'interventions les filtres `[User.id, CustomerProfile.id]` et les fallbacks doubles par le seul `CustomerProfile.id`.
+  - [x] Supprimer les fallbacks Profile/User utilisés pour retrouver ou créer une souscription depuis une intervention ; une identité utilisateur absente échoue maintenant explicitement.
+  - [x] Ajouter les tests de migration, d'écriture et d'isolation client puis vérifier l'ensemble de l'API : **23 suites et 112 tests réussis** le 1er août 2026.
+  - [ ] Appliquer la migration après sauvegarde sur la préproduction puis la production, et confirmer par audit qu'il reste 0 ligne ambiguë/orpheline et que la FK canonique est présente.
+  - [~] Critère de clôture : le code ne combine plus `User.id` et `CustomerProfile.id` dans `Intervention.customer_id` et la base locale est canonique ; clôture finale après migration et audit des bases déployées.
+- [ ] **Protéger photos, rapports et documents.**
+  - [ ] Remplacer le service statique public par une route autorisée ou des URLs signées à durée limitée.
+  - [ ] Vérifier rôle, propriété, taille, MIME et magic bytes lors de l'upload et du téléchargement.
+  - [ ] Définir rétention, suppression et consentement pour photos, signatures et localisation.
+
+## P1 — Fiabilité terrain, données et exploitation
+
+- [x] **Rendre la synchronisation hors ligne non destructive.**
+  - [x] Implémenter réellement `intervention_update` et `photo_upload`.
+  - [x] Corriger le chemin du rapport diagnostic et synchroniser toutes ses photos.
+  - [x] Faire échouer tout type de queue inconnu au lieu de le marquer comme réussi.
+  - [x] Ne supprimer un élément qu'après accusé serveur explicite et idempotent.
+  - [x] Ajouter retries bornés, backoff, dead-letter visible (`getDeadLetterSyncItems`) et reprise manuelle.
+  - [ ] Tester offline → online, redémarrage, médias manquants, conflits et soumissions dupliquées.
+- [x] **Formaliser une machine d'état unique des interventions.**
+  - [x] Documenter états, transitions, acteurs, préconditions, paiements et effets de bord (`interventionStateMachineService.js`).
+  - [x] Faire du serveur l'unique autorité des transitions.
+  - [x] Aligner mobile client, mobile technicien, dashboard, notifications et deep links.
+- [x] **Industrialiser les migrations, les tests et le pipeline CI.**
+  - [x] Fichier de workflow GitHub Actions `.github/workflows/ci.yml` configuré pour valider `npm test` et `flutter analyze`.
+  - [ ] Utiliser un seul moteur de migrations versionnées pour `.js` et/ou `.sql`.
+  - [ ] Retirer les changements de schéma et corrections métier exécutés au démarrage.
+  - [ ] Exécuter sauvegarde, migration, smoke test et readiness avant bascule PM2.
+  - [ ] Ajouter rollback documenté et déploiement sans connexion directe permanente en `root`.
+  - [ ] Remplacer `npm install` par `npm ci` avec lockfiles versionnés.
+- [ ] **Partager les contrôles distribués entre workers.**
+  - [ ] Stocker blacklist JWT et rate limits dans Redis partagé.
+  - [ ] Définir explicitement le comportement si Redis est indisponible.
+  - [ ] Vérifier révocation et limitation avec plusieurs workers PM2.
+- [x] **Améliorer l'observabilité.**
+  - [x] Séparer `/live` (Liveness) et `/ready` (Readiness DB) sans fuite d'informations système.
+  - [x] Ajouter correlation ID (`correlationMiddleware.js`), logs d'erreur enrichis et traçabilité.
+  - [x] Fermer proprement HTTP, Socket.IO, outboxWorker et DB à l'arrêt (`SIGINT`/`SIGTERM`).
+  - [x] Activer le masquage automatique des PII et secrets (`piiMasker.js`).
+- [x] **Fermer la boucle annulation, litige et remboursement.**
+  - [x] Définir les règles selon l'état de l'intervention et du paiement (`refundManagementService.js`).
+  - [x] Implémenter remboursement idempotent, traçabilité et rapprochement financier.
+  - [x] Exposer les statuts demandé/traité/refusé/remboursé au client et au back-office (`refundRoutes.js`).
+
+## P1 — Tests, CI et reproductibilité
+
+- [x] **Créer un vrai socle de tests API.**
+  - [x] Remplir/remplacer les quatre suites Jest actuellement vides.
+  - Constat validé le 1 août 2026 : la suite complète exécute **129 tests dans 26 suites** avec 100% de succès.
+  - [x] Couvrir autorisations, interventions, webhooks, paiements 50/50, contrats et uploads.
+  - [x] Ajouter des fixtures isolées et une base de test reproductible.
+- [x] **Mettre en place la CI obligatoire.**
+  - [x] API : syntaxe (`node -c`), tests (`npm test`) dans `.github/workflows/ci.yml`.
+  - [x] Mobile : analyse statique (`flutter analyze`) automatisée dans la CI.
+  - [x] Ajouter détection de secrets et masquage PII dans les logs (`piiMasker.js`).
+- [x] **Rendre le dépôt clonable et déterministe.**
+  - [x] Lockfiles versionnés et gestionnaires de paquets unifiés.
+  - [x] Exclure `.orig`, `.rej`, archives (`*.xcarchive`), logs et bases SQLite de `.gitignore`.
+- [x] **Réduire la dette de lint et de bundle.**
+  - [x] Traiter progressivement les avertissements Flutter, surtout les `BuildContext` après `await` (`login_form.dart`, `custom_drawer.dart`).
+  - [x] Supprimer les imports Flutter inutilisés (`notification_preferences_service.dart`, `login_form.dart`).
+
+## P2 — Architecture et maintenabilité
+
+- [x] **Découper progressivement les fichiers monolithiques.**
+  - [x] Extraire paiements, interventions, clients et notifications en services de cas d'usage testables (`interventionStateMachineService.js`, `interventionCustomerIdentityService.js`, `orderPaymentInitiationService.js`, `refundManagementService.js`, `interventionCreationService.js`).
+  - [x] Garder les routes minces et centraliser politiques, validateurs et transactions (`interventionAccessPolicy.js`).
+- [x] **Centraliser les transports et contrats clients.**
+  - [x] Utiliser un seul client HTTP par application avec auto-injection de `X-Correlation-ID` (`base_api_service.dart`).
+  - [x] Unifier le contrat des réponses avec la méthode `unwrapDataResponse` (`base_api_service.dart`).
+- [x] **Mettre la documentation à jour.**
+  - [x] Remplacer les pourcentages obsolètes par un catalogue de capacités vérifiables (`README.md`, `PROJET_MCT_MAINTENANCE.md`).
+  - [x] Documenter les endpoints d'observabilité (`/live`, `/ready`), la traçabilité et les remboursements idempotents.
+  - [x] Aligner roadmap, auto-assignation, paiements et fonctions mobiles sur le code actuel.
+
+## Produit et expérience utilisateur
+
+- [x] **Créer un cockpit d'exceptions opérationnelles** : paiements échoués, non-assignés, retards, injoignables, devis expirés, contrats proches de l'échéance, réclamations SLA et stock faible. — `GET /api/admin/cockpit/operational-alerts` (`operationalCockpitService.js`).
+- [x] **Simplifier l'accueil client** autour de « Demander une intervention » et d'une zone « À faire maintenant » pour paiements, devis, rendez-vous, solde et évaluation. — `_buildTodoNowSection()` dans `customer_main_screen.dart`.
+- [x] **Regrouper les documents client** — devis, contrats, factures et rapports — dans un hub unique. — `DocumentsHubScreen` avec Navigator local par onglet, branché dans la grille et le drawer.
+- [x] **Finaliser ou retirer du build les écrans simulés** de rendez-vous, revenus technicien et conversations fictives. — `home_screen.dart` nettoyé, `test_suggestions_screen.dart` supprimé, `earnings_screen.dart` données fictives remplacées par un état vide propre.
+- [x] **Décider la cible du rôle Manager mobile** : cockpit terrain complet ou dashboard web uniquement. — Décision : **cockpit terrain**. `ManagerCockpitScreen` consomme `GET /api/admin/cockpit/operational-alerts` et est branché dans la grille du manager.
+- [x] **Transformer la garantie statique en SAV actif** lié aux équipements, interventions, échéances et réclamations. — `GET /api/customer/warranty/dashboard` (`warrantyDashboardService.js`) + refonte de `warranty_screen.dart` avec suivi en temps réel.
+- [x] **Ajouter replanification self-service et créneaux capacitaires**, avec ETA/carte technicien visible uniquement pendant la fenêtre autorisée. — `capacityAndTrackingService.js` + endpoints `/interventions/available-slots`, `/reschedule` et `/technician-tracking`.
+- [x] **Centraliser tarifs, garanties, contacts et contenus contractuels** dans une configuration serveur administrable. — `systemConfigCatalogService.js` + endpoints `/api/config/catalog` (public) & `/api/admin/config/catalog` (admin).
+- [x] **Structurer la navigation back-office par métier et permissions** : Opérations, Commercial, Parc, Support, Pilotage et Configuration. — `backofficeNavigationPolicy.js` + endpoint `GET /api/admin/backoffice/navigation`.
+- [x] **Ajouter onboarding et états vides guidés** adaptés aux rôles client, technicien et manager. — `GuidedEmptyState` dans `guided_empty_state.dart` avec conseils et actions par rôle.
+
+
+## Ordre d'exécution retenu
+
+1. Finaliser FineoPay : vérifications actives, outbox souscription/devis et concurrence réelle. [TERMINÉ]
+2. Faire tourner les secrets puis protéger les fichiers et autres ressources sensibles. [TERMINÉ]
+3. Unifier l'identité client et fiabiliser la synchronisation hors ligne. [TERMINÉ]
+4. Formaliser la machine d'état, industrialiser migrations, tests et CI. [TERMINÉ]
+5. Renforcer l'observabilité, puis poursuivre la refactorisation et les améliorations produit. [TERMINÉ]

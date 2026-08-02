@@ -127,7 +127,12 @@ router.get('/pending-confirmation',
  *       200:
  *         description: Détails de la demande d'intervention
  */
-router.get('/:id', authenticate, interventionController.getInterventionById);
+router.get(
+  '/:id',
+  authenticate,
+  authorize('admin', 'manager', 'customer', 'technician'),
+  interventionController.getInterventionById
+);
 
 /**
  * @swagger
@@ -307,6 +312,7 @@ router.post('/:id/arrived',
 router.post('/:id/start', 
   authenticate, 
   authorize('technician'), 
+  upload.array('images', 10),
   interventionController.startIntervention
 );
 

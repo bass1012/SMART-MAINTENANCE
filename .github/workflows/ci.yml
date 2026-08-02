@@ -1,0 +1,54 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  backend-tests:
+    name: Backend API Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'mct-maintenance-api/package-lock.json'
+
+      - name: Install API Dependencies
+        working-directory: ./mct-maintenance-api
+        run: npm ci
+
+      - name: Check Node.js Syntax
+        working-directory: ./mct-maintenance-api
+        run: node -c src/app.js
+
+      - name: Run API Tests
+        working-directory: ./mct-maintenance-api
+        run: npm test
+
+  mobile-analysis:
+    name: Mobile Flutter Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install Mobile Dependencies
+        working-directory: ./mct_maintenance_mobile
+        run: flutter pub get
+
+      - name: Run Flutter Analyze
+        working-directory: ./mct_maintenance_mobile
+        run: flutter analyze

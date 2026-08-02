@@ -43,10 +43,15 @@ exports.createQuoteFromReport = async (req, res) => {
     const intervention = report.intervention;
     const customer = intervention.customer;
 
-    // Générer une référence unique pour le devis (format court: DEV-AAMMJJ-HHMM-ID)
+    // Générer une référence unique pour le devis (format: DEV-JJMMAA-HHMM-ID)
     const now = new Date();
-    const dateStr = now.toISOString().slice(2, 10).replace(/-/g, ''); // AAMMJJ
-    const timeStr = now.toISOString().slice(11, 16).replace(':', ''); // HHMM
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2); // YY (ex: 26)
+    const dateStr = `${day}${month}${year}`; // JJMMAA
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const timeStr = `${hours}${minutes}`;
     const reference = `DEV-${dateStr}-${timeStr}-${report.id}`;
     const issueDate = new Date();
     const expiryDate = new Date();
@@ -203,8 +208,8 @@ exports.acceptQuote = async (req, res) => {
       second_contact: second_contact || null
     }, { transaction });
 
-    // Mettre à jour l'intervention
-    const interventionStatus = execute_now ? 'in_progress' : 'quote_accepted';
+    // Mettre à jour l'intervention (reste en quote_accepted en attente du règlement du paiement)
+    const interventionStatus = 'quote_accepted';
     await quote.intervention.update({
       status: interventionStatus,
       scheduled_date: executionDate || null
@@ -219,34 +224,8 @@ exports.acceptQuote = async (req, res) => {
 
     await transaction.commit();
 
-    // Notifier les admins et managers
-    const admins = await User.findAll({ where: { role: { [Op.in]: ['admin', 'manager'] }, status: 'active' } });
-    for (const admin of admins) {
-      await notificationService.create({
-        userId: admin.id,
-        type: 'quote_accepted',
-        title: 'Devis accepté',
-        message: `Le devis ${quote.reference} a été accepté par le client`,
-        data: { quote_id: quote.id, intervention_id: quote.intervention_id },
-        priority: 'high',
-        actionUrl: `/devis/${quote.id}`
-      });
-    }
-
-    // Notifier le technicien
-    if (quote.intervention.assigned_to) {
-      const techMessage = `Le client a accepté le devis pour l'intervention #${quote.intervention_id}. En attente du paiement de 50% (${quote.first_payment_amount || Math.ceil(quote.total / 2)} FCFA).`;
-      
-      await notificationService.create({
-        userId: quote.intervention.assigned_to,
-        type: 'quote_accepted',
-        title: 'Devis accepté',
-        message: techMessage,
-        data: { quote_id: quote.id, intervention_id: quote.intervention_id },
-        priority: 'high',
-        actionUrl: `/interventions`
-      });
-    }
+    // Note: Les notifications aux admins/dashboard et au technicien ne sont envoyées qu'après la confirmation effective du paiement dans fineoPayController.js
+    console.log(`ℹ️ Devis #${quote.id} accepté par le client. Notifications en attente de la confirmation du paiement.`);
 
     // Récupérer le devis mis à jour
     const updatedQuote = await Quote.findByPk(id, {

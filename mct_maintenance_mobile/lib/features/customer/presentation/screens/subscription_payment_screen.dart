@@ -118,10 +118,27 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
         final response = await _paymentRepository.verifySubscriptionPayment(
           widget.subscriptionId,
         );
-        final paymentStatus = response['data']?['payment_status'];
-        if (kDebugMode) debugPrint('📊 Statut: $paymentStatus');
+        final data = response['data'] ?? {};
+        final paymentStatus = data['payment_status'] ?? data['paymentStatus'] ?? data['status'];
+        final firstPaymentStatus = data['first_payment_status'] ?? data['firstPaymentStatus'];
+        final secondPaymentStatus = data['second_payment_status'] ?? data['secondPaymentStatus'];
 
-        if (paymentStatus == 'paid') {
+        bool isPaid = false;
+        if (firstPaymentStatus == 'paid' && secondPaymentStatus != 'paid') {
+          // Solde (2ème paiement)
+          isPaid = secondPaymentStatus == 'paid' || paymentStatus == 'paid';
+        } else {
+          // Premier paiement
+          isPaid = paymentStatus == 'paid' ||
+              paymentStatus == 'partial' ||
+              firstPaymentStatus == 'paid' ||
+              data['status'] == 'active' ||
+              data['status'] == 'completed';
+        }
+
+        if (kDebugMode) debugPrint('📊 Statut: $paymentStatus, 1er: $firstPaymentStatus, 2ème: $secondPaymentStatus, isPaid: $isPaid');
+
+        if (isPaid) {
           _stopPolling();
           if (mounted && Navigator.of(context).canPop()) {
             Navigator.of(context).pop();
@@ -139,9 +156,25 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
       final response = await _paymentRepository.verifySubscriptionPayment(
         widget.subscriptionId,
       );
-      final paymentStatus = response['data']?['payment_status'];
+      final data = response['data'] ?? {};
+      final paymentStatus = data['payment_status'] ?? data['paymentStatus'] ?? data['status'];
+      final firstPaymentStatus = data['first_payment_status'] ?? data['firstPaymentStatus'];
+      final secondPaymentStatus = data['second_payment_status'] ?? data['secondPaymentStatus'];
 
-      if (paymentStatus == 'paid') {
+      bool isPaid = false;
+      if (firstPaymentStatus == 'paid' && secondPaymentStatus != 'paid') {
+        // Solde (2ème paiement)
+        isPaid = secondPaymentStatus == 'paid' || paymentStatus == 'paid';
+      } else {
+        // Premier paiement
+        isPaid = paymentStatus == 'paid' ||
+            paymentStatus == 'partial' ||
+            firstPaymentStatus == 'paid' ||
+            data['status'] == 'active' ||
+            data['status'] == 'completed';
+      }
+
+      if (isPaid) {
         _stopPolling();
         if (mounted && Navigator.of(dialogContext).canPop()) {
           Navigator.pop(dialogContext);

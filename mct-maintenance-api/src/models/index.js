@@ -28,6 +28,8 @@ const ChatMessage = require('./ChatMessage');
 const PasswordResetCode = require('./PasswordResetCode');
 const Split = require('./Split');
 const PaymentLog = require('./PaymentLog');
+const PaymentWebhookEvent = require('./PaymentWebhookEvent');
+const OutboxEvent = require('./OutboxEvent');
 const Promotion = require('./Promotion');
 
 // Association CustomerProfile -> User
@@ -122,6 +124,8 @@ const models = {
   Split,
   DiagnosticReport,
   PaymentLog,
+  PaymentWebhookEvent,
+  OutboxEvent,
   SystemConfig,
   sequelize
 };
@@ -181,10 +185,11 @@ Intervention.hasMany(Quote, { foreignKey: 'intervention_id', as: 'quotes' });
 
 // Define associations for Payment
 if (Payment.associate) {
-  Payment.associate({ Order, Subscription });
+  Payment.associate({ Order, Subscription, Intervention });
 }
 Order.hasMany(Payment, { foreignKey: 'orderId', as: 'payments' });
 Subscription.hasMany(Payment, { foreignKey: 'subscriptionId', as: 'payments' });
+Intervention.hasMany(Payment, { foreignKey: 'interventionId', as: 'payments' });
 
 // Export the sequelize instance for transactions
 module.exports = {
@@ -201,5 +206,6 @@ module.exports = {
   ChatMessage,
   EmailVerificationCode,
   Split,
-  Promotion
+  Promotion,
+  RefundRequest: require('./RefundRequest')
 };

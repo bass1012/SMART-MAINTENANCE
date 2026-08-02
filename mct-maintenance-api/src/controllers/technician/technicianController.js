@@ -144,17 +144,27 @@ const updateLocation = async (req, res) => {
     const { latitude, longitude } = req.body;
     const userId = req.user.id;
 
-    if (!latitude || !longitude) {
+    if (latitude === undefined || longitude === undefined || latitude === null || longitude === null) {
       return res.status(400).json({
         success: false,
         message: 'Latitude et longitude sont requises'
       });
     }
 
+    // 💡 Détection des coordonnées par défaut de l'émulateur Android (Mountain View / San Jose: ~37.42, -122.08)
+    let finalLat = parseFloat(latitude);
+    let finalLng = parseFloat(longitude);
+
+    if (Math.abs(finalLat - 37.4219983) < 0.1 && Math.abs(finalLng - (-122.084)) < 0.1) {
+      console.log('📱 Position par défaut de l\'émulateur Android (San Jose) détectée. Remplacement par Abidjan, Côte d\'Ivoire.');
+      finalLat = 5.359951;
+      finalLng = -4.008256;
+    }
+
     const [updatedCount] = await TechnicianProfile.update(
       { 
-        current_location_lat: latitude,
-        current_location_lng: longitude,
+        current_location_lat: finalLat,
+        current_location_lng: finalLng,
         last_location_update: new Date()
       },
       { where: { user_id: userId } }
@@ -172,8 +182,8 @@ const updateLocation = async (req, res) => {
     if (notificationService.io) {
       notificationService.io.emit('technician_moved', {
         user_id: userId,
-        latitude,
-        longitude,
+        latitude: finalLat,
+        longitude: finalLng,
         last_location_update: new Date()
       });
     }
@@ -229,12 +239,91 @@ const getAllTechnicianLocations = async (req, res) => {
   }
 };
 
+const updateTechnicianAvailabilityByAdmin = async (req, res) => {
+  try {
+    const { availability_status } = req.body;
+    const targetUserId = parseInt(req.params.id, 10);
+
+    if (!targetUserId || isNaN(targetUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID du technicien invalide'
+      });
+    }
+
+    const validStatuses = ['available', 'busy', 'offline'];
+    if (!availability_status || !validStatuses.includes(availability_status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Statut invalide. Valeurs acceptées: available, busy, offline'
+      });
+    }
+
+    // Vérifier si le profil existe ou le créer si manquant
+    let profile = await TechnicianProfile.findOne({ where: { user_id: targetUserId } });
+    if (!profile) {
+      const user = await User.findByPk(targetUserId);
+      profile = await TechnicianProfile.create({
+        user_id: targetUserId,
+        first_name: user?.first_name || 'Technicien',
+        last_name: user?.last_name || 'MCT',
+        phone: user?.phone || '0000000000',
+        availability_status
+      });
+    } else {
+      await profile.update({ availability_status });
+    }
+
+    console.log(`✅ Disponibilité technicien #${targetUserId} mise à jour par l'admin: ${availability_status}`);
+
+    // Émettre l'événement Socket.io
+    const notificationService = require('../../services/notificationService');
+    if (notificationService.io) {
+      notificationService.io.emit('technician_status_changed', {
+        user_id: targetUserId,
+        availability_status
+      });
+    }
+
+    // Envoyer une notification au technicien
+    try {
+      const statusLabels = {
+        available: 'En ligne (Disponible)',
+        busy: 'Occupé (En intervention)',
+        offline: 'Hors ligne'
+      };
+      await notificationService.create({
+        userId: targetUserId,
+        type: 'alert',
+        title: 'Changement de disponibilité par le support',
+        message: `Votre statut de disponibilité a été modifié à "${statusLabels[availability_status]}" par l'administration.`,
+        priority: 'high'
+      });
+    } catch (notifErr) {
+      console.error('Erreur notification changement statut:', notifErr);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Statut de disponibilité mis à jour avec succès',
+      data: { user_id: targetUserId, availability_status }
+    });
+  } catch (error) {
+    console.error('❌ Erreur updateTechnicianAvailabilityByAdmin:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur lors de la mise à jour de la disponibilité'
+    });
+  }
+};
+
 module.exports = {
   getTechnicianProfile,
   updateTechnicianProfile,
   getTechnicianInterventions,
   getAvailableInterventions,
   updateAvailability,
+  updateTechnicianAvailabilityByAdmin,
   updateLocation,
   getAllTechnicianLocations
 };

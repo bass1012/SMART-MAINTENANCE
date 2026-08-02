@@ -1,7 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:mct_maintenance_mobile/features/common/domain/repositories/notification_repository.dart';
-import 'package:mct_maintenance_mobile/features/common/data/repositories/notification_repository_impl.dart';
-import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 import 'package:mct_maintenance_mobile/models/notification_preference.dart';
 
 class NotificationPreferencesService {

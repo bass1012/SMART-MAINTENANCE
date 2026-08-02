@@ -9,13 +9,15 @@ import 'payment_webview_screen.dart';
 class DiagnosticPaymentScreen extends StatefulWidget {
   final int interventionId;
   final double diagnosticFee;
-  final bool isMaintenanceDeposit; // true = acompte 50% maintenance
+  final bool isMaintenanceDeposit; // true = paiement entretien (acompte 50% ou total 100%)
+  final String? paymentOption; // 'split' (50%) ou 'full' (100%)
 
   const DiagnosticPaymentScreen({
     super.key,
     required this.interventionId,
     required this.diagnosticFee,
     this.isMaintenanceDeposit = false,
+    this.paymentOption,
   });
 
   @override
@@ -51,6 +53,8 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         foregroundColor: Colors.white,
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage('assets/images/background_tech_2.png'),
@@ -58,62 +62,67 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
             opacity: 0.4,
           ),
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Information sur le diagnostic
-              _buildDiagnosticInfo(),
-              const SizedBox(height: 24),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Information sur le diagnostic
+                _buildDiagnosticInfo(),
+                const SizedBox(height: 16),
 
-              // Information importante
-              _buildImportantNote(),
-              const SizedBox(height: 24),
+                // Information importante (seulement pour les acomptes d'entretien)
+                if (widget.isMaintenanceDeposit) ...[
+                  _buildImportantNote(),
+                  const SizedBox(height: 16),
+                ],
 
-              // Information sur FineoPay
-              _buildFineoPayInfo(),
-              const SizedBox(height: 32),
+                // Information sur FineoPay
+                _buildFineoPayInfo(),
+                const SizedBox(height: 24),
 
-              // Bouton de paiement
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _isProcessing ? null : _processPayment,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                // Bouton de paiement
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isProcessing ? null : _processPayment,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
+                    icon: _isProcessing
+                        ? const SizedBox.shrink()
+                        : const Icon(Icons.credit_card),
+                    label: _isProcessing
+                        ? SizedBox(
+                            height: 20,
+                            child: ButtonLoadingIndicator(
+                              color: Colors.white,
+                              size: 6.0,
+                            ),
+                          )
+                        : Text(
+                            'Payer ${_formatCurrency(widget.diagnosticFee)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
-                  icon: _isProcessing
-                      ? const SizedBox.shrink()
-                      : const Icon(Icons.credit_card),
-                  label: _isProcessing
-                      ? SizedBox(
-                          height: 20,
-                          child: ButtonLoadingIndicator(
-                            color: Colors.white,
-                            size: 6.0,
-                          ),
-                        )
-                      : Text(
-                          'Payer ${_formatCurrency(widget.diagnosticFee)}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                 ),
-              ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              // Note de sécurité
-              _buildSecurityNote(),
-            ],
+                // Note de sécurité
+                _buildSecurityNote(),
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
         ),
       ),
@@ -161,7 +170,9 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
                 ),
                 Text(
                   widget.isMaintenanceDeposit
-                      ? 'Acompte entretien (50%)'
+                      ? (widget.paymentOption == 'full'
+                          ? 'Paiement entretien (100%)'
+                          : 'Acompte entretien (50%)')
                       : 'Frais de diagnostic',
                   style: const TextStyle(
                     fontSize: 14,
@@ -199,19 +210,22 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
 
   Widget _buildImportantNote() {
     if (widget.isMaintenanceDeposit) {
+      final isFull = widget.paymentOption == 'full';
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.blue.shade50,
+          color: isFull ? Colors.green.shade50 : Colors.blue.shade50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.shade200),
+          border: Border.all(
+            color: isFull ? Colors.green.shade200 : Colors.blue.shade200,
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
-              Icons.info_outline,
-              color: Colors.blue.shade700,
+              isFull ? Icons.check_circle_outline : Icons.info_outline,
+              color: isFull ? Colors.green.shade700 : Colors.blue.shade700,
               size: 24,
             ),
             const SizedBox(width: 12),
@@ -220,19 +234,23 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Acompte de 50% requis',
+                    isFull
+                        ? 'Paiement intégral (100%)'
+                        : 'Acompte de 50% requis',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade900,
+                      color: isFull ? Colors.green.shade900 : Colors.blue.shade900,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Un acompte de 50% est requis avant l\'intervention. Le solde restant (50%) sera payé après l\'intervention.',
+                    isFull
+                        ? 'Vous effectuez le paiement intégral de votre entretien (100%). Aucun solde restant ne sera à régler après l\'intervention.'
+                        : 'Un acompte de 50% est requis avant l\'intervention. Le solde restant (50%) sera payé après l\'intervention.',
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.blue.shade800,
+                      color: isFull ? Colors.green.shade800 : Colors.blue.shade800,
                     ),
                   ),
                 ],
@@ -485,7 +503,15 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
                 onPressed: () {
                   _isPolling = false;
                   Navigator.pop(dialogContext);
-                  Navigator.pop(context, false);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Paiement non finalisé. Vous pouvez réessayer ci-dessous.'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  }
                 },
                 child: const Text('Annuler'),
               ),
@@ -523,11 +549,28 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         );
 
         final diagnosticPaid = response['data']?['diagnostic_paid'] == true;
-        if (kDebugMode) {
-          debugPrint('📊 Statut diagnostic_paid: $diagnosticPaid');
+        final firstPaymentStatus = response['data']?['first_payment_status'];
+        final secondPaymentStatus = response['data']?['second_payment_status'];
+        final paymentStatus = response['data']?['payment_status'] ?? response['data']?['status'];
+
+        bool isPaid = false;
+        if (firstPaymentStatus == 'paid' && secondPaymentStatus != 'paid') {
+          // Solde (2ème paiement 50%)
+          isPaid = secondPaymentStatus == 'paid' || paymentStatus == 'paid';
+        } else {
+          // Premier paiement ou diagnostic direct
+          isPaid = (diagnosticPaid == true) ||
+              (firstPaymentStatus == 'paid') ||
+              (secondPaymentStatus == 'paid') ||
+              (paymentStatus == 'paid') ||
+              (paymentStatus == 'partial');
         }
 
-        if (diagnosticPaid) {
+        if (kDebugMode) {
+          debugPrint('📊 Statut diagnostic_paid: $diagnosticPaid, 1er: $firstPaymentStatus, 2ème: $secondPaymentStatus, status: $paymentStatus, isPaid: $isPaid');
+        }
+
+        if (isPaid) {
           _isPolling = false;
           if (mounted && Navigator.of(dialogContext).canPop()) {
             Navigator.pop(dialogContext);
@@ -557,8 +600,24 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
       );
 
       final diagnosticPaid = response['data']?['diagnostic_paid'] == true;
+      final firstPaymentStatus = response['data']?['first_payment_status'];
+      final secondPaymentStatus = response['data']?['second_payment_status'];
+      final paymentStatus = response['data']?['payment_status'] ?? response['data']?['status'];
 
-      if (diagnosticPaid) {
+      bool isPaid = false;
+      if (firstPaymentStatus == 'paid' && secondPaymentStatus != 'paid') {
+        // Solde (2ème paiement 50%)
+        isPaid = secondPaymentStatus == 'paid' || paymentStatus == 'paid';
+      } else {
+        // Premier paiement ou diagnostic direct
+        isPaid = (diagnosticPaid == true) ||
+            (firstPaymentStatus == 'paid') ||
+            (secondPaymentStatus == 'paid') ||
+            (paymentStatus == 'paid') ||
+            (paymentStatus == 'partial');
+      }
+
+      if (isPaid) {
         _isPolling = false;
         if (mounted && Navigator.of(dialogContext).canPop()) {
           Navigator.pop(dialogContext);
@@ -630,7 +689,15 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.pop(this.context, false);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'Le délai de vérification est écoulé. Vous pouvez relancer le paiement.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
             },
             child: const Text('OK'),
           ),

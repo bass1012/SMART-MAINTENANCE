@@ -320,18 +320,22 @@ const notifyNewQuote = async (quote, customer) => {
 
 // Notification: Devis accepté
 const notifyQuoteAccepted = async (quote, customer) => {
-  const userId = customer.user_id || customer.id;
-  const customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
+  const userId = customer.user_id || customer.userId || customer.id;
+  const userObj = customer.user || customer;
+  const customerName = `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() || 'Client';
   
   return await notificationService.notifyAdmins({
     type: 'quote_accepted',
-    title: 'Devis accepté',
-    message: `${customerName} a accepté un devis de ${quote.total} FCFA`,
+    title: 'Devis accepté et payé',
+    message: quote.scheduled_date 
+      ? `${customerName} a payé et planifié un devis de ${quote.total || quote.total_amount || 0} FCFA pour le ${new Date(quote.scheduled_date).toLocaleDateString('fr-FR')}`
+      : `${customerName} a accepté et payé un devis de ${quote.total || quote.total_amount || 0} FCFA`,
     data: {
       quoteId: quote.id,
       customerId: userId,
       customerName: customerName,
-      amount: quote.total
+      amount: quote.total || quote.total_amount || 0,
+      scheduledDate: quote.scheduled_date
     },
     priority: 'high',
     actionUrl: `/devis/${quote.id}`

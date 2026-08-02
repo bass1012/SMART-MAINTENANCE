@@ -345,11 +345,15 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                                   size: 14, color: Colors.blue.shade600),
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              _formatDate(report['date']),
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                color: Colors.grey[600],
+                            Expanded(
+                              child: Text(
+                                _formatDate(report['date']),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
@@ -375,9 +379,13 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                         size: 18, color: Colors.purple.shade600),
                   ),
                   const SizedBox(width: 10),
-                  Text(
-                    report['customer'],
-                    style: GoogleFonts.poppins(fontSize: 14),
+                  Expanded(
+                    child: Text(
+                      report['customer'],
+                      style: GoogleFonts.poppins(fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),

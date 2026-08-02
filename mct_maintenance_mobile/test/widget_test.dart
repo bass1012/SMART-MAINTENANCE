@@ -117,9 +117,13 @@ class _FakeInterventionRepository implements InterventionRepository {
   @override
   Future<Map<String, dynamic>> getTechnicianStats() async => {};
   @override
-  Future<Map<String, dynamic>> reportClientUnreachable(int id, {String? notes}) async => {};
+  Future<Map<String, dynamic>> reportClientUnreachable(int id,
+          {String? notes}) async =>
+      {};
   @override
-  Future<Map<String, dynamic>> rescheduleIntervention(int id, DateTime date) async => {};
+  Future<Map<String, dynamic>> rescheduleIntervention(
+          int id, DateTime date) async =>
+      {};
   @override
   Future<Map<String, dynamic>> updateTechnicianAvailability(String s) async =>
       {};
@@ -144,7 +148,9 @@ class _FakeInterventionRepository implements InterventionRepository {
   @override
   Future<Map<String, dynamic>> markInterventionArrived(int id) async => {};
   @override
-  Future<Map<String, dynamic>> startIntervention(int id) async => {};
+  Future<Map<String, dynamic>> startIntervention(int id,
+          {Map<String, dynamic>? reportData}) async =>
+      {};
   @override
   Future<Map<String, dynamic>> completeIntervention(int id) async => {};
   @override
@@ -237,9 +243,13 @@ class _FakePaymentRepository implements PaymentRepository {
   @override
   Future<Map<String, dynamic>> verifyOrderPayment(int orderId) async => {};
   @override
-  Future<Map<String, dynamic>> verifyDiagnosticPayment(int interventionId) async => {};
+  Future<Map<String, dynamic>> verifyDiagnosticPayment(
+          int interventionId) async =>
+      {};
   @override
-  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId) async => {};
+  Future<Map<String, dynamic>> verifySubscriptionPayment(
+          int subscriptionId) async =>
+      {};
 }
 
 // ─── Test helpers ───────────────────────────────────────────────────────────

@@ -58,12 +58,8 @@ class ConnectivityService {
 
   /// Mettre à jour l'état de connexion
   void _updateConnectionStatus(List<ConnectivityResult> results) {
-    // Vérifier si au moins une connexion active
-    final bool hasConnection = results.any((result) =>
-        result == ConnectivityResult.wifi ||
-        result == ConnectivityResult.mobile ||
-        result == ConnectivityResult.ethernet ||
-        result == ConnectivityResult.vpn);
+    // Vérifier si au moins une connexion active (exclure uniquement ConnectivityResult.none)
+    final bool hasConnection = results.isNotEmpty && !results.contains(ConnectivityResult.none);
 
     // Si l'état change, notifier
     if (hasConnection != _isConnected) {

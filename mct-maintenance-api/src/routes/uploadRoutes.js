@@ -52,10 +52,10 @@ const storage = multer.diskStorage({
 // Filtre pour les images — exige MIME TYPE valide ET extension valide
 const imageFilter = (req, file, cb) => {
   const allowedExtensions = /\.(jpeg|jpg|png|gif|webp)$/i;
-  const allowedMimetypes = /^image\/(jpeg|png|gif|webp)$/;
+  const allowedMimetypes = /^image\/(jpeg|jpg|png|gif|webp|pjpeg)$/i;
 
   const extOk = allowedExtensions.test(path.extname(file.originalname));
-  const mimeOk = allowedMimetypes.test(file.mimetype);
+  const mimeOk = allowedMimetypes.test(file.mimetype) || file.mimetype === 'application/octet-stream';
 
   if (extOk && mimeOk) {
     return cb(null, true);

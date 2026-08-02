@@ -14,6 +14,9 @@ const { setupSwagger } = require('./config/swagger');
 const notificationService = require('./services/notificationService');
 const fcmService = require('./services/fcmService');
 const cronService = require('./services/cronService');
+const { registerPaymentOutboxHandlers } = require('./services/outboxHandlers/paymentHandlers');
+const { createOutboxWorker } = require('./jobs/outboxWorker');
+const outboxWorker = createOutboxWorker();
 
 const { securityMiddleware, authLimiter, corsOptions } = require('./middleware/security');
 const { errorHandler, notFound, errorLogger, rateLimitErrorHandler } = require('./middleware/errorHandler');
@@ -98,7 +101,14 @@ app.use(compression());
 app.use(morgan('dev'));
 
 // Parsing JSON AVANT le logging pour voir les données
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+  limit: '50mb',
+  verify: (req, res, buffer) => {
+    if (req.originalUrl?.includes('/fineopay/callback')) {
+      req.rawBody = Buffer.from(buffer);
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Middleware de logging désactivé pour éviter la pollution des logs
@@ -111,19 +121,40 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 //   next();
 // });
 
-// Health check endpoints
-app.get(['/health', '/api/health'], (req, res) => {
+const { correlationMiddleware } = require('./middleware/correlationMiddleware');
+const { sequelize } = require('./models');
+
+// Middleware correlation ID
+app.use(correlationMiddleware);
+
+// Liveness check (léger, sans fuite d'informations système)
+app.get(['/live', '/api/live', '/health', '/api/health'], (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'MCT Maintenance API',
     version: '2.0.8',
-    uptime: process.uptime(),
-    memoryUsage: process.memoryUsage(),
-    nodeVersion: process.version,
-    platform: process.platform,
     env: process.env.NODE_ENV || 'development'
   });
+});
+
+// Readiness check (vérification de la connectivité base de données)
+app.get(['/ready', '/api/ready'], async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    res.status(200).json({
+      status: 'READY',
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'NOT_READY',
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: error.message
+    });
+  }
 });
 
 // Configuration Swagger (avant les routes API)
@@ -132,13 +163,17 @@ setupSwagger(app);
 // Middleware de sécurité (après les endpoints de santé)
 securityMiddleware(app);
 
-// Servir les fichiers uploadés (images des interventions)
+// Servir les fichiers uploadés (images des interventions, avatars, etc.) avec options de sécurité
 const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 Dossier uploads créé');
 }
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, {
+  dotfiles: 'ignore',
+  index: false,
+  maxAge: '1d'
+}));
 console.log('📁 Dossier uploads disponible sur /uploads');
 
 // API routes
@@ -156,6 +191,7 @@ app.use('/api/interventions', interventionRoutes);
 app.use('/api/contracts', contractRoutes);
 app.use('/api/quotes', quoteRoutes);
 app.use('/api/promotions', promotionRoutes);
+app.use('/api/refunds', require('./routes/refundRoutes'));
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notification-preferences', notificationPreferenceRoutes);
 app.use('/api/users', userRoutes);
@@ -182,11 +218,9 @@ app.use('/api/maintenance', require('./routes/maintenanceRoutes'));
 app.use('/api/activities', activityRoutes);
 app.use('/api/sms', smsWebhookRoutes); // Webhooks HSMS.ci
 app.use('/api/splits', require('./routes/splitRoutes')); // Gestion des splits (QR code)
+app.use('/api/config', require('./routes/configRoutes')); // Configuration serveur administrable (tarifs, garanties, contacts, contrats)
 
-// Servir les fichiers statiques uploadés
-app.use('/uploads', express.static('uploads'));
-
-console.log('✅ Routes mounted: /api/users available');
+console.log('✅ Routes mounted: /api/users, /api/config available');
 
 // Error handling middleware
 app.use(rateLimitErrorHandler);
@@ -202,6 +236,86 @@ const startServer = async () => {
     
     // Sync database models
     await syncDatabase();
+
+    // Migration automatique des colonnes 50% solde sur interventions
+    try {
+      const { sequelize } = require('./config/database');
+      const { DataTypes } = require('sequelize');
+      const queryInterface = sequelize.getQueryInterface();
+      const tableDesc = await queryInterface.describeTable('interventions');
+
+      if (!tableDesc.payment_option) {
+        await queryInterface.addColumn('interventions', 'payment_option', { type: DataTypes.STRING, allowNull: true, defaultValue: 'full' });
+      }
+      if (!tableDesc.total_price) {
+        await queryInterface.addColumn('interventions', 'total_price', { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 });
+      }
+      if (!tableDesc.second_payment_amount) {
+        await queryInterface.addColumn('interventions', 'second_payment_amount', { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 });
+      }
+      if (!tableDesc.second_payment_status) {
+        await queryInterface.addColumn('interventions', 'second_payment_status', { type: DataTypes.STRING, allowNull: true, defaultValue: 'none' });
+      }
+      console.log('✅ Auto-migration colonnes 50% solde interventions effectuée');
+    } catch (migErr) {
+      console.log('ℹ️ Remarque migration colonnes interventions:', migErr.message);
+    }
+
+    // Migration automatique des colonnes diagnostic_reports
+    try {
+      const { sequelize } = require('./config/database');
+      const { DataTypes } = require('sequelize');
+      const queryInterface = sequelize.getQueryInterface();
+      const diagTableDesc = await queryInterface.describeTable('diagnostic_reports');
+      if (!diagTableDesc.equipments) {
+        await queryInterface.addColumn('diagnostic_reports', 'equipments', { type: DataTypes.TEXT, allowNull: true });
+      }
+      if (!diagTableDesc.materials_needed) {
+        await queryInterface.addColumn('diagnostic_reports', 'materials_needed', { type: DataTypes.TEXT, allowNull: true });
+      }
+      console.log('✅ Auto-migration colonnes diagnostic_reports effectuée');
+    } catch (diagMigErr) {
+      console.log('ℹ️ Remarque migration colonnes diagnostic_reports:', diagMigErr.message);
+    }
+    
+    // Auto-correction des souscriptions et interventions à 0 FCFA en attente
+    try {
+      const { Subscription, Intervention } = require('./models');
+      const [updatedSubCount] = await Subscription.update(
+        { payment_status: 'paid', first_payment_status: 'paid', second_payment_status: 'paid', status: 'active' },
+        { where: { price: 0, payment_status: 'pending' } }
+      );
+      if (updatedSubCount > 0) {
+        console.log(`✅ ${updatedSubCount} souscription(s) à 0 FCFA mise(s) à jour en "paid"`);
+      }
+
+      const [updatedIntervCount] = await Intervention.update(
+        { diagnostic_paid: true, is_free_diagnosis: true },
+        { where: { diagnostic_fee: 0, diagnostic_paid: false } }
+      );
+      if (updatedIntervCount > 0) {
+        console.log(`✅ ${updatedIntervCount} intervention(s) à 0 FCFA mise(s) à jour en "paid"`);
+      }
+
+      // 🔧 Auto-correction: Si une intervention en mode 'split' n'est pas encore terminée/confirmée, son 2ème paiement (solde 50%) doit rester 'pending'
+      const { Op } = require('sequelize');
+      const [resetSecondCount] = await Intervention.update(
+        { second_payment_status: 'pending' },
+        { 
+          where: { 
+            payment_option: 'split',
+            second_payment_status: 'paid',
+            status: { [Op.ne]: 'completed' },
+            customer_confirmed: { [Op.ne]: true }
+          } 
+        }
+      );
+      if (resetSecondCount > 0) {
+        console.log(`🔧 ${resetSecondCount} intervention(s) split non-terminée(s) réinitialisée(s) -> second_payment_status: "pending"`);
+      }
+    } catch (err) {
+      console.error('⚠️  Erreur auto-update 0 FCFA:', err.message);
+    }
     
     // Initialize Firebase Cloud Messaging
     try {
@@ -215,8 +329,10 @@ const startServer = async () => {
     // Initialize CRON jobs (uniquement sur le worker 0 en mode cluster pour éviter les doublons)
     if (!process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0') {
       cronService.initializeJobs();
+      registerPaymentOutboxHandlers();
+      outboxWorker.start();
     } else {
-      console.log(`⏰ [Cron] Worker ${process.env.NODE_APP_INSTANCE} - cron jobs désactivés (géré par worker 0)`);
+      console.log(`⏰ [Cron/Outbox] Worker ${process.env.NODE_APP_INSTANCE} - tâches différées désactivées (gérées par worker 0)`);
     }
     
     // Start server (utiliser server au lieu de app pour Socket.IO)
@@ -235,15 +351,17 @@ const startServer = async () => {
 startServer();
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
   cronService.stopAllJobs();
+  await outboxWorker.stop();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully');
   cronService.stopAllJobs();
+  await outboxWorker.stop();
   process.exit(0);
 });
 

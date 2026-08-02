@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
+import 'package:mct_maintenance_mobile/utils/avatar_helper.dart';
 import 'diagnostic_payment_screen.dart';
 import 'payment_screen.dart';
 import 'contract_payment_screen.dart';
@@ -205,8 +206,10 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                         const SizedBox(height: 16),
 
                       // Technicien
-                      if (_intervention['technician'] != null)
+                      if (_shouldShowTechnicianCard()) ...[
+                        const SizedBox(height: 16),
                         _buildTechnicianCard(),
+                      ],
 
                       // Offre d'entretien
                       if (_intervention['maintenance_offer'] != null) ...[
@@ -219,10 +222,16 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                       // Dates
                       _buildDatesCard(scheduledDate, completedDate),
 
-                      // Section paiement si non payé
+                      // Section paiement initial si non payé
                       if (_needsPayment()) ...[
                         const SizedBox(height: 16),
                         _buildPaymentSection(),
+                      ],
+
+                      // Section paiement du solde (50% restant) si en attente
+                      if (_needsSecondPayment()) ...[
+                        const SizedBox(height: 16),
+                        _buildSecondPaymentSection(),
                       ],
 
                       // Bouton d'annulation si l'intervention peut être annulée
@@ -275,6 +284,12 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
 
     // Needs payment if not free, has a fee, and not yet paid
     return !isFree && diagnosticFee > 0 && !diagnosticPaid;
+  }
+
+  bool _needsSecondPayment() {
+    final secondStatus = _intervention['second_payment_status'] ?? 'none';
+    final secondAmount = double.tryParse(_intervention['second_payment_amount']?.toString() ?? '0') ?? 0;
+    return secondStatus == 'pending' && secondAmount > 0;
   }
 
   // Vérifie si le rapport est soumis mais pas encore confirmé par le client
@@ -452,8 +467,17 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
   }
 
   Widget _buildReportSummary(Map<String, dynamic> report) {
-    final workDone = report['travaux_effectues'] ?? report['description'] ?? '';
-    final observations = report['observations'] ?? '';
+    final isDiagnostic = report['report_type'] == 'diagnostic' ||
+        (report['problem_description'] != null &&
+            report['work_description'] == null &&
+            report['intervention_nature'] == null);
+
+    final workDone = report['travaux_effectues'] ??
+        report['work_description'] ??
+        report['intervention_nature'] ??
+        (isDiagnostic ? report['problem_description'] : '') ??
+        '';
+    final observations = report['observations'] ?? report['notes'] ?? '';
     final List<dynamic> equipments = _getEquipments(report);
 
     return Container(
@@ -465,9 +489,11 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Résumé du rapport',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          Text(
+            isDiagnostic
+                ? 'Rapport de Diagnostic'
+                : 'Résumé des travaux effectués',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           const SizedBox(height: 8),
           if (workDone.isNotEmpty) ...[
@@ -794,25 +820,41 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
             );
 
             if (shouldPay == true && mounted) {
-              // Rediriger vers l'écran de paiement
+              // Rediriger vers l'écran de paiement (Intervention vs Commande Devis)
+              final type = paymentInfo['type'];
               final orderId = paymentInfo['order_id'];
-              if (orderId == null) {
-                SnackBarHelper.showError(
-                    context, 'Erreur: Commande non trouvée');
+              final targetInterventionId = paymentInfo['intervention_id'] ?? _intervention['id'];
+              final amountToPay = (paymentInfo['amount'] as num).toDouble();
+
+              if (type == 'intervention' || orderId == null) {
+                // Paiement direct du solde de l'intervention via DiagnosticPaymentScreen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DiagnosticPaymentScreen(
+                      interventionId: targetInterventionId,
+                      diagnosticFee: amountToPay,
+                      isMaintenanceDeposit: true,
+                      paymentOption: 'split',
+                    ),
+                  ),
+                ).then((_) => _refreshIntervention());
+                return;
+              } else {
+                // Paiement du solde de commande devis via PaymentScreen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PaymentScreen(
+                      invoiceId: orderId.toString(),
+                      invoiceNumber: paymentInfo['quote_reference'] ?? 'N/A',
+                      amount: amountToPay,
+                      paymentStep: 2,
+                    ),
+                  ),
+                ).then((_) => _refreshIntervention());
                 return;
               }
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PaymentScreen(
-                    invoiceId: orderId.toString(),
-                    invoiceNumber: paymentInfo['quote_reference'] ?? 'N/A',
-                    amount: (paymentInfo['amount'] as num).toDouble(),
-                    paymentStep: 2,
-                  ),
-                ),
-              ).then((_) => _refreshIntervention());
-              return; // On sort ici car on a redirigé vers le paiement
             }
           }
         }
@@ -993,6 +1035,79 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                 label: const Text('Payer maintenant'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSecondPaymentSection() {
+    final secondAmount = double.tryParse(_intervention['second_payment_amount']?.toString() ?? '0') ?? 0;
+    return Card(
+      elevation: 2,
+      color: Colors.teal.shade50,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.payment, color: Color(0xFF0a543d)),
+                const SizedBox(width: 8),
+                const Text(
+                  'Paiement du solde (50% restant)',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0a543d),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Montant du solde à payer: ${secondAmount.toStringAsFixed(0)} FCFA',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'L\'intervention est terminée. Veuillez régler le solde restant.',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DiagnosticPaymentScreen(
+                        interventionId: _intervention['id'],
+                        diagnosticFee: secondAmount,
+                        isMaintenanceDeposit: true,
+                        paymentOption: 'split',
+                      ),
+                    ),
+                  );
+                  if (result == true) {
+                    await _refreshIntervention();
+                  }
+                },
+                icon: const Icon(Icons.credit_card, color: Colors.white),
+                label: const Text('Payer le solde maintenant', style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0a543d),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -1510,8 +1625,41 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     );
   }
 
+  bool _shouldShowTechnicianCard() {
+    if (_intervention['technician'] != null &&
+        _intervention['technician'] is Map &&
+        (_intervention['technician'] as Map).isNotEmpty) {
+      return true;
+    }
+    if (_intervention['assigned_technician'] != null) return true;
+    final status = (_intervention['status'] ?? '').toString().toLowerCase();
+    return status == 'assigned' ||
+        status == 'accepted' ||
+        status == 'on_the_way' ||
+        status == 'arrived' ||
+        status == 'in_progress' ||
+        status == 'completed' ||
+        status == 'diagnostic_submitted' ||
+        status == 'execution_confirmed';
+  }
+
   Widget _buildTechnicianCard() {
-    final technician = _intervention['technician'];
+    final techObj = _intervention['technician'] ?? _intervention['assigned_technician'];
+    final Map<String, dynamic> technician = techObj is Map<String, dynamic>
+        ? techObj
+        : (techObj is Map ? Map<String, dynamic>.from(techObj) : {});
+
+    final firstName = (technician['first_name'] ?? technician['firstName'] ?? '').toString().trim();
+    final lastName = (technician['last_name'] ?? technician['lastName'] ?? '').toString().trim();
+    final phone = (technician['phone'] ?? '').toString().trim();
+    final profileImg = (technician['profile_image'] ?? technician['profile_picture'] ?? technician['photo'] ?? '').toString();
+
+    final fullName = '$firstName $lastName'.trim();
+    final displayName = fullName.isNotEmpty ? fullName : 'Technicien MCT';
+
+    final firstInitial = firstName.isNotEmpty ? firstName[0] : (displayName.isNotEmpty ? displayName[0] : 'T');
+    final lastInitial = lastName.isNotEmpty ? lastName[0] : '';
+    final initials = '$firstInitial$lastInitial'.toUpperCase();
 
     return Card(
       elevation: 2,
@@ -1531,17 +1679,25 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: const Color(0xFF0a543d),
-                  child: Text(
-                    '${technician['first_name']?[0] ?? ''}${technician['last_name']?[0] ?? ''}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                Builder(
+                  builder: (context) {
+                    final hasImg = AvatarHelper.hasAvatar(profileImg);
+                    return CircleAvatar(
+                      radius: 30,
+                      backgroundColor: const Color(0xFF0a543d),
+                      backgroundImage: AvatarHelper.buildImageProvider(profileImg),
+                      child: hasImg
+                          ? null
+                          : Text(
+                              initials,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    );
+                  },
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1549,14 +1705,13 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${technician['first_name']} ${technician['last_name']}',
+                        displayName,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (technician['phone'] != null &&
-                          technician['phone'].toString().isNotEmpty) ...[
+                      if (phone.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Row(
                           children: [
@@ -1564,7 +1719,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                                 size: 16, color: Colors.grey.shade600),
                             const SizedBox(width: 4),
                             Text(
-                              technician['phone'],
+                              phone,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey.shade600,
@@ -1572,21 +1727,28 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                             ),
                           ],
                         ),
+                      ] else ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'MCT Maintenance',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                       ],
                     ],
                   ),
                 ),
-                if (technician['phone'] != null &&
-                    technician['phone'].toString().isNotEmpty)
+                if (phone.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.call, color: Color(0xFF0a543d)),
                     onPressed: () async {
-                      String phoneStr = technician['phone'].toString();
+                      String phoneStr = phone;
                       if (phoneStr.startsWith('225')) {
                         phoneStr = '+$phoneStr';
                       }
-                      final Uri phoneUri =
-                          Uri(scheme: 'tel', path: phoneStr);
+                      final Uri phoneUri = Uri(scheme: 'tel', path: phoneStr);
                       if (await canLaunchUrl(phoneUri)) {
                         await launchUrl(phoneUri);
                       }
@@ -1803,8 +1965,43 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
   }
 
   Widget _buildImagesCard() {
-    final images = _intervention['images'] as List;
-    final baseUrl = AppConfig.baseUrl;
+    final rawImages = _intervention['images'] ?? _intervention['photos'];
+    final List<String> imageUrls = [];
+
+    void extractUrls(dynamic data) {
+      if (data == null) return;
+      if (data is String) {
+        final str = data.trim();
+        if (str.startsWith('[')) {
+          try {
+            final List decoded = json.decode(str);
+            for (var item in decoded) {
+              extractUrls(item);
+            }
+            return;
+          } catch (_) {}
+        }
+        if (str.isNotEmpty) {
+          if (str.startsWith('http://') || str.startsWith('https://')) {
+            imageUrls.add(str);
+          } else {
+            final clean = str.startsWith('/') ? str : '/$str';
+            imageUrls.add('${AppConfig.baseUrl}$clean');
+          }
+        }
+      } else if (data is Map) {
+        extractUrls(data['image_url'] ?? data['url'] ?? data['path']);
+      } else if (data is List) {
+        for (var item in data) {
+          extractUrls(item);
+        }
+      }
+    }
+
+    extractUrls(rawImages);
+    final uniqueUrls = imageUrls.toSet().toList();
+
+    if (uniqueUrls.isEmpty) return const SizedBox.shrink();
 
     return Card(
       elevation: 2,
@@ -1819,7 +2016,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                 const Icon(Icons.photo_library, color: Color(0xFF0a543d)),
                 const SizedBox(width: 8),
                 Text(
-                  'Photos (${images.length})',
+                  'Photos (${uniqueUrls.length})',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1832,35 +2029,57 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
               height: 120,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: images.length,
+                itemCount: uniqueUrls.length,
                 itemBuilder: (context, index) {
-                  final image = images[index];
-                  final imageUrl = '$baseUrl${image['image_url']}';
+                  final imageUrl = uniqueUrls[index];
 
                   return Padding(
                     padding: const EdgeInsets.only(right: 12),
                     child: GestureDetector(
                       onTap: () {
-                        // Afficher l'image en grand
                         showDialog(
                           context: context,
                           builder: (context) => Dialog(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
+                            backgroundColor: Colors.transparent,
+                            insetPadding: const EdgeInsets.all(16),
+                            child: Stack(
+                              alignment: Alignment.topRight,
                               children: [
-                                Image.network(
-                                  imageUrl,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return const Center(
-                                      child: Icon(Icons.error,
-                                          size: 50, color: Colors.red),
-                                    );
-                                  },
+                                InteractiveViewer(
+                                  minScale: 0.5,
+                                  maxScale: 4.0,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      imageUrl,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Container(
+                                          padding: const EdgeInsets.all(24),
+                                          color: Colors.white,
+                                          child: const Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.error_outline, size: 48, color: Colors.red),
+                                              SizedBox(height: 12),
+                                              Text('Erreur de chargement de l\'image'),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
                                 ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Fermer'),
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: CircleAvatar(
+                                    backgroundColor: Colors.black.withValues(alpha: 0.6),
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close, color: Colors.white),
+                                      onPressed: () => Navigator.pop(context),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1868,40 +2087,40 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                         );
                       },
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          imageUrl,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
                           width: 120,
                           height: 120,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Container(
-                              width: 120,
-                              height: 120,
-                              color: Colors.grey.shade200,
-                              child: const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 120,
-                              height: 120,
-                              color: Colors.grey.shade200,
-                              child: const Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.broken_image,
-                                      size: 40, color: Colors.grey),
-                                  SizedBox(height: 4),
-                                  Text('Erreur',
-                                      style: TextStyle(fontSize: 12)),
-                                ],
-                              ),
-                            );
-                          },
+                          color: Colors.grey[200],
+                          child: Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return const Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.broken_image_rounded, color: Colors.grey, size: 32),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Non disponible',
+                                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),

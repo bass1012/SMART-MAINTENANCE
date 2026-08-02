@@ -645,10 +645,8 @@ const acceptQuote = async (req, res) => {
       // Générer une référence unique pour la commande
       const orderReference = `CMD-${Date.now()}-${quote.id}`;
 
-      // Déterminer le statut de paiement selon le type d'exécution
-      // Exécution immédiate → pending (paiement maintenant)
-      // Planifié pour plus tard → deferred (paiement différé)
-      const paymentStatus = execute_now ? 'pending' : 'deferred';
+      // Déterminer le statut de paiement initial (toujours 'pending' car le paiement préalable est obligatoire)
+      const paymentStatus = 'pending';
 
       // Créer la commande
       const order = await Order.create({
@@ -656,7 +654,7 @@ const acceptQuote = async (req, res) => {
         customer_id: quote.customerId,
         quote_id: quote.id,
         total_amount: quote.total || 0,
-        status: execute_now ? 'pending' : 'scheduled',
+        status: 'pending',
         payment_status: paymentStatus,
         payment_method: null,
         line_items: JSON.stringify(lineItems),

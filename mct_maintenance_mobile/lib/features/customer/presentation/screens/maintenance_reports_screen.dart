@@ -5,6 +5,7 @@ import 'package:mct_maintenance_mobile/features/interventions/domain/repositorie
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/widgets/common/support_fab_wrapper.dart';
+import 'package:mct_maintenance_mobile/config/environment.dart';
 
 class MaintenanceReportsScreen extends StatefulWidget {
   const MaintenanceReportsScreen({super.key});
@@ -19,6 +20,7 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
   bool _isLoading = true;
   List<MaintenanceReport> _reports = [];
   String? _error;
+  final Set<String> _expandedReportIds = {};
 
   @override
   void initState() {
@@ -34,6 +36,9 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
         setState(() {
           _reports = reports;
           _isLoading = false;
+          if (reports.isNotEmpty) {
+            _expandedReportIds.add(reports.first.id);
+          }
         });
       }
     } catch (e) {
@@ -85,138 +90,268 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
   Widget _buildReportCard(MaintenanceReport report) {
     final dateFormat = DateFormat("dd/MM/yyyy HH'h'mm");
     final statusColor = _getStatusColor(report.status);
+    final bool isExpanded = _expandedReportIds.contains(report.id);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      child: InkWell(
-        onTap: () {
-          // TODO: Naviguer vers les détails du rapport
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // En-tête cliquable pour dérouler / réduire
+            InkWell(
+              onTap: () {
+                setState(() {
+                  if (isExpanded) {
+                    _expandedReportIds.remove(report.id);
+                  } else {
+                    _expandedReportIds.add(report.id);
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    report.reference ?? 'Sans référence',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Text(
+                          report.reference ?? 'Sans référence',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _formatStatus(report.status),
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFF0a543d).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
                     ),
-                    child: Text(
-                      _formatStatus(report.status),
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: const Color(0xFF0a543d),
+                      size: 26,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                report.title ?? 'Sans titre',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              report.title ?? 'Sans titre',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (report.description != null && report.description!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  report.description!,
+                  maxLines: isExpanded ? 10 : 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(height: 8),
-              if (report.description != null && report.description!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    report.description!,
-                    maxLines: 2,
+            const Divider(),
+            if (report.technicianName != null)
+              _buildInfoRow(
+                Icons.person_outline,
+                'Technicien: ${report.technicianName!}',
+              ),
+            if (report.scheduledDate != null)
+              _buildInfoRow(
+                Icons.calendar_today,
+                'Date prévue: ${dateFormat.format(report.scheduledDate!)}',
+              ),
+            if (report.completedDate != null)
+              _buildInfoRow(
+                Icons.check_circle_outline,
+                'Terminé le: ${dateFormat.format(report.completedDate!)}',
+              ),
+            if (report.technicianNotes != null &&
+                report.technicianNotes!.isNotEmpty)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Notes du technicien:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    report.technicianNotes!,
+                    maxLines: isExpanded ? 10 : 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                ],
+              ),
+
+            // Contenu détaillé (déroulant / réduisible avec flèche)
+            if (isExpanded) ...[
+              // Mesures techniques & Équipements 2-étapes
+              if (_hasTechnicalMeasures(report))
+                _buildTechnicalMeasuresSection(report),
+
+              // Photos AVANT intervention
+              if (report.photosBefore != null && report.photosBefore!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  '📷 Photos AVANT intervention (${report.photosBefore!.length})',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade900,
+                  ),
                 ),
-              const Divider(),
-              if (report.technicianName != null)
-                _buildInfoRow(
-                  Icons.person_outline,
-                  'Technicien: ${report.technicianName!}',
+                const SizedBox(height: 6),
+                _buildPhotoGallery(report.photosBefore!),
+              ],
+
+              // Photos APRÈS intervention
+              if (report.photosAfter != null && report.photosAfter!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  '📸 Photos APRÈS intervention (${report.photosAfter!.length})',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade900,
+                  ),
                 ),
-              if (report.scheduledDate != null)
-                _buildInfoRow(
-                  Icons.calendar_today,
-                  'Date prévue: ${dateFormat.format(report.scheduledDate!)}',
+                const SizedBox(height: 6),
+                _buildPhotoGallery(report.photosAfter!),
+              ],
+              if ((report.photosBefore == null || report.photosBefore!.isEmpty) &&
+                  (report.photosAfter == null || report.photosAfter!.isEmpty) &&
+                  report.imageUrls != null && report.imageUrls!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _buildPhotoGallery(report.imageUrls!),
+              ],
+            ],
+
+            const SizedBox(height: 10),
+
+            // Bouton barre inférieure pour dérouler / réduire
+            InkWell(
+              onTap: () {
+                setState(() {
+                  if (isExpanded) {
+                    _expandedReportIds.remove(report.id);
+                  } else {
+                    _expandedReportIds.add(report.id);
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: isExpanded
+                      ? Colors.grey.shade100
+                      : const Color(0xFF0a543d).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isExpanded
+                        ? Colors.grey.shade300
+                        : const Color(0xFF0a543d).withValues(alpha: 0.2),
+                  ),
                 ),
-              if (report.completedDate != null)
-                _buildInfoRow(
-                  Icons.check_circle_outline,
-                  'Terminé le: ${dateFormat.format(report.completedDate!)}',
-                ),
-              if (report.technicianNotes != null &&
-                  report.technicianNotes!.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Notes du technicien:',
-                      style: TextStyle(
+                    Text(
+                      isExpanded
+                          ? 'Réduire le rapport'
+                          : 'Voir le rapport détaillé (Mesures & Photos)',
+                      style: const TextStyle(
+                        color: Color(0xFF0a543d),
                         fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
                     ),
-                    Text(
-                      report.technicianNotes!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 6),
+                    Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: const Color(0xFF0a543d),
+                      size: 20,
                     ),
                   ],
                 ),
-              // Mesures techniques
-              if (_hasTechnicalMeasures(report))
-                _buildTechnicalMeasuresSection(report),
-              if (report.imageUrls != null && report.imageUrls!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: SizedBox(
-                    height: 80,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: report.imageUrls!.length,
-                      itemBuilder: (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              report.imageUrls![index],
-                              width: 80,
-                              height: 80,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                width: 80,
-                                height: 80,
-                                color: Colors.grey[200],
-                                child: const Icon(Icons.broken_image),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoGallery(List<String> rawPaths) {
+    final urls = rawPaths.map((path) {
+      if (path.startsWith('http://') || path.startsWith('https://')) return path;
+      final clean = path.startsWith('/') ? path : '/$path';
+      return '${AppConfig.baseUrl}$clean';
+    }).toList();
+
+    return SizedBox(
+      height: 80,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: urls.length,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                urls[index],
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: 80,
+                  height: 80,
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.broken_image),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -355,45 +490,129 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
             ],
           ),
           if (equipment.state != null && equipment.state!.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              'État: ${equipment.state}',
-              style: TextStyle(color: Colors.grey.shade700),
+              'État initial: ${equipment.state}',
+              style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.w500),
             ),
           ],
-          // Mesures techniques
-          if (equipment.hasTechnicalMeasures) ...[
-            const SizedBox(height: 8),
+          if (equipment.location != null && equipment.location!.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Emplacement: ${equipment.location}',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            ),
+          ],
+          if (equipment.functionalTest != null) ...[
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Text('Test de bon fonctionnement: ', style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                Text(
+                  equipment.functionalTest == true ? 'Oui ✓' : 'Non ✗',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: equipment.functionalTest == true ? Colors.green.shade800 : Colors.red.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Mesures techniques AVANT intervention (Constat initial)
+          if (equipment.hasBeforeMeasures) ...[
+            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.play_circle_fill, color: Colors.green.shade700, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Données Techniques — AVANT Intervention',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.green.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      if (equipment.beforePression != null && equipment.beforePression!.isNotEmpty)
+                        _buildMeasureChip(Icons.compress, 'Pression', '${equipment.beforePression} bar', color: Colors.green.shade800),
+                      if (equipment.beforeFreon != null && equipment.beforeFreon!.isNotEmpty)
+                        _buildMeasureChip(Icons.ac_unit, 'Fréon', '${equipment.beforeFreon}', color: Colors.green.shade800),
+                      if (equipment.beforePuissance != null && equipment.beforePuissance!.isNotEmpty)
+                        _buildMeasureChip(Icons.power, 'Puissance', '${equipment.beforePuissance} CV', color: Colors.green.shade800),
+                      if (equipment.beforeIntensite != null && equipment.beforeIntensite!.isNotEmpty)
+                        _buildMeasureChip(Icons.electrical_services, 'Intensité', '${equipment.beforeIntensite} A', color: Colors.green.shade800),
+                      if (equipment.beforeTension != null && equipment.beforeTension!.isNotEmpty)
+                        _buildMeasureChip(Icons.bolt, 'Tension', '${equipment.beforeTension} V', color: Colors.green.shade800),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Mesures techniques APRÈS intervention (Clôture finale)
+          if (equipment.hasAfterMeasures) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.orange.shade200),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade300),
               ),
-              child: Wrap(
-                spacing: 16,
-                runSpacing: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (equipment.pression != null &&
-                      equipment.pression!.isNotEmpty)
-                    _buildMeasureChip(Icons.compress, 'Pression',
-                        '${equipment.pression} bar'),
-                  if (equipment.freon != null && equipment.freon!.isNotEmpty)
-                    _buildMeasureChip(Icons.ac_unit, 'Fréon',
-                        '${equipment.freon} Kg'),
-                  if (equipment.puissance != null &&
-                      equipment.puissance!.isNotEmpty)
-                    _buildMeasureChip(
-                        Icons.power, 'Puissance', '${equipment.puissance} CV'),
-                  if (equipment.intensite != null &&
-                      equipment.intensite!.isNotEmpty)
-                    _buildMeasureChip(Icons.electrical_services, 'Intensité',
-                        '${equipment.intensite} A'),
-                  if (equipment.tension != null &&
-                      equipment.tension!.isNotEmpty)
-                    _buildMeasureChip(
-                        Icons.bolt, 'Tension', '${equipment.tension} V'),
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.orange.shade700, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Données Techniques — APRÈS Intervention',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.orange.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      if (equipment.afterPression != null && equipment.afterPression!.isNotEmpty)
+                        _buildMeasureChip(Icons.compress, 'Pression', '${equipment.afterPression} bar', color: Colors.orange.shade900),
+                      if (equipment.afterFreon != null && equipment.afterFreon!.isNotEmpty)
+                        _buildMeasureChip(Icons.ac_unit, 'Fréon', '${equipment.afterFreon}', color: Colors.orange.shade900),
+                      if (equipment.afterPuissance != null && equipment.afterPuissance!.isNotEmpty)
+                        _buildMeasureChip(Icons.power, 'Puissance', '${equipment.afterPuissance} CV', color: Colors.orange.shade900),
+                      if (equipment.afterIntensite != null && equipment.afterIntensite!.isNotEmpty)
+                        _buildMeasureChip(Icons.electrical_services, 'Intensité', '${equipment.afterIntensite} A', color: Colors.orange.shade900),
+                      if (equipment.afterTension != null && equipment.afterTension!.isNotEmpty)
+                        _buildMeasureChip(Icons.bolt, 'Tension', '${equipment.afterTension} V', color: Colors.orange.shade900),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -438,7 +657,7 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
                     Icons.compress, 'Pression', '${report.pression} bar'),
               if (report.freon != null && report.freon!.isNotEmpty)
                 _buildMeasureChip(
-                    Icons.ac_unit, 'Fréon', '${report.freon} Kg'),
+                    Icons.ac_unit, 'Fréon', '${report.freon}'),
               if (report.puissance != null && report.puissance!.isNotEmpty)
                 _buildMeasureChip(
                     Icons.power, 'Puissance', '${report.puissance} kW'),
@@ -454,11 +673,12 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
     );
   }
 
-  Widget _buildMeasureChip(IconData icon, String label, String value) {
+  Widget _buildMeasureChip(IconData icon, String label, String value, {Color? color}) {
+    final activeColor = color ?? Colors.orange.shade800;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: Colors.orange.shade700),
+        Icon(icon, size: 14, color: activeColor),
         const SizedBox(width: 4),
         Text(
           '$label: ',
@@ -469,7 +689,7 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.bold,
-            color: Colors.orange.shade900,
+            color: activeColor,
           ),
         ),
       ],

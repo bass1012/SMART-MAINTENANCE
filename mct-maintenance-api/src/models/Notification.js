@@ -17,50 +17,9 @@ const Notification = sequelize.define('Notification', {
       onDelete: 'CASCADE'
     },
     type: {
-      type: DataTypes.ENUM(
-        'intervention_request',
-        'intervention_assigned',
-        'technician_assigned',
-        'intervention_completed',
-        'complaint_created',
-        'complaint_response',
-        'complaint_status_change',
-        'subscription_created',
-        'subscription_expiring',
-        'order_created',
-        'order_status_update',
-        'order_tracking',
-        'quote_created',
-        'quote_sent',
-        'quote_updated',
-        'quote_accepted',
-        'quote_rejected',
-        'contract_created',
-        'contract_activated',
-        'contract_completed',
-        'contract_expiring',
-        'contract_renewal_request',
-        'second_payment_required',
-        'next_visit_scheduled',
-        'payment_received',
-        'payment_confirmed',
-        'payment_success',
-        'payment_failed',
-        'diagnostic_payment_confirmed',
-        'diagnostic_payment_received',
-        'diagnostic_payment_failed',
-        'diagnostic_payment_reminder',
-        'report_submitted',
-        'maintenance_offer_created',
-        'maintenance_offer_activated',
-        'promotion',
-        'maintenance_tip',
-        'maintenance_reminder',
-        'announcement',
-        'alert',
-        'general'
-      ),
-      allowNull: false
+      type: DataTypes.STRING(64),
+      allowNull: false,
+      validate: { notEmpty: true, len: [1, 64] }
     },
     title: {
       type: DataTypes.STRING,
@@ -100,6 +59,11 @@ const Notification = sequelize.define('Notification', {
       type: DataTypes.STRING,
       allowNull: true,
       comment: 'URL pour rediriger l\'utilisateur'
+    },
+    dedupe_key: {
+      type: DataTypes.STRING(191),
+      allowNull: true,
+      comment: 'Clé stable empêchant la création et l’envoi répétés d’une même notification'
     }
   }, {
     tableName: 'notifications',
@@ -118,6 +82,11 @@ const Notification = sequelize.define('Notification', {
       },
       {
         fields: ['created_at']
+      },
+      {
+        name: 'notifications_user_dedupe_key_uq',
+        unique: true,
+        fields: ['user_id', 'dedupe_key']
       }
     ]
   });

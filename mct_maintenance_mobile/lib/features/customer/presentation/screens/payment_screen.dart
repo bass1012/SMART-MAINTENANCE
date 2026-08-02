@@ -553,12 +553,27 @@ class _PaymentScreenState extends State<PaymentScreen>
           await _paymentRepository.verifyOrderPayment(_currentOrderId!);
 
       if (response['success'] == true) {
-        final order = response['data'];
-        final paymentStatus = order['paymentStatus']; // Noter: camelCase
+        final order = response['data'] ?? {};
+        final paymentStatus = order['paymentStatus'] ?? order['payment_status'] ?? order['status'];
+        final firstPaymentStatus = order['firstPaymentStatus'] ?? order['first_payment_status'];
+        final secondPaymentStatus = order['secondPaymentStatus'] ?? order['second_payment_status'];
+        bool isPaid = false;
+        if (widget.paymentStep == 2) {
+          // SECOND PAIEMENT (50% solde)
+          isPaid = secondPaymentStatus == 'paid' || paymentStatus == 'paid';
+        } else if (widget.paymentStep == 1) {
+          // PREMIER PAIEMENT (50% acompte)
+          isPaid = firstPaymentStatus == 'paid' || paymentStatus == 'partial' || paymentStatus == 'paid';
+        } else {
+          // PAIEMENT 100% INTÉGRAL
+          isPaid = paymentStatus == 'paid' || secondPaymentStatus == 'paid' || order['status'] == 'completed';
+        }
 
-        if (kDebugMode) debugPrint('📊 Statut du paiement: $paymentStatus');
+        if (kDebugMode) {
+          debugPrint('📊 Statut du paiement (étape ${widget.paymentStep}): $paymentStatus, 1er: $firstPaymentStatus, 2nd: $secondPaymentStatus, isPaid: $isPaid');
+        }
 
-        if (paymentStatus == 'paid') {
+        if (isPaid) {
           // Paiement réussi !
           _stopPolling();
 

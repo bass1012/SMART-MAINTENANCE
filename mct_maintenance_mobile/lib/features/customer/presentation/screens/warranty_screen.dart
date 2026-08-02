@@ -1,232 +1,521 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/complaints_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/interventions_list_screen.dart';
+import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
+import 'package:provider/provider.dart';
 
-class WarrantyScreen extends StatelessWidget {
+/// Écran SAV & Garanties Actives Client.
+///
+/// Transforme la garantie statique en espace SAV dynamique :
+/// - Statut en temps réel des garanties par équipement
+/// - Alertes sur garanties arrivant à échéance
+/// - Lien direct vers réclamations SAV & demande d'intervention
+/// - Consultation des engagements contractuels de garantie
+class WarrantyScreen extends StatefulWidget {
   const WarrantyScreen({super.key});
+
+  @override
+  State<WarrantyScreen> createState() => _WarrantyScreenState();
+}
+
+class _WarrantyScreenState extends State<WarrantyScreen> {
+  bool _isLoading = true;
+  String? _error;
+  Map<String, dynamic>? _dashboardData;
+  bool _showStaticRules = false;
+
+  static const _green = Color(0xFF0a543d);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDashboard());
+  }
+
+  Future<void> _loadDashboard() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final api = context.read<BaseApiService>();
+      final response = await api.get('/api/customer/warranty/dashboard');
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (decoded['success'] == true) {
+        if (mounted) {
+          setState(() {
+            _dashboardData = decoded['data'] as Map<String, dynamic>;
+            _isLoading = false;
+          });
+        }
+      } else {
+        throw Exception(decoded['message'] ?? 'Erreur lors du chargement');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FA),
       appBar: AppBar(
         title: Text(
-          'Garantie et Responsabilités',
+          'Garantie & SAV Actif',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
           ),
         ),
-        backgroundColor: const Color(0xFF0a543d),
+        backgroundColor: _green,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadDashboard,
+            tooltip: 'Actualiser',
+          ),
+        ],
       ),
-      body: Stack(
+      body: _isLoading
+          ? const Center(child: LoadingIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadDashboard,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 16),
+                    _buildQuickSAVActions(),
+                    const SizedBox(height: 20),
+                    if (_error == null && _dashboardData != null) ...[
+                      _buildEquipmentsWarrantyList(),
+                      const SizedBox(height: 20),
+                    ],
+                    _buildStaticTermsToggle(),
+                    if (_showStaticRules) ...[
+                      const SizedBox(height: 16),
+                      _buildStaticTermsContent(),
+                    ],
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildHeader() {
+    final summary = _dashboardData?['summary'] as Map<String, dynamic>?;
+    final activeCount = summary?['warranties_active'] ?? 0;
+    final totalEquipments = summary?['total_equipments'] ?? 0;
+    final openComplaints = summary?['open_complaints'] ?? 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: const BoxDecoration(
+        color: _green,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      child: Column(
         children: [
-          // Image de fond
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.08,
-              child: Image.asset(
-                'assets/images/Maintenancier_SMART_Maintenance_two.png',
-                fit: BoxFit.cover,
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.verified_user_rounded,
+              size: 40,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Suivi SAV & Couverture Équipements',
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+
+          // Cartes KPI
+          Row(
+            children: [
+              Expanded(
+                child: _buildKPITile(
+                  label: 'Équipements',
+                  value: '$totalEquipments',
+                  icon: Icons.devices_other,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildKPITile(
+                  label: 'Garanties actives',
+                  value: '$activeCount',
+                  icon: Icons.check_circle_outline,
+                  highlight: activeCount > 0,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildKPITile(
+                  label: 'Réclamations',
+                  value: '$openComplaints',
+                  icon: Icons.report_problem_outlined,
+                  isWarning: openComplaints > 0,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKPITile({
+    required String label,
+    required String value,
+    required IconData icon,
+    bool highlight = false,
+    bool isWarning = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: isWarning
+            ? Colors.red.shade400
+            : highlight
+                ? const Color(0xFF059669)
+                : Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 20, color: Colors.white),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 10,
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickSAVActions() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ComplaintsScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.report_problem_outlined, size: 18),
+              label: const Text('Déclarer réclamation'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE53E3E),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ),
-          // Contenu
-          SingleChildScrollView(
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const InterventionsListScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.build_outlined, size: 18),
+              label: const Text('Demander SAV'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _green,
+                side: const BorderSide(color: _green, width: 1.5),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEquipmentsWarrantyList() {
+    final equipments = (_dashboardData?['equipments'] as List<dynamic>?) ?? [];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Vos équipements & Garanties',
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF1A202C),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (equipments.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.devices_other, color: Colors.grey.shade400, size: 32),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      'Aucun équipement enregistré pour le moment.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: equipments.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final eq = equipments[index] as Map<String, dynamic>;
+                return _buildEquipmentCard(eq);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEquipmentCard(Map<String, dynamic> eq) {
+    final status = eq['warranty_status'] ?? 'unknown';
+    final days = eq['days_remaining'] as int?;
+
+    Color badgeColor;
+    String badgeText;
+    IconData badgeIcon;
+
+    if (status == 'active') {
+      badgeColor = const Color(0xFF2F855A);
+      badgeText = days != null ? 'Sous garantie ($days j)' : 'Garantie active';
+      badgeIcon = Icons.check_circle_outline;
+    } else if (status == 'expiring_soon') {
+      badgeColor = const Color(0xFFD97706);
+      badgeText = 'Expire bientôt ($days j)';
+      badgeIcon = Icons.warning_amber_rounded;
+    } else if (status == 'expired') {
+      badgeColor = const Color(0xFFE53E3E);
+      badgeText = 'Garantie expirée';
+      badgeIcon = Icons.cancel_outlined;
+    } else {
+      badgeColor = Colors.grey.shade600;
+      badgeText = 'Hors contrat / Non renseignée';
+      badgeIcon = Icons.help_outline;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.25), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: badgeColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.ac_unit, color: badgeColor, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // En-tête avec icône
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0a543d),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(30),
-                      bottomRight: Radius.circular(30),
+                Text(
+                  eq['name'] ?? 'Équipement',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1A202C),
+                  ),
+                ),
+                if (eq['brand'] != null || eq['model'] != null)
+                  Text(
+                    '${eq['brand'] ?? ''} ${eq['model'] ?? ''}'.trim(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.verified_user,
-                          size: 48,
-                          color: Colors.white,
-                        ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(badgeIcon, size: 14, color: badgeColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      badgeText,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: badgeColor,
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Nos engagements envers vous',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.white.withValues(alpha: 0.9),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Section 1: Installation
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildWarrantySection(
-                    icon: Icons.build_outlined,
-                    title: 'Installation d\'équipements',
-                    color: Colors.blue,
-                    content:
-                        '''Tous les travaux d'installation d'équipement de notre maison (LK et Carrier) par nos techniciens ont une garantie de 3 mois (délais plus ou moins impartis pour le premier entretien).
-
-Garantie portant sur la qualité des travaux et le matériel utilisé pour l'installation, non sur les éventuels soucis électriques ou la qualité du courant (puissance reçue d'électricité) que reçoit l'équipement, ce qui est du ressort de l'Opérateur fournisseur d'électricité que le client/partenaire doit consulter pour plus de détails.
-
-Tous les travaux d'installation de nouveaux splits (reçu d'achat corroborant à présenter par le client/partenaire Vs la date de notre installation) autre que les nôtres bénéficie de la même garantie tout comme de la même exemption.''',
-                    duration: '3 mois',
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Section 2: Entretien
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildWarrantySection(
-                    icon: Icons.cleaning_services,
-                    title: 'Travaux d\'entretien',
-                    color: Colors.green,
-                    content:
-                        '''Tous les travaux d'entretien de vos équipements effectués par nos équipes bénéficient de 3 jours de garantie pour leur bonne marche et le confort de résultat escompté à la suite des travaux.
-
-Durant ces 3 jours nous restons à votre entière disposition pour nous signaler tout éventuel défaut de rendement de votre/vos équipements qui résulteraient de notre passage.
-
-Attention : la garantie ne prend pas en compte les défauts de marche liés à l'électricité ou tout problème qui y serait lié.''',
-                    duration: '3 jours',
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Section 3: Dépannage
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildWarrantySection(
-                    icon: Icons.handyman,
-                    title: 'Travaux de dépannage',
-                    color: Colors.orange,
-                    content:
-                        '''Tous les travaux de dépannage de vos nouveaux équipements moins d'1 mois d'ancienneté (reçu d'achat corroborant à présenter par le client/partenaire Vs la date de notre dépannage) bénéficient d'une garantie de 7 jours à la suite de notre intervention.
-
-Garantie portant sur la qualité des travaux et le matériel utilisé pour l'installation, non sur les éventuels soucis électriques ou la qualité du courant (puissance reçue d'électricité) que reçoit l'équipement, ce qui est du ressort de l'Opérateur fournisseur d'électricité que le client/partenaire doit consulter pour plus de détails.
-
-Les dépannages sur vos équipements avec une ancienneté supérieur à celle mentionnée plus bénéficient de 3 jours de garantie tout comme de la même exemption.''',
-                    duration: '3 à 7 jours',
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Section 4: Diagnostic
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildWarrantySection(
-                    icon: Icons.search,
-                    title: 'Diagnostic préalable',
-                    color: Colors.purple,
-                    content:
-                        '''Les dépannages et les installations sont tous soumis à un diagnostic (4 000 FCFA) préalable avant tous travaux.
-
-Le diagnostic établi nous permet de vous partager un devis et c'est uniquement après la validation dudit devis que nous intervenons.''',
-                    price: '4 000 FCFA',
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Section Contact
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF0a543d),
-                          const Color(0xFF0d6b4d),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0a543d).withValues(alpha: 0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
                     ),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.support_agent,
-                          size: 40,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Besoin d\'aide ?',
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Pour toutes préoccupations ou autres sujets portant sur la qualité de nos travaux (installation, dépannage, entretien), veuillez nous contacter par WhatsApp.',
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            color: Colors.white.withValues(alpha: 0.9),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => _launchWhatsApp(),
-                          icon:
-                              const Icon(Icons.chat, color: Color(0xFF25D366)),
-                          label: Text(
-                            'WhatsApp: 07 59 50 50 50',
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF0a543d),
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
-
-                const SizedBox(height: 24),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStaticTermsToggle() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: InkWell(
+        onTap: () => setState(() => _showStaticRules = !_showStaticRules),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.gavel_outlined, color: Color(0xFF0a543d), size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Conditions & Engagements de Garantie',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF1A202C),
+                  ),
+                ),
+              ),
+              Icon(
+                _showStaticRules
+                    ? Icons.keyboard_arrow_up
+                    : Icons.keyboard_arrow_down,
+                color: Colors.grey.shade600,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStaticTermsContent() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          _buildWarrantySection(
+            icon: Icons.build_outlined,
+            title: 'Installation d\'équipements',
+            color: Colors.blue,
+            duration: '3 mois',
+            content:
+                '''Garantie de 3 mois sur les travaux d'installation d'équipements de nos marques partenaires. Portant sur la qualité des travaux et du matériel d'installation (hors problèmes de réseau électrique externe).''',
+          ),
+          const SizedBox(height: 12),
+          _buildWarrantySection(
+            icon: Icons.cleaning_services_outlined,
+            title: 'Travaux d\'Entretien',
+            color: Colors.orange,
+            duration: '2 semaines',
+            content:
+                '''Garantie de 2 semaines après la date d'entretien pour couvrir toute mauvaise manipulation éventuelle durant la prestation.''',
+          ),
+          const SizedBox(height: 12),
+          _buildWarrantySection(
+            icon: Icons.extension_outlined,
+            title: 'Pièces de Rechange',
+            color: Colors.green,
+            duration: 'Variables selon fabricant',
+            content:
+                '''Garanties régies par les conditions constructeurs. MCT Maintenance assure le remplacement sous réserve de l'expertise technique.''',
           ),
         ],
       ),
@@ -237,131 +526,60 @@ Le diagnostic établi nous permet de vous partager un devis et c'est uniquement 
     required IconData icon,
     required String title,
     required Color color,
+    required String duration,
     required String content,
-    String? duration,
-    String? price,
   }) {
     return Container(
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // En-tête de la section
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: color, size: 24),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: color,
-                        ),
-                      ),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          if (duration != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                'Garantie: $duration',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          if (price != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                price,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
+                child: Text(
+                  duration,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          // Contenu
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              content,
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Colors.grey.shade700,
-                height: 1.6,
-              ),
+          const SizedBox(height: 8),
+          Text(
+            content,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.grey.shade700,
+              height: 1.4,
             ),
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _launchWhatsApp() async {
-    final Uri whatsappUri = Uri.parse(
-        'https://wa.me/22507595050505?text=Bonjour, j\'ai une question concernant la garantie de vos services.');
-
-    if (await canLaunchUrl(whatsappUri)) {
-      await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
-    }
   }
 }

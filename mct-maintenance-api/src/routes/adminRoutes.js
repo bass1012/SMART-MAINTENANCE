@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const analyticsController = require('../controllers/admin/analyticsController');
+const technicianController = require('../controllers/technician/technicianController');
 
 const router = express.Router();
 const { Op } = require('sequelize');
@@ -314,21 +315,32 @@ router.get('/dashboard/quick-stats', async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
+    const paidOrFreeCondition = {
+      [Op.or]: [
+        { is_free_diagnosis: true },
+        { diagnostic_paid: true },
+        { diagnostic_fee: 0 },
+        { diagnostic_fee: null }
+      ]
+    };
+
     // Interventions du jour
     const interventionsToday = await Intervention.count({
       where: {
         scheduled_date: {
           [Op.gte]: today,
           [Op.lt]: new Date(today.getTime() + 24 * 60 * 60 * 1000)
-        }
+        },
+        ...paidOrFreeCondition
       }
     });
 
-    // Interventions en attente d'assignation
+    // Interventions en attente d'assignation (seulement les payées ou gratuites)
     const pendingAssignment = await Intervention.count({
       where: {
         status: 'pending',
-        technician_id: null
+        technician_id: null,
+        ...paidOrFreeCondition
       }
     });
 
@@ -506,6 +518,8 @@ router.get('/technicians', async (req, res) => {
   certification: u.technicianProfile?.certification || null,
   hourly_rate: u.technicianProfile?.hourly_rate || null,
   availability_status: u.technicianProfile?.availability_status || 'available',
+  rating: u.technicianProfile?.rating || 0,
+  total_reviews: u.technicianProfile?.total_reviews || 0,
       created_at: u.createdAt,
       updated_at: u.updatedAt,
     }));
@@ -525,6 +539,10 @@ router.get('/technicians', async (req, res) => {
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
+
+// Mise à jour de la disponibilité d'un technicien par l'admin
+router.patch('/technicians/:id/availability', technicianController.updateTechnicianAvailabilityByAdmin);
+router.put('/technicians/:id/availability', technicianController.updateTechnicianAvailabilityByAdmin);
 
 router.get('/users', (req, res) => {
   res.json({
@@ -1009,6 +1027,7 @@ router.get('/reports', async (req, res, next) => {
           phone: intervention.technician.phone,
         } : null,
         report: {
+          ...reportData,
           work_description: reportData.work_description || '',
           duration: reportData.duration || 0,
           materials_used: reportData.materials_used || [],
@@ -1016,6 +1035,9 @@ router.get('/reports', async (req, res, next) => {
           photos_count: reportData.photos_count || 0,
           status: reportData.status || 'submitted',
           submitted_at: intervention.report_submitted_at,
+          tasks_done: reportData.tasks_done || {},
+          photos_before: reportData.photos_before || [],
+          photos_after: reportData.photos_after || [],
           // Mesures techniques
           pression: reportData.pression || '',
           freon: reportData.freon || '',
@@ -1118,6 +1140,7 @@ router.get('/reports/:interventionId', async (req, res, next) => {
         phone: intervention.technician.phone,
       } : null,
       report: {
+        ...reportData,
         work_description: reportData.work_description || '',
         duration: reportData.duration || 0,
         materials_used: reportData.materials_used || [],
@@ -1125,6 +1148,9 @@ router.get('/reports/:interventionId', async (req, res, next) => {
         photos_count: reportData.photos_count || 0,
         status: reportData.status || 'submitted',
         submitted_at: intervention.report_submitted_at,
+        tasks_done: reportData.tasks_done || {},
+        photos_before: reportData.photos_before || [],
+        photos_after: reportData.photos_after || [],
         // Mesures techniques
         pression: reportData.pression || '',
         freon: reportData.freon || '',
@@ -1262,4 +1288,76 @@ router.patch('/subscriptions/:id/cancel', async (req, res) => {
   }
 });
 
+const { buildOperationalAlerts } = require('../services/operationalCockpitService');
+
+/**
+ * GET /api/admin/cockpit/operational-alerts
+ * Cockpit des exceptions opérationnelles : paiements échoués, interventions non assignées,
+ * retards, devis expirés, contrats proches de l'échéance, remboursements en attente.
+ */
+router.get('/cockpit/operational-alerts', async (req, res) => {
+  try {
+    const cockpit = await buildOperationalAlerts();
+    res.status(200).json({ success: true, data: cockpit });
+  } catch (error) {
+    console.error('❌ Erreur cockpit opérationnel:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des alertes opérationnelles',
+      error: error.message
+    });
+  }
+});
+
+const { getSystemCatalog, updateSystemCatalog } = require('../services/systemConfigCatalogService');
+
+/**
+ * GET /api/admin/config/catalog
+ * Consulter le catalogue complet de configuration serveur
+ */
+router.get('/config/catalog', async (req, res) => {
+  try {
+    const catalog = await getSystemCatalog();
+    res.status(200).json({ success: true, data: catalog });
+  } catch (error) {
+    console.error('❌ Erreur consultation catalogue admin:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/config/catalog
+ * Mettre à jour les tarifs, garanties, contacts et contenus contractuels du serveur
+ */
+router.put('/config/catalog', async (req, res) => {
+  try {
+    const updated = await updateSystemCatalog(req.body);
+    res.status(200).json({ success: true, message: 'Catalogue de configuration mis à jour avec succès', data: updated });
+  } catch (error) {
+    console.error('❌ Erreur mise à jour catalogue admin:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+const { getNavigationForRole } = require('../policies/backofficeNavigationPolicy');
+
+/**
+ * GET /api/admin/backoffice/navigation
+ * Renvoie la navigation back-office structurée par métier (Opérations, Commercial, Parc, Support, Pilotage, Configuration)
+ * filtrée selon le rôle de l'utilisateur connecté.
+ */
+router.get('/backoffice/navigation', async (req, res) => {
+  try {
+    const role = req.user?.role || 'manager';
+    const navigation = getNavigationForRole(role);
+    res.status(200).json({ success: true, role, data: navigation });
+  } catch (error) {
+    console.error('❌ Erreur navigation back-office:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = router;
+
+
+

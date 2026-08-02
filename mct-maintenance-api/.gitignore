@@ -1,38 +1,46 @@
+# Environment files
+.env
+.env.*
+!.env.example
 
+# Credentials & Key files
+*.pem
+*.key
+*.p8
+firebase-service-account.json
+google-services.json
+GoogleService-Info.plist
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Build & Dependencies
+node_modules/
+build/
+dist/
+coverage/
+package-lock.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.bak*
+
+# Uploads (sauf structure)
+uploads/**/*
 !uploads/.gitkeep
 !uploads/avatars/.gitkeep
 !uploads/documents/.gitkeep
 !uploads/equipments/.gitkeep
 !uploads/products/.gitkeep
-.DS_Store
-.env
-.env.local
-.env.production
-.idea/
-.vscode/
-*.bak*
-*.db
-*.log
-*.sqlite
-*.sqlite3
-*.swo
-*.swp
-# Build
-# Database
-# Dependencies
-# Environment files
-# IDE
-# Logs
-# OS
-# Testing
-# Uploads (sauf structure)
-build/
-coverage/
-dist/
-logs/
-mct-maintenance-api/.env.bak2
-node_modules/
-npm-debug.log*
-package-lock.json
-Thumbs.db
-uploads/**/*

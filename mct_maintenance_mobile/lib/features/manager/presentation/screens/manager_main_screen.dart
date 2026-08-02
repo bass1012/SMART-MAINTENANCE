@@ -11,6 +11,7 @@ import 'package:mct_maintenance_mobile/features/customer/presentation/screens/pr
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/settings_screen.dart';
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/notifications_screen.dart';
 import 'package:mct_maintenance_mobile/features/auth/presentation/screens/login_screen.dart';
+import 'package:mct_maintenance_mobile/features/manager/presentation/screens/manager_cockpit_screen.dart';
 
 import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:mct_maintenance_mobile/features/common/domain/repositories/notification_repository.dart';
@@ -324,13 +325,16 @@ class _ManagerMainScreenState extends State<ManagerMainScreen> {
                             case 3:
                               return _buildFeatureCard(
                                 context,
-                                icon: Icons.bar_chart,
-                                title: 'Statistiques',
-                                color: const Color(0xFF7B1FA2),
+                                icon: Icons.warning_amber_rounded,
+                                title: 'Cockpit Alertes',
+                                color: const Color(0xFFE53935),
                                 onTap: () {
-                                  SnackBarHelper.showInfo(
+                                  Navigator.push(
                                     context,
-                                    'Statistiques - Bientôt disponible',
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const ManagerCockpitScreen(),
+                                    ),
                                   );
                                 },
                               );

@@ -27,7 +27,7 @@ abstract class InterventionRepository {
   Future<Map<String, dynamic>> acceptIntervention(int id);
   Future<Map<String, dynamic>> markInterventionOnTheWay(int id);
   Future<Map<String, dynamic>> markInterventionArrived(int id);
-  Future<Map<String, dynamic>> startIntervention(int id);
+  Future<Map<String, dynamic>> startIntervention(int id, {Map<String, dynamic>? reportData});
   Future<Map<String, dynamic>> completeIntervention(int id);
   Future<Map<String, dynamic>> submitInterventionReport(int id, Map<String, dynamic> reportData);
   Future<Map<String, dynamic>> submitDiagnosticReport(Map<String, dynamic> data);

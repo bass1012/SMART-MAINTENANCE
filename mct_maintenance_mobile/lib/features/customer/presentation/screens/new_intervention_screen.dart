@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:mct_maintenance_mobile/features/customer/domain/repositories/service_repository.dart';
@@ -17,6 +19,7 @@ import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/models/repair_service.dart';
 import 'package:mct_maintenance_mobile/models/installation_service.dart';
 import 'diagnostic_payment_screen.dart';
+import 'intervention_detail_screen.dart';
 
 class NewInterventionScreen extends StatefulWidget {
   final String? preSelectedType;
@@ -48,6 +51,12 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
   final _descriptionController = TextEditingController();
   final _addressController = TextEditingController();
   final _equipmentCountController = TextEditingController(text: '1');
+  final _promoCodeController = TextEditingController();
+
+  // Code Promo
+  bool _isValidatingPromo = false;
+  Map<String, dynamic>? _appliedPromo;
+  double _promoDiscount = 0.0;
 
   String? _selectedType;
   DateTime? _preferredDate;
@@ -76,6 +85,20 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
   // Frais de diagnostic (chargé depuis l'API)
   int _diagnosticFee = 4000; // Valeur par défaut
 
+  bool get _isTypeLocked =>
+      widget.preSelectedType != null &&
+      widget.preSelectedType!.trim().isNotEmpty;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _addressController.dispose();
+    _equipmentCountController.dispose();
+    _promoCodeController.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -88,7 +111,18 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     }
     // Si un type est pré-sélectionné, l'initialiser et charger les données correspondantes
     if (widget.preSelectedType != null) {
-      _selectedType = widget.preSelectedType;
+      final String pre = widget.preSelectedType!.toLowerCase();
+      if (pre == 'maintenance') {
+        _selectedType = 'Maintenance';
+      } else if (pre == 'installation') {
+        _selectedType = 'installation';
+      } else if (pre == 'repair' || pre == 'réparation' || pre == 'depannage' || pre == 'dépannage') {
+        _selectedType = 'repair';
+      } else if (pre == 'diagnostic') {
+        _selectedType = 'diagnostic';
+      } else {
+        _selectedType = widget.preSelectedType;
+      }
       // Charger les données appropriées selon le type
       if (_selectedType == 'Maintenance') {
         _loadMaintenanceOffersWithPreselection();
@@ -134,14 +168,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _addressController.dispose();
-    _equipmentCountController.dispose();
-    super.dispose();
-  }
+
 
   Future<void> _loadMaintenanceOffers() async {
     setState(() => _isLoadingOffers = true);
@@ -589,6 +616,84 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     }
   }
 
+  Future<void> _validatePromoCode() async {
+    final code = _promoCodeController.text.trim();
+    if (code.isEmpty) {
+      SnackBarHelper.showWarning(context, 'Veuillez entrer un code promo');
+      return;
+    }
+
+    setState(() => _isValidatingPromo = true);
+
+    try {
+      final apiService = context.read<BaseApiService>();
+      final response = await apiService.post('/api/promotions/validate', body: {
+        'code': code,
+      });
+
+      final responseData = jsonDecode(response.body);
+
+      if (responseData['success'] == true) {
+        final promo = responseData['data'];
+        double discountAmount = 0;
+        final double val = (promo['value'] as num?)?.toDouble() ?? 0;
+        final String type = (promo['type'] ?? '').toString();
+
+        if (type == 'percentage') {
+          double baseAmount = 0;
+          if (_selectedType == 'Maintenance' && _selectedMaintenanceOffer != null) {
+            try {
+              final offer = _maintenanceOffers.firstWhere(
+                (o) => o['id'].toString() == _selectedMaintenanceOffer,
+              );
+              final unitPrice = (offer['price'] as num?)?.toDouble() ?? 0;
+              final count = int.tryParse(_equipmentCountController.text) ?? 1;
+              baseAmount = unitPrice * count;
+            } catch (_) {}
+          } else {
+            baseAmount = _diagnosticFee.toDouble();
+          }
+          discountAmount = (baseAmount * val) / 100;
+        } else {
+          discountAmount = val;
+        }
+
+        setState(() {
+          _appliedPromo = promo is Map<String, dynamic>
+              ? promo
+              : Map<String, dynamic>.from(promo);
+          _promoDiscount = discountAmount;
+        });
+
+        if (mounted) {
+          SnackBarHelper.showSuccess(
+            context,
+            'Code promo "$code" appliqué ! Réduction de ${discountAmount.toStringAsFixed(0)} FCFA',
+            emoji: '🏷️',
+          );
+        }
+      } else {
+        if (mounted) {
+          SnackBarHelper.showError(
+            context,
+            responseData['message'] ?? 'Code promo invalide',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackBarHelper.showError(
+          context,
+          'Erreur lors de la vérification du code promo: $e',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isValidatingPromo = false);
+      }
+    }
+  }
+
   Future<void> _submitIntervention() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -647,16 +752,16 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
           final selectedService = _installationServices.firstWhere(
             (s) => s.id == _selectedInstallationServiceId,
           );
-          title =
-              'Installation: ${selectedService.title} - ${selectedService.model}';
+          final hasModel = selectedService.model != null && selectedService.model!.isNotEmpty;
+          title = 'Installation: ${selectedService.title}${hasModel ? ' - ${selectedService.model}' : ''}';
         } else if (_selectedType == 'repair' &&
             _selectedRepairServiceId != null) {
           // Utiliser le titre du service de réparation sélectionné
           final selectedService = _repairServices.firstWhere(
             (s) => s.id == _selectedRepairServiceId,
           );
-          title =
-              'Dépannage: ${selectedService.title} - ${selectedService.model}';
+          final hasModel = selectedService.model != null && selectedService.model!.isNotEmpty;
+          title = 'Dépannage: ${selectedService.title}${hasModel ? ' - ${selectedService.model}' : ''}';
         } else {
           title = 'Intervention ${_selectedType ?? ""}';
         }
@@ -691,6 +796,12 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
       // Ajouter le service de réparation si le type est repair
       if (_selectedType == 'repair' && _selectedRepairServiceId != null) {
         interventionData['repair_service_id'] = _selectedRepairServiceId;
+      }
+
+      // Ajouter le code promo s'il a été appliqué
+      if (_appliedPromo != null && _appliedPromo!['code'] != null) {
+        interventionData['promo_code'] = _appliedPromo!['code'];
+        interventionData['discount_amount'] = _promoDiscount;
       }
 
       // Appel API avec images (OPTION 1 - Multipart/Form-Data)
@@ -753,12 +864,12 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
           // Attendre un peu pour que l'utilisateur voie le message de succès
           await Future.delayed(const Duration(milliseconds: 800));
 
-          // Utiliser le montant calculé par le backend
+          // Utiliser le montant calculé et retourné par le backend (déjà ajusté avec la réduction)
           double paymentAmount = diagnosticFeeFromServer;
 
           if (mounted) {
             // Naviguer vers l'écran de paiement
-            final paymentResult = await Navigator.push(
+            await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => DiagnosticPaymentScreen(
@@ -767,18 +878,45 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                       : int.parse(interventionId.toString()),
                   diagnosticFee: paymentAmount,
                   isMaintenanceDeposit: _selectedType == 'Maintenance',
+                  paymentOption: _maintenancePaymentOption,
                 ),
               ),
             );
 
-            // Retourner avec le résultat du paiement
+            // Rediriger directement vers la fiche détaillée de l'intervention créée !
             if (mounted) {
-              Navigator.pop(context, paymentResult ?? true);
+              final Map<String, dynamic> interventionDataForDetail =
+                  createdInterventionData is Map<String, dynamic>
+                      ? createdInterventionData
+                      : Map<String, dynamic>.from(createdInterventionData);
+
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => InterventionDetailScreen(
+                    intervention: interventionDataForDetail,
+                  ),
+                ),
+              );
             }
           }
         } else {
-          // Pour les interventions gratuites (maintenance avec souscription active), retourner normalement
-          Navigator.pop(context, true);
+          // Pour les interventions gratuites ou sans paiement immédiat, rediriger vers la fiche détaillée
+          if (mounted) {
+            final Map<String, dynamic> interventionDataForDetail =
+                createdInterventionData is Map<String, dynamic>
+                    ? createdInterventionData
+                    : Map<String, dynamic>.from(createdInterventionData);
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => InterventionDetailScreen(
+                  intervention: interventionDataForDetail,
+                ),
+              ),
+            );
+          }
         }
       }
     } catch (e) {
@@ -902,6 +1040,24 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                       hintText: 'Sélectionnez un type d\'intervention',
                       hintStyle:
                           GoogleFonts.poppins(color: Colors.grey, fontSize: 14),
+                      helperText: _isTypeLocked
+                          ? 'Type sélectionné depuis les services (verrouillé)'
+                          : null,
+                      helperStyle: GoogleFonts.poppins(
+                        color: const Color(0xFF0a543d),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      suffixIcon: _isTypeLocked
+                          ? const Padding(
+                              padding: EdgeInsets.only(right: 12.0),
+                              child: Icon(
+                                Icons.lock_outline,
+                                color: Color(0xFF0a543d),
+                                size: 20,
+                              ),
+                            )
+                          : null,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: Colors.grey.shade300),
@@ -909,6 +1065,10 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      disabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade400),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -965,23 +1125,25 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                       }
                       return null;
                     },
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedType = value;
-                        _selectedMaintenanceOffer = null;
-                        _selectedRepairServiceId = null;
-                        _selectedInstallationServiceId = null;
-                        if (value == 'Maintenance') {
-                          _loadMaintenanceOffers();
-                        }
-                        if (value == 'repair') {
-                          _loadRepairServices();
-                        }
-                        if (value == 'installation') {
-                          _loadInstallationServices();
-                        }
-                      });
-                    },
+                    onChanged: _isTypeLocked
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _selectedType = value;
+                              _selectedMaintenanceOffer = null;
+                              _selectedRepairServiceId = null;
+                              _selectedInstallationServiceId = null;
+                              if (value == 'Maintenance') {
+                                _loadMaintenanceOffers();
+                              }
+                              if (value == 'repair') {
+                                _loadRepairServices();
+                              }
+                              if (value == 'installation') {
+                                _loadInstallationServices();
+                              }
+                            });
+                          },
                   ),
                 ),
 
@@ -2369,6 +2531,10 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 24),
+
+                // Section Code Promo
+                _buildPromoCodeSection(),
                 const SizedBox(height: 32),
 
                 // Bouton de soumission
@@ -2429,6 +2595,173 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPromoCodeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Code promotionnel',
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.95),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.6),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _promoCodeController,
+                      enabled: _appliedPromo == null,
+                      textCapitalization: TextCapitalization.characters,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.1,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Ex: PROMO10',
+                        hintStyle: GoogleFonts.poppins(
+                          color: Colors.grey,
+                          fontSize: 14,
+                          letterSpacing: 0,
+                          fontWeight: FontWeight.normal,
+                        ),
+                        isDense: true,
+                        prefixIcon: Container(
+                          margin: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.discount_outlined,
+                              color: Colors.white, size: 18),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        disabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF0a543d), width: 2),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_appliedPromo == null)
+                    ElevatedButton(
+                      onPressed: _isValidatingPromo ? null : _validatePromoCode,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0a543d),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: _isValidatingPromo
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text('Appliquer',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              )),
+                    )
+                  else
+                    IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _appliedPromo = null;
+                          _promoDiscount = 0.0;
+                          _promoCodeController.clear();
+                        });
+                        SnackBarHelper.showInfo(
+                          context,
+                          'Code promo retiré',
+                        );
+                      },
+                      icon: const Icon(Icons.cancel, color: Colors.red),
+                      tooltip: 'Retirer le code promo',
+                    ),
+                ],
+              ),
+              if (_appliedPromo != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle,
+                          color: Colors.green.shade700, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Code "${_appliedPromo!['code'] ?? _promoCodeController.text}" valide (-${_promoDiscount.toStringAsFixed(0)} FCFA)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.green.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

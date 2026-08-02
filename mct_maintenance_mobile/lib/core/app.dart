@@ -88,7 +88,8 @@ class App extends StatelessWidget {
           update: (_, apiService, __) => ContractRepositoryImpl(apiService),
         ),
         ProxyProvider<BaseApiService, CustomerNotificationRepository>(
-          update: (_, apiService, __) => CustomerNotificationRepositoryImpl(apiService),
+          update: (_, apiService, __) =>
+              CustomerNotificationRepositoryImpl(apiService),
         ),
         ProxyProvider<BaseApiService, PaymentService>(
           update: (_, apiService, __) => PaymentService(apiService),
@@ -105,7 +106,15 @@ class App extends StatelessWidget {
           create: (_) => NotificationPreferencesProvider()..loadPreferences(),
         ),
         // Provider pour le mode offline et synchronisation
-        ChangeNotifierProvider(create: (_) => SyncProvider()),
+        ChangeNotifierProxyProvider2<BaseApiService, InterventionRepository,
+            SyncProvider>(
+          create: (context) => SyncProvider(
+            context.read<BaseApiService>(),
+            context.read<InterventionRepository>(),
+          ),
+          update: (context, apiService, interventionRepository, previous) =>
+              previous ?? SyncProvider(apiService, interventionRepository),
+        ),
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settings, _) {

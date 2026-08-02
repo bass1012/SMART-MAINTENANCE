@@ -32,8 +32,8 @@ const storage = multer.diskStorage({
 
 // Filtrage des types de fichiers autorisés
 const fileFilter = (req, file, cb) => {
-  const allowedExts = /jpeg|jpg|png|gif|mp4|mov|avi/;
-  const allowedMimes = /image\/jpeg|image\/png|image\/gif|video\/mp4|video\/quicktime|video\/x-msvideo/;
+  const allowedExts = /jpeg|jpg|png|gif|webp|mp4|mov|avi/;
+  const allowedMimes = /image\/jpeg|image\/jpg|image\/png|image\/gif|image\/webp|video\/mp4|video\/quicktime|video\/x-msvideo|application\/octet-stream/;
   
   const extname = allowedExts.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedMimes.test(file.mimetype);
@@ -42,7 +42,7 @@ const fileFilter = (req, file, cb) => {
     return cb(null, true);
   } else {
     console.error(`❌ Multer Rejet: extension=${path.extname(file.originalname)}, mimetype=${file.mimetype}`);
-    cb(new Error('Seules les images (JPEG, PNG, GIF) et courtes vidéos (MP4, MOV, AVI) sont autorisées'));
+    cb(new Error('Seules les images (JPEG, PNG, GIF, WEBP) et courtes vidéos (MP4, MOV, AVI) sont autorisées'));
   }
 };
 

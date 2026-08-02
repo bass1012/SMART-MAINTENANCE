@@ -36,6 +36,7 @@ class BaseApiService {
     if (_token != null) {
       headers['Authorization'] = 'Bearer $_token';
     }
+    headers['X-Correlation-ID'] = 'mobile-${DateTime.now().millisecondsSinceEpoch}';
     return headers;
   }
 
@@ -196,5 +197,20 @@ class BaseApiService {
       if (kDebugMode) debugPrint('❌ API Error (GET Bytes $endpoint): $e');
       rethrow;
     }
+  }
+
+  /// Déballe la réponse API de façon unifiée (enveloppe `data` ou objet direct)
+  dynamic unwrapDataResponse(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Erreur API (${response.statusCode}): ${response.body}');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      if (decoded.containsKey('data')) {
+        return decoded['data'];
+      }
+    }
+    return decoded;
   }
 }

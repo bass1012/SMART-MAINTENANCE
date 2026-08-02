@@ -31,6 +31,12 @@ MaintenanceOffer.init({
     defaultValue: 1,
     comment: 'Durée en mois (obsolète - les souscriptions expirent après utilisation)'
   },
+  priceNote: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    field: 'price_note',
+    comment: 'Texte d\'information sous le prix (ex: par an, par équipement)'
+  },
   features: {
     type: DataTypes.TEXT,
     allowNull: true,

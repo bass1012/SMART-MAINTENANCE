@@ -2,8 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:mct_maintenance_mobile/config/environment.dart';
+import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 
-class ViewDiagnosticReportScreen extends StatelessWidget {
+class ViewDiagnosticReportScreen extends StatefulWidget {
   final Map<String, dynamic> intervention;
 
   const ViewDiagnosticReportScreen({
@@ -11,19 +14,105 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
     required this.intervention,
   });
 
+  @override
+  State<ViewDiagnosticReportScreen> createState() => _ViewDiagnosticReportScreenState();
+}
+
+class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen> {
+  late Map<String, dynamic> _intervention;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _intervention = Map<String, dynamic>.from(widget.intervention);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchFreshIntervention();
+    });
+  }
+
+  Future<void> _fetchFreshIntervention() async {
+    final rawId = _intervention['id'];
+    if (rawId == null) return;
+    final int id = rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0;
+    if (id == 0) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final interventionRepository = context.read<InterventionRepository>();
+      final response = await interventionRepository.getInterventionById(id);
+      if (mounted && response['success'] == true && response['data'] != null) {
+        setState(() {
+          _intervention = Map<String, dynamic>.from(response['data']);
+          _isLoading = false;
+        });
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Erreur chargement rapport: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Map<String, dynamic>? get _report {
-    // L'API retourne 'diagnosticReports' (liste) mais on veut le premier élément
-    if (intervention['diagnosticReports'] != null) {
-      final reports = intervention['diagnosticReports'];
+    if (_intervention['diagnosticReports'] != null) {
+      final reports = _intervention['diagnosticReports'];
       if (reports is List && reports.isNotEmpty) {
-        return reports[0] as Map<String, dynamic>;
+        final first = reports[0];
+        if (first is Map<String, dynamic>) return first;
+        if (first is Map) return Map<String, dynamic>.from(first);
       }
     }
-    // Fallback pour l'ancien format (diagnostic_report singulier)
-    if (intervention['diagnostic_report'] != null) {
-      return intervention['diagnostic_report'] as Map<String, dynamic>;
+    if (_intervention['diagnostic_report'] != null) {
+      final r = _intervention['diagnostic_report'];
+      if (r is Map<String, dynamic>) return r;
+      if (r is Map) return Map<String, dynamic>.from(r);
+    }
+    if (_intervention['report_data'] != null) {
+      final r = _intervention['report_data'];
+      if (r is Map<String, dynamic>) return r;
+      if (r is Map) return Map<String, dynamic>.from(r);
     }
     return null;
+  }
+
+  List<dynamic> get _equipments {
+    final report = _report;
+    if (report == null) return [];
+
+    if (report['equipments'] != null) {
+      final eq = report['equipments'];
+      if (eq is List) return eq;
+      if (eq is String) {
+        try {
+          final decoded = json.decode(eq);
+          if (decoded is List) return decoded;
+        } catch (_) {}
+      }
+    }
+
+    // Fallback legacy (single equipment)
+    if (report['equipment_brand'] != null || report['equipment_type'] != null || report['pression'] != null) {
+      return [
+        {
+          'index': 1,
+          'type': report['equipment_type'] ?? 'Mural',
+          'brand': report['equipment_brand'] ?? '',
+          'location': report['location'] ?? '',
+          'state': report['equipment_state'] ?? '',
+          'tested': report['tested'] ?? true,
+          'before_intensite': report['intensite'] ?? '',
+          'before_tension': report['tension'] ?? '',
+          'before_freon': report['freon'] ?? '',
+          'before_pression': report['pression'] ?? '',
+          'before_puissance': report['puissance'] ?? '',
+        }
+      ];
+    }
+
+    return [];
   }
 
   List<dynamic> get _partsList {
@@ -33,15 +122,12 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
 
     final partsNeeded = _report!['parts_needed'];
     if (partsNeeded is String) {
-      // Handle empty string
       if (partsNeeded.isEmpty || partsNeeded == '[]') {
         return [];
       }
       try {
         final decoded = json.decode(partsNeeded);
-        if (decoded is List) {
-          return decoded;
-        }
+        if (decoded is List) return decoded;
         return [];
       } catch (e) {
         if (kDebugMode) debugPrint('❌ Erreur parsing parts_needed: $e');
@@ -57,16 +143,26 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final report = _report;
     final hasReport = report != null;
+    final equipments = _equipments;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Rapport de Diagnostic'),
+        title: const Text('Rapport de Diagnostic', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF0a543d),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchFreshIntervention,
+            tooltip: 'Rafraîchir',
+          ),
+        ],
       ),
-      body: !hasReport
-          ? _buildNoReport()
-          : SingleChildScrollView(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF0a543d)))
+          : !hasReport
+              ? _buildNoReport()
+              : SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -74,11 +170,11 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
                   children: [
                     // En-tête avec statut
                     _buildStatusBadge(report['status'] ?? 'submitted'),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // Informations intervention
                     _buildInfoCard(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // Date de soumission
                     if (report['submitted_at'] != null)
@@ -86,102 +182,126 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
                         '📅 Rapport soumis le',
                         _formatDate(report['submitted_at']),
                       ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
-                    // Description du problème
+                    // SECTION ÉQUIPEMENTS & DONNÉES TECHNIQUES
+                    if (equipments.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.build, color: Color(0xFF0a543d), size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Équipements (${equipments.length}) & Constantes',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0a543d),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      for (int i = 0; i < equipments.length; i++) ...[
+                        _buildEquipmentCard(Map<String, dynamic>.from(equipments[i]), i + 1),
+                        if (i < equipments.length - 1) const SizedBox(height: 12),
+                      ],
+                      const SizedBox(height: 24),
+                    ],
+
+                    // POINT 6 : DESCRIPTION DE LA PANNE
                     _buildSection(
-                      'Description du Problème',
-                      Icons.error_outline,
+                      '6/ Description / Constat de la Panne',
+                      Icons.report_problem,
                       report['problem_description'] ?? 'Non renseigné',
                     ),
                     const SizedBox(height: 24),
 
-                    // Solution recommandée
-                    _buildSection(
-                      'Solution Recommandée',
-                      Icons.build_circle,
-                      report['recommended_solution'] ?? 'Non renseigné',
+                    // POINT 7 : MATÉRIELS NÉCESSAIRES
+                    if ((report['materials_needed'] != null && report['materials_needed'].toString().isNotEmpty) ||
+                        _partsList.isNotEmpty) ...[
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.build_circle, size: 20, color: Color(0xFF0a543d)),
+                              SizedBox(width: 8),
+                              Text(
+                                '7/ Matériels nécessaires (Dépannage / Installation)',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0a543d),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if (report['materials_needed'] != null && report['materials_needed'].toString().isNotEmpty)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey[300]!),
+                              ),
+                              child: Text(
+                                report['materials_needed'],
+                                style: const TextStyle(fontSize: 14, height: 1.5),
+                              ),
+                            ),
+                          if (_partsList.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            _buildPartsSection(_partsList),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Solution recommandée (si renseignée)
+                    if (report['recommended_solution'] != null &&
+                        report['recommended_solution'].toString().isNotEmpty &&
+                        report['recommended_solution'] != report['problem_description']) ...[
+                      _buildSection(
+                        'Solution Recommandée',
+                        Icons.check_circle_outline,
+                        report['recommended_solution'],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Niveau d'urgence & Durée estimée
+                    Row(
+                      children: [
+                        Expanded(child: _buildUrgencyBadge(report['urgency_level'] ?? 'medium')),
+                        if (report['estimated_duration'] != null &&
+                            report['estimated_duration'].toString().isNotEmpty) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildSection(
+                              'Durée Estimée',
+                              Icons.access_time,
+                              report['estimated_duration'],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 24),
 
-                    // Pièces nécessaires
-                    if (_partsList.isNotEmpty) _buildPartsSection(_partsList),
-                    const SizedBox(height: 24),
-
-                    // Niveau d'urgence
-                    _buildUrgencyBadge(report['urgency_level'] ?? 'medium'),
-                    const SizedBox(height: 24),
-
-                    // Durée estimée
-                    if (report['estimated_duration'] != null &&
-                        report['estimated_duration'].toString().isNotEmpty)
-                      _buildSection(
-                        'Durée Estimée',
-                        Icons.access_time,
-                        report['estimated_duration'],
-                      ),
-                    const SizedBox(height: 24),
-
                     // Notes
-                    if (report['notes'] != null &&
-                        report['notes'].toString().isNotEmpty)
+                    if (report['notes'] != null && report['notes'].toString().isNotEmpty)
                       _buildSection(
                         'Notes / Observations',
                         Icons.comment,
                         report['notes'],
                       ),
-                    
-                    // Technical Data
-                    if ((report['pression'] != null && report['pression'].toString().isNotEmpty) ||
-                        (report['freon'] != null && report['freon'].toString().isNotEmpty) ||
-                        (report['puissance'] != null && report['puissance'].toString().isNotEmpty) ||
-                        (report['intensite'] != null && report['intensite'].toString().isNotEmpty) ||
-                        (report['tension'] != null && report['tension'].toString().isNotEmpty)) ...[
-                      const Text(
-                        'Données techniques',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: Wrap(
-                          spacing: 16,
-                          runSpacing: 12,
-                          children: [
-                            if (report['pression'] != null && report['pression'].toString().isNotEmpty)
-                              _buildMeasureChip(Icons.compress, 'Pression', '${report['pression']} bar'),
-                            if (report['freon'] != null && report['freon'].toString().isNotEmpty)
-                              _buildMeasureChip(Icons.ac_unit, 'Fréon', '${report['freon']} Kg'),
-                            if (report['puissance'] != null && report['puissance'].toString().isNotEmpty)
-                              _buildMeasureChip(Icons.power, 'Puissance', '${report['puissance']} CV'),
-                            if (report['intensite'] != null && report['intensite'].toString().isNotEmpty)
-                              _buildMeasureChip(Icons.electrical_services, 'Intensité', '${report['intensite']} A'),
-                            if (report['tension'] != null && report['tension'].toString().isNotEmpty)
-                              _buildMeasureChip(Icons.bolt, 'Tension', '${report['tension']} V'),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
+                    const SizedBox(height: 24),
 
-                    // After intervention report
-                    if (report['after_intervention_report'] != null &&
-                        report['after_intervention_report'].toString().isNotEmpty)
-                      _buildSection(
-                        'Rapport après interventions',
-                        Icons.assignment_turned_in,
-                        report['after_intervention_report'],
-                      ),
-
+                    // Photos du diagnostic
+                    _buildPhotosGallerySection(report, _intervention),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -190,22 +310,276 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildEquipmentCard(Map<String, dynamic> eq, int index) {
+    final name = eq['name'] ?? '';
+    final type = eq['type'] ?? '';
+    final brand = eq['brand'] ?? '';
+    final location = eq['location'] ?? '';
+    final state = eq['state'] ?? '';
+    final tested = eq['tested'];
+
+    final bIntensite = eq['before_intensite'] ?? eq['intensite'] ?? '';
+    final bTension = eq['before_tension'] ?? eq['tension'] ?? '';
+    final bFreon = eq['before_freon'] ?? eq['freon'] ?? '';
+    final bPression = eq['before_pression'] ?? eq['pression'] ?? '';
+    final bPuissance = eq['before_puissance'] ?? eq['puissance'] ?? '';
+
+    final hasMeasures = bIntensite.isNotEmpty ||
+        bTension.isNotEmpty ||
+        bFreon.isNotEmpty ||
+        bPression.isNotEmpty ||
+        bPuissance.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0a543d).withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF0a543d).withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: const Color(0xFF0a543d),
+                child: Text(
+                  '$index',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  name.isNotEmpty ? name : (brand.isNotEmpty ? '$brand - $type' : 'Équipement $index'),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (type.isNotEmpty) _buildInfoRow('Type :', type),
+          if (brand.isNotEmpty) _buildInfoRow('Marque :', brand),
+          if (location.isNotEmpty) _buildInfoRow('Emplacement :', location),
+          if (state.isNotEmpty) _buildInfoRow('État :', state),
+          if (tested != null) _buildInfoRow('Test équipement :', tested == true ? 'Oui' : 'Non'),
+
+          if (hasMeasures) ...[
+            const Divider(),
+            const Text(
+              '🟢 Données Techniques (Constantes avant intervention)',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: Color(0xFF0a543d),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                if (bPression.isNotEmpty) _buildMeasureChip(Icons.compress, 'Pression', '$bPression bar'),
+                if (bPuissance.isNotEmpty) _buildMeasureChip(Icons.power, 'Puissance', '$bPuissance CV'),
+                if (bIntensite.isNotEmpty) _buildMeasureChip(Icons.electrical_services, 'Intensité', '$bIntensite A'),
+                if (bTension.isNotEmpty) _buildMeasureChip(Icons.bolt, 'Tension', '$bTension V'),
+                if (bFreon.isNotEmpty) _buildMeasureChip(Icons.cloud, 'Fréon', bFreon),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotosGallerySection(dynamic photosData, [dynamic extraImages]) {
+    final List<String> imageUrls = [];
+
+    void extractUrls(dynamic data) {
+      if (data == null) return;
+      if (data is String) {
+        final str = data.trim();
+        if (str.startsWith('[')) {
+          try {
+            final List decoded = json.decode(str);
+            for (var item in decoded) {
+              extractUrls(item);
+            }
+            return;
+          } catch (_) {}
+        }
+        if (str.isNotEmpty) {
+          if (str.startsWith('http://') || str.startsWith('https://')) {
+            imageUrls.add(str);
+          } else {
+            final clean = str.startsWith('/') ? str : '/$str';
+            imageUrls.add('${AppConfig.baseUrl}$clean');
+          }
+        }
+      } else if (data is Map) {
+        extractUrls(data['image_url'] ?? data['url'] ?? data['path']);
+      } else if (data is List) {
+        for (var item in data) {
+          extractUrls(item);
+        }
+      }
+    }
+
+    extractUrls(photosData);
+    extractUrls(extraImages);
+
+    final uniqueUrls = imageUrls.toSet().toList();
+
+    if (uniqueUrls.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.photo_library_rounded,
+              color: Color(0xFF0a543d),
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Photos (${uniqueUrls.length})',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0a543d),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 120,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: uniqueUrls.length,
+            itemBuilder: (context, index) {
+              final url = uniqueUrls[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: GestureDetector(
+                  onTap: () => _openImageDialog(context, url),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      color: Colors.grey[200],
+                      child: Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.broken_image_rounded, color: Colors.grey, size: 32),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Non disponible',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openImageDialog(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      padding: const EdgeInsets.all(24),
+                      color: Colors.white,
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          SizedBox(height: 12),
+                          Text('Erreur de chargement de l\'image'),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: CircleAvatar(
+                backgroundColor: Colors.black.withValues(alpha: 0.6),
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMeasureChip(IconData icon, String label, String value) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: Colors.orange.shade700),
+        Icon(icon, size: 15, color: const Color(0xFF0a543d)),
         const SizedBox(width: 4),
         Text(
           '$label: ',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
         ),
         Text(
           value,
-          style: TextStyle(
-            fontSize: 14,
+          style: const TextStyle(
+            fontSize: 13,
             fontWeight: FontWeight.bold,
-            color: Colors.orange.shade900,
+            color: Color(0xFF0a543d),
           ),
         ),
       ],
@@ -281,7 +655,7 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(8),
@@ -308,22 +682,23 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
   Widget _buildInfoCard() {
     return Card(
       elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              intervention['title'] ?? 'Sans titre',
+              _intervention['title'] ?? 'Sans titre',
               style: const TextStyle(
-                fontSize: 18,
+                fontSize: 17,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            if (intervention['description'] != null)
+            if (_intervention['description'] != null)
               Text(
-                intervention['description'],
+                _intervention['description'],
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[700],
@@ -336,24 +711,27 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
   }
 
   Widget _buildInfoRow(String label, String value) {
-    return Row(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6.0),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 14),
-            textAlign: TextAlign.right,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.right,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -375,7 +753,7 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
@@ -397,21 +775,6 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
-          children: [
-            Icon(Icons.build, size: 20, color: Color(0xFF0a543d)),
-            SizedBox(width: 8),
-            Text(
-              'Pièces Nécessaires',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0a543d),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
         ...parts.map((part) => Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
@@ -503,68 +866,6 @@ class ViewDiagnosticReportScreen extends StatelessWidget {
               color: color,
               fontWeight: FontWeight.bold,
               fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCostRow(String label, double cost) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          Text(
-            '${NumberFormat('#,##0').format(cost)} FCFA',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTotalCostRow(double total) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0a543d).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF0a543d)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text(
-            'Coût Total Estimé',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF0a543d),
-            ),
-          ),
-          Text(
-            '${NumberFormat('#,##0').format(total)} FCFA',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF0a543d),
             ),
           ),
         ],

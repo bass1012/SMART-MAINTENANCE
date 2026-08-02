@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
+import 'package:path/path.dart' as path_util;
+import 'package:path_provider/path_provider.dart';
 import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 import 'package:mct_maintenance_mobile/services/connectivity_service.dart';
 import 'package:mct_maintenance_mobile/services/local_cache_service.dart';
@@ -38,9 +41,12 @@ class InterventionRepositoryImpl implements InterventionRepository {
       for (final image in images) {
         String mimeType = 'image/jpeg'; // default
         final lowerPath = image.path.toLowerCase();
-        if (lowerPath.endsWith('.png')) mimeType = 'image/png';
-        else if (lowerPath.endsWith('.mp4')) mimeType = 'video/mp4';
-        else if (lowerPath.endsWith('.mov')) mimeType = 'video/quicktime';
+        if (lowerPath.endsWith('.png'))
+          mimeType = 'image/png';
+        else if (lowerPath.endsWith('.mp4'))
+          mimeType = 'video/mp4';
+        else if (lowerPath.endsWith('.mov'))
+          mimeType = 'video/quicktime';
         else if (lowerPath.endsWith('.avi')) mimeType = 'video/x-msvideo';
 
         files.add(await http.MultipartFile.fromPath(
@@ -102,6 +108,9 @@ class InterventionRepositoryImpl implements InterventionRepository {
         final List<dynamic> interventions = rawData is List
             ? rawData
             : (rawData is Map ? (rawData['interventions'] as List? ?? []) : []);
+        
+        // 🧹 Nettoyer les anciennes interventions en cache local pour éviter la persistance d'anciens comptes
+        await _cacheService.clearCachedInterventions();
         for (var intervention in interventions) {
           await _cacheService.cacheIntervention(intervention);
         }
@@ -117,7 +126,12 @@ class InterventionRepositoryImpl implements InterventionRepository {
       if (status != null) {
         results = cached.where((i) => i['status'] == status).toList();
       }
-      return {'success': true, 'data': results, 'from_cache': true, 'offline_fallback': true};
+      return {
+        'success': true,
+        'data': results,
+        'from_cache': true,
+        'offline_fallback': true
+      };
     }
   }
 
@@ -130,7 +144,8 @@ class InterventionRepositoryImpl implements InterventionRepository {
     // Mode Offline
     if (!_connectivityService.isConnected) {
       if (kDebugMode) {
-        debugPrint('📦 Mode offline - Lecture interventions technicien depuis cache');
+        debugPrint(
+            '📦 Mode offline - Lecture interventions technicien depuis cache');
       }
       final cached = await _cacheService.getCachedInterventions();
 
@@ -163,14 +178,20 @@ class InterventionRepositoryImpl implements InterventionRepository {
       return responseData;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('⚠️ Erreur réseau sur getTechnicianInterventions, fallback cache: $e');
+        debugPrint(
+            '⚠️ Erreur réseau sur getTechnicianInterventions, fallback cache: $e');
       }
       final cached = await _cacheService.getCachedInterventions();
       var results = cached;
       if (status != null) {
         results = cached.where((i) => i['status'] == status).toList();
       }
-      return {'success': true, 'data': results, 'from_cache': true, 'offline_fallback': true};
+      return {
+        'success': true,
+        'data': results,
+        'from_cache': true,
+        'offline_fallback': true
+      };
     }
   }
 
@@ -224,11 +245,17 @@ class InterventionRepositoryImpl implements InterventionRepository {
       return responseData;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('⚠️ Erreur réseau sur getInterventionById, fallback cache: $e');
+        debugPrint(
+            '⚠️ Erreur réseau sur getInterventionById, fallback cache: $e');
       }
       final cached = await _cacheService.getCachedIntervention(id);
       if (cached != null) {
-        return {'success': true, 'data': cached, 'from_cache': true, 'offline_fallback': true};
+        return {
+          'success': true,
+          'data': cached,
+          'from_cache': true,
+          'offline_fallback': true
+        };
       }
       rethrow;
     }
@@ -305,7 +332,8 @@ class InterventionRepositoryImpl implements InterventionRepository {
     final responseData = jsonDecode(response.body);
     if (responseData['success'] == true) {
       try {
-        await _cacheService.updateCachedIntervention(id, {'status': 'in_progress'});
+        await _cacheService
+            .updateCachedIntervention(id, {'status': 'in_progress'});
       } catch (e) {
         if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
       }
@@ -323,7 +351,8 @@ class InterventionRepositoryImpl implements InterventionRepository {
     final responseData = jsonDecode(response.body);
     if (responseData['success'] == true) {
       try {
-        await _cacheService.updateCachedIntervention(id, {'status': 'on_the_way'});
+        await _cacheService
+            .updateCachedIntervention(id, {'status': 'on_the_way'});
       } catch (e) {
         if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
       }
@@ -349,20 +378,84 @@ class InterventionRepositoryImpl implements InterventionRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> startIntervention(int id) async {
+  Future<Map<String, dynamic>> startIntervention(int id,
+      {Map<String, dynamic>? reportData}) async {
     if (!_connectivityService.isConnected) {
-      return _queueAction(id, 'start', 'in_progress');
+      return _queueOfflineStart(id, reportData);
     }
-    final response = await _apiService.post('/api/interventions/$id/start');
-    final responseData = jsonDecode(response.body);
-    if (responseData['success'] == true) {
-      try {
-        await _cacheService.updateCachedIntervention(id, {'status': 'in_progress'});
-      } catch (e) {
-        if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
+
+    try {
+      late final http.Response response;
+      if (reportData == null) {
+        response = await _apiService.post('/api/interventions/$id/start');
+      } else {
+        final files = <http.MultipartFile>[];
+        final photoPaths = (reportData['photos_before'] as List<dynamic>? ?? [])
+            .map((item) => item.toString())
+            .where((item) =>
+                !item.startsWith('http://') &&
+                !item.startsWith('https://') &&
+                !item.startsWith('/uploads/'));
+
+        for (final photoPath in photoPaths) {
+          final file = File(photoPath);
+          if (!await file.exists()) continue;
+          files.add(await http.MultipartFile.fromPath(
+            'images',
+            photoPath,
+            contentType:
+                http_parser.MediaType.parse(_mimeTypeForPath(photoPath)),
+          ));
+        }
+
+        response = await _apiService.multipart(
+          'POST',
+          '/api/interventions/$id/start',
+          fields: {'report_data': jsonEncode(reportData)},
+          files: files,
+        );
       }
+
+      final responseData = jsonDecode(response.body);
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          responseData['success'] != true) {
+        throw Exception(
+            responseData['message'] ?? 'Impossible de démarrer l’intervention');
+      }
+
+      if (responseData['success'] == true) {
+        try {
+          final updateMap = <String, dynamic>{'status': 'in_progress'};
+          final serverData = responseData['data'];
+          if (serverData is Map && serverData['report_data'] != null) {
+            updateMap['report_data'] = serverData['report_data'];
+          } else if (reportData != null) {
+            updateMap['report_data'] = reportData;
+          }
+          await _cacheService.updateCachedIntervention(id, updateMap);
+          if (reportData != null) {
+            final cachedPhotos = await _cacheService.getUnuploadedPhotos(id);
+            final beforePaths =
+                (reportData['photos_before'] as List<dynamic>? ?? [])
+                    .map((item) => item.toString())
+                    .toSet();
+            for (final cachedPhoto in cachedPhotos) {
+              if (beforePaths.contains(cachedPhoto['file_path'])) {
+                await _cacheService.markPhotoUploaded(cachedPhoto['id'] as int);
+              }
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
+        }
+      }
+      return responseData;
+    } on SocketException {
+      return _queueOfflineStart(id, reportData);
+    } on TimeoutException {
+      return _queueOfflineStart(id, reportData);
     }
-    return responseData;
   }
 
   @override
@@ -374,7 +467,8 @@ class InterventionRepositoryImpl implements InterventionRepository {
     final responseData = jsonDecode(response.body);
     if (responseData['success'] == true) {
       try {
-        await _cacheService.updateCachedIntervention(id, {'status': 'completed'});
+        await _cacheService
+            .updateCachedIntervention(id, {'status': 'completed'});
       } catch (e) {
         if (kDebugMode) debugPrint('Erreur maj cache offline: $e');
       }
@@ -393,10 +487,12 @@ class InterventionRepositoryImpl implements InterventionRepository {
         'status': 'completed',
       });
 
-      final List<String> imagePaths = (reportData['photos'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [];
+      final List<String> imagePaths =
+          (reportData['photos_after'] as List<dynamic>? ??
+                      reportData['photos'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [];
       for (final path in imagePaths) {
         await _cacheService.cachePhoto(id, path, path.split('/').last);
       }
@@ -425,24 +521,20 @@ class InterventionRepositoryImpl implements InterventionRepository {
     });
 
     final List<http.MultipartFile> files = [];
-    final List<String> imagePaths = (reportData['photos'] as List<dynamic>?)
-            ?.map((e) => e.toString())
-            .toList() ??
-        [];
+    final List<String> imagePaths =
+        (reportData['photos_after'] as List<dynamic>? ??
+                    reportData['photos'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [];
 
     for (final path in imagePaths) {
       final file = File(path);
       if (await file.exists()) {
-        String mimeType = 'image/jpeg'; // default
-        final lowerPath = path.toLowerCase();
-        if (lowerPath.endsWith('.png')) mimeType = 'image/png';
-        else if (lowerPath.endsWith('.mp4')) mimeType = 'video/mp4';
-        else if (lowerPath.endsWith('.mov')) mimeType = 'video/quicktime';
-        else if (lowerPath.endsWith('.avi')) mimeType = 'video/x-msvideo';
         files.add(await http.MultipartFile.fromPath(
           'images',
           path,
-          contentType: http_parser.MediaType.parse(mimeType),
+          contentType: http_parser.MediaType.parse(_mimeTypeForPath(path)),
         ));
       }
     }
@@ -524,12 +616,13 @@ class InterventionRepositoryImpl implements InterventionRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> reportClientUnreachable(int interventionId, {String? notes}) async {
+  Future<Map<String, dynamic>> reportClientUnreachable(int interventionId,
+      {String? notes}) async {
     final Map<String, dynamic> data = {};
     if (notes != null && notes.isNotEmpty) {
       data['notes'] = notes;
     }
-    
+
     try {
       final response = await _apiService.post(
         '/api/technician/interventions/$interventionId/report-unreachable',
@@ -542,7 +635,8 @@ class InterventionRepositoryImpl implements InterventionRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> rescheduleIntervention(int interventionId, DateTime newDate) async {
+  Future<Map<String, dynamic>> rescheduleIntervention(
+      int interventionId, DateTime newDate) async {
     try {
       final response = await _apiService.post(
         '/api/customer/interventions/$interventionId/reschedule',
@@ -557,14 +651,87 @@ class InterventionRepositoryImpl implements InterventionRepository {
   }
 
   Future<Map<String, dynamic>> _queueAction(
-      int id, String action, String status) async {
-    await _cacheService.updateCachedIntervention(id, {'status': status});
-    await _cacheService.addToSyncQueue(
-        'intervention_status', id, {'status': status, 'action': action});
+      int id, String action, String status,
+      {Map<String, dynamic>? additionalData}) async {
+    final cacheUpdates = <String, dynamic>{
+      'status': status,
+      ...?additionalData,
+    };
+    await _cacheService.updateCachedIntervention(id, cacheUpdates);
+    await _cacheService.addToSyncQueue('intervention_status', id, {
+      'status': status,
+      'action': action,
+      ...?additionalData,
+    });
     return {
       'success': true,
       'message': 'Action mise en attente (hors ligne)',
       'queued': true,
     };
+  }
+
+  Future<Map<String, dynamic>> _queueOfflineStart(
+      int id, Map<String, dynamic>? reportData) async {
+    final durableReportData =
+        reportData == null ? null : await _persistReportPhotos(id, reportData);
+    return _queueAction(
+      id,
+      'start',
+      'in_progress',
+      additionalData:
+          durableReportData == null ? null : {'report_data': durableReportData},
+    );
+  }
+
+  Future<Map<String, dynamic>> _persistReportPhotos(
+      int interventionId, Map<String, dynamic> reportData) async {
+    final durableData = Map<String, dynamic>.from(reportData);
+    final sourcePaths = (reportData['photos_before'] as List<dynamic>? ?? [])
+        .map((item) => item.toString())
+        .toList();
+    if (sourcePaths.isEmpty) return durableData;
+
+    final documentsDirectory = await getApplicationDocumentsDirectory();
+    final reportDirectory = Directory(path_util.join(
+        documentsDirectory.path, 'offline_reports', '$interventionId'));
+    await reportDirectory.create(recursive: true);
+
+    final durablePaths = <String>[];
+    for (int index = 0; index < sourcePaths.length; index++) {
+      final sourcePath = sourcePaths[index];
+      if (sourcePath.startsWith('http://') ||
+          sourcePath.startsWith('https://') ||
+          sourcePath.startsWith('/uploads/')) {
+        durablePaths.add(sourcePath);
+        continue;
+      }
+
+      final source = File(sourcePath);
+      if (!await source.exists()) {
+        throw Exception('Photo avant intervention introuvable');
+      }
+      final extension = path_util.extension(sourcePath);
+      final destinationPath = path_util.join(reportDirectory.path,
+          'before_${DateTime.now().microsecondsSinceEpoch}_$index$extension');
+      await source.copy(destinationPath);
+      durablePaths.add(destinationPath);
+      await _cacheService.cachePhoto(
+          interventionId, destinationPath, path_util.basename(destinationPath));
+    }
+
+    durableData['photos_before'] = durablePaths;
+    durableData['photos'] = durablePaths;
+    return durableData;
+  }
+
+  String _mimeTypeForPath(String filePath) {
+    final lowerPath = filePath.toLowerCase();
+    if (lowerPath.endsWith('.png')) return 'image/png';
+    if (lowerPath.endsWith('.webp')) return 'image/webp';
+    if (lowerPath.endsWith('.gif')) return 'image/gif';
+    if (lowerPath.endsWith('.mp4')) return 'video/mp4';
+    if (lowerPath.endsWith('.mov')) return 'video/quicktime';
+    if (lowerPath.endsWith('.avi')) return 'video/x-msvideo';
+    return 'image/jpeg';
   }
 }

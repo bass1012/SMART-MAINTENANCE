@@ -35,6 +35,16 @@ const DiagnosticReport = sequelize.define('DiagnosticReport', {
     allowNull: false,
     comment: 'Solution recommandée par le technicien'
   },
+  equipments: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Liste des équipements soumis avec leurs constantes avant intervention'
+  },
+  materials_needed: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Matériels et pièces nécessaires pour le dépannage/l\'installation'
+  },
   parts_needed: {
     type: DataTypes.JSON,
     allowNull: true,

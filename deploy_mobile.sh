@@ -39,14 +39,14 @@ echo ""
 read -p "Choix [1-6]: " choice
 
 increment_version() {
-    CURRENT=$(grep 'version:' pubspec.yaml | sed 's/version: //')
+    CURRENT=$(grep '^version:' pubspec.yaml | sed 's/version: //')
     BUILD=$(echo $CURRENT | cut -d'+' -f2)
     NEW_BUILD=$((BUILD + 1))
     VERSION=$(echo $CURRENT | cut -d'+' -f1)
     NEW_VERSION="$VERSION+$NEW_BUILD"
     
     # macOS compatible sed
-    sed -i '' "s/version: .*/version: $NEW_VERSION/" pubspec.yaml
+    sed -i '' "s/^version: .*/version: $NEW_VERSION/" pubspec.yaml
     echo -e "${GREEN}✅ Version mise à jour: $NEW_VERSION${NC}"
 }
 
