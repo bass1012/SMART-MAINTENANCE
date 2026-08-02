@@ -24,6 +24,28 @@ const dashboardController = require('../controllers/customer/dashboardController
 // Statistiques du tableau de bord client
 router.get('/dashboard/stats', dashboardController.getDashboardStats);
 
+const { buildWarrantyDashboard } = require('../services/warrantyDashboardService');
+
+/**
+ * GET /api/customer/warranty/dashboard
+ * Tableau de bord SAV actif : équipements, état des garanties, réclamations & interventions
+ */
+router.get('/warranty/dashboard', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const data = await buildWarrantyDashboard(userId);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error('❌ Erreur dashboard SAV garantie:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération du tableau de bord SAV garantie',
+      error: error.message
+    });
+  }
+});
+
+
 // ==================== DEVIS ET CONTRATS ====================
 
 // IMPORTANT: Les routes spécifiques doivent être AVANT les routes génériques
@@ -75,10 +97,10 @@ router.post('/quotes/:id/accept', async (req, res) => {
       console.log('📅 Intervention planifiée pour:', scheduledDateTime);
     }
 
-    // Déterminer le statut de paiement
-    const paymentStatus = execute_now ? 'pending' : 'deferred';
+    // Déterminer le statut de paiement (toujours 'pending' car le client doit payer immédiatement l'option choisie)
+    const paymentStatus = 'pending';
     
-    // Mettre à jour le statut du devis avec tous les champs
+    // Mettre à jour le devis avec les détails de planification et statut de paiement pending
     await quote.update({ 
       status: 'accepted',
       scheduled_date: scheduledDateTime,
@@ -87,15 +109,7 @@ router.post('/quotes/:id/accept', async (req, res) => {
       payment_status: paymentStatus
     });
     
-    console.log(`✅ Devis ${quoteId} accepté (paiement: ${paymentStatus})`);
-    
-    // 📬 Notifier les admins de l'acceptation
-    try {
-      await notifyQuoteAccepted(quote, customerProfile);
-      console.log('✅ Notification envoyée aux admins : devis accepté');
-    } catch (notifError) {
-      console.error('⚠️  Erreur notification acceptation devis:', notifError.message);
-    }
+    console.log(`✅ Devis ${quoteId} préparé (paiement: ${paymentStatus}) - En attente de paiement avant notification admin`);
 
     // 🔧 Si exécution immédiate, NE PAS notifier le technicien maintenant
     // La notification sera envoyée APRÈS confirmation du paiement (webhook)
@@ -197,19 +211,19 @@ router.post('/quotes/:id/accept', async (req, res) => {
         totalAmount: totalAmount,
         paymentType: paymentType,
         paymentStep: isSplitPayment ? 1 : 0, // 1 = premier paiement (split), 0 = paiement complet
-        status: execute_now ? 'pending' : 'scheduled',
-        paymentStatus: execute_now ? 'pending' : 'deferred',
+        status: 'pending',
+        paymentStatus: 'pending',
         paymentMethod: null,
         lineItems: JSON.stringify(lineItems),
         notes: isSplitPayment
-          ? `Commande créée automatiquement - Premier paiement (50%) de ${totalAmount} FCFA`
-          : `Commande créée automatiquement - Paiement intégral de ${totalAmount} FCFA`,
+          ? `Commande créée automatiquement - Premier paiement (50%) de ${totalAmount} FCFA - En attente de règlement`
+          : `Commande créée automatiquement - Paiement intégral de ${totalAmount} FCFA - En attente de règlement`,
         scheduledDate: scheduledDateTime
       });
 
       // Mettre à jour le type de paiement et statut du devis
       await fullQuote.update({ 
-        payment_status: execute_now ? 'pending' : 'deferred',
+        payment_status: 'pending',
         payment_type: paymentType
       });
 
@@ -342,18 +356,19 @@ router.get('/payments/history', authenticate, async (req, res) => {
     if (!customerProfile) {
       return res.status(404).json({ success: false, message: 'Profil client non trouvé' });
     }
-    const customerId = customerProfile.id;
+    const customerIds = [userId];
+    if (customerProfile) customerIds.push(customerProfile.id);
 
     // 1. Commandes boutique
     const orders = await Order.findAll({
-      where: { customerId: userId },
+      where: { customerId: { [Op.in]: customerIds } },
       order: [['created_at', 'DESC']],
     });
 
     // 2. Devis avec paiement (split ou full)
     const quotes = await Quote.findAll({
       where: {
-        customerId: customerId,
+        customerId: { [Op.in]: customerIds },
         payment_status: { [Op.not]: null },
       },
       order: [['created_at', 'DESC']],
@@ -487,12 +502,13 @@ router.get('/quotes', async (req, res) => {
       });
     }
     
-    const customerId = customerProfile.id;
-    console.log(`✅ Customer ID trouvé: ${customerId}`);
+    const customerIds = [userId];
+    if (customerProfile) customerIds.push(customerProfile.id);
+    console.log(`✅ Customer IDs résolus: ${customerIds.join(', ')}`);
     
     // Récupérer tous les devis du client
     const quotes = await Quote.findAll({
-      where: { customerId: customerId },
+      where: { customerId: { [Op.in]: customerIds } },
       include: [{ model: QuoteItem, as: 'items' }],
       order: [['created_at', 'DESC']]
     });
@@ -564,13 +580,10 @@ router.get('/maintenance-reports', async (req, res) => {
       });
     }
 
-    const customerId = customerProfile.id;
-    console.log(`🔄 Conversion User.id ${userId} → CustomerProfile.id ${customerId} pour rapports`);
-
     // Récupérer les interventions avec rapport soumis
     const interventions = await Intervention.findAll({
       where: {
-        customer_id: customerId,
+        customer_id: customerProfile.id,
         report_submitted_at: { [Op.not]: null } // Seulement avec rapport
       },
       include: [
@@ -595,6 +608,48 @@ router.get('/maintenance-reports', async (req, res) => {
           JSON.parse(intervention.report_data) : intervention.report_data)
         : {};
 
+      // Extraire photos_before et photos_after
+      const photosBefore = Array.isArray(reportData.photos_before) ? reportData.photos_before :
+        (reportData.initial_constat?.photos_before || []);
+      const photosAfter = Array.isArray(reportData.photos_after) ? reportData.photos_after :
+        (reportData.final_cloture?.photos_after || reportData.photos || []);
+      const allPhotos = [...new Set([...photosBefore, ...photosAfter])];
+
+      // Formatage des équipements 2 étapes
+      let rawEquipments = reportData.equipments ||
+        reportData.initial_constat?.equipments || [];
+
+      if (!Array.isArray(rawEquipments)) rawEquipments = [];
+
+      const formattedEquipments = rawEquipments.map((eq, idx) => ({
+        index: eq.index || (idx + 1),
+        brand: eq.brand || '',
+        type: eq.type || '',
+        location: eq.location || '',
+        state: eq.state || eq.initial_state || '',
+        tested: eq.tested !== undefined ? eq.tested : (eq.functional_test !== undefined ? eq.functional_test : true),
+        functional_test: eq.functional_test !== undefined ? eq.functional_test : (eq.tested !== undefined ? eq.tested : true),
+        final_test: eq.final_test !== undefined ? eq.final_test : true,
+        // Mesures AVANT
+        before_pression: eq.before_pression || eq.pression || '',
+        before_freon: eq.before_freon || eq.freon || '',
+        before_puissance: eq.before_puissance || eq.puissance || '',
+        before_intensite: eq.before_intensite || eq.intensite || '',
+        before_tension: eq.before_tension || eq.tension || '',
+        // Mesures APRÈS
+        after_pression: eq.after_pression || eq.pression || '',
+        after_freon: eq.after_freon || eq.freon || '',
+        after_puissance: eq.after_puissance || eq.puissance || '',
+        after_intensite: eq.after_intensite || eq.intensite || '',
+        after_tension: eq.after_tension || eq.tension || '',
+        // Fallbacks legacy
+        pression: eq.pression || eq.before_pression || '',
+        freon: eq.freon || eq.before_freon || '',
+        puissance: eq.puissance || eq.before_puissance || '',
+        intensite: eq.intensite || eq.before_intensite || '',
+        tension: eq.tension || eq.before_tension || '',
+      }));
+
       // Enrichir le technicien
       const technician = intervention.technician;
       const technicianName = technician ?
@@ -607,25 +662,27 @@ router.get('/maintenance-reports', async (req, res) => {
         id: intervention.id,
         reference: `MAINT-${intervention.id}`,
         title: intervention.title,
-        description: reportData.work_description || intervention.description || '',
+        description: reportData.work_description || reportData.final_cloture?.work_done || intervention.description || '',
         status: intervention.status,
         technicianName: technicianName,
-        technicianNotes: reportData.observations || '',
+        technicianNotes: reportData.observations || reportData.work_description || reportData.final_cloture?.work_done || '',
         scheduledDate: intervention.scheduled_date,
         completedDate: intervention.completed_at || intervention.report_submitted_at,
         duration: reportData.duration || 0,
-        materialsUsed: reportData.materials_used || [],
-        photosCount: reportData.photos_count || 0,
-        imageUrls: [], // TODO: Ajouter les URLs des photos si disponibles
+        materialsUsed: reportData.materials_used || reportData.spare_parts || [],
+        photosCount: allPhotos.length,
+        imageUrls: allPhotos,
+        photos_before: photosBefore,
+        photos_after: photosAfter,
         createdAt: intervention.created_at,
-        // Section Équipements (nouveau format - tableau)
-        equipments: reportData.equipments || [],
-        // Mesures techniques (format legacy)
-        pression: reportData.pression || '',
-        freon: reportData.freon || '',
-        puissance: reportData.puissance || reportData.temperature || '',
-        intensite: reportData.intensite || '',
-        tension: reportData.tension || '',
+        // Section Équipements 2-étapes
+        equipments: formattedEquipments,
+        // Mesures techniques (format legacy - 1er équipement)
+        pression: formattedEquipments.length > 0 ? formattedEquipments[0].before_pression : (reportData.pression || ''),
+        freon: formattedEquipments.length > 0 ? formattedEquipments[0].before_freon : (reportData.freon || ''),
+        puissance: formattedEquipments.length > 0 ? formattedEquipments[0].before_puissance : (reportData.puissance || ''),
+        intensite: formattedEquipments.length > 0 ? formattedEquipments[0].before_intensite : (reportData.intensite || ''),
+        tension: formattedEquipments.length > 0 ? formattedEquipments[0].before_tension : (reportData.tension || ''),
       };
     });
 
@@ -988,6 +1045,9 @@ router.post('/subscriptions', authenticate, async (req, res) => {
       console.log(`   💰 Réduction: ${discount} FCFA, Prix final: ${finalPrice} FCFA`);
     }
     
+    const numericPrice = parseFloat(finalPrice || 0);
+    const isFreePrice = numericPrice === 0;
+
     // Créer la souscription avec les bons champs selon le type
     const subscriptionData = {
       customer_id: customerId,
@@ -995,11 +1055,15 @@ router.post('/subscriptions', authenticate, async (req, res) => {
       status: 'active',
       start_date: startDate,
       end_date: endDate,
-      price: finalPrice,
+      price: numericPrice,
       original_price: originalPrice,
       discount_amount: discount,
       promo_code: promo_code || null,
-      payment_status: 'pending'
+      payment_status: isFreePrice ? 'paid' : 'pending',
+      first_payment_status: isFreePrice ? 'paid' : 'pending',
+      second_payment_status: isFreePrice ? 'paid' : null,
+      first_payment_amount: isFreePrice ? 0 : Math.ceil(numericPrice / 2),
+      second_payment_amount: isFreePrice ? 0 : Math.floor(numericPrice / 2)
     };
     
     if (maintenance_offer_id) {
@@ -1757,19 +1821,24 @@ router.post('/contracts/:id/request-renewal', async (req, res) => {
 // Customer interventions routes
 router.get('/interventions', async (req, res) => {
   try {
-    const { Intervention, User, Equipment } = require('../models');
+    const { Intervention, User, Equipment, CustomerProfile } = require('../models');
     const userId = req.user.id;
     
     console.log(`🔧 Récupération des interventions pour user_id: ${userId}`);
+
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    if (!customerProfile) {
+      return res.status(404).json({ success: false, message: 'Profil client non trouvé' });
+    }
     
     // Récupérer toutes les interventions du client
     const interventions = await Intervention.findAll({
-      where: { customerId: userId },
+      where: { customer_id: customerProfile.id },
       include: [
         { 
           model: User, 
           as: 'technician',
-          attributes: ['id', 'firstName', 'lastName', 'email', 'phone']
+          attributes: ['id', 'first_name', 'last_name', 'email', 'phone', 'profile_image']
         },
         { 
           model: Equipment, 
@@ -1777,7 +1846,7 @@ router.get('/interventions', async (req, res) => {
           attributes: ['id', 'name', 'type', 'brand', 'model']
         }
       ],
-      order: [['scheduledDate', 'DESC']]
+      order: [['scheduled_date', 'DESC']]
     });
     
     console.log(`✅ ${interventions.length} interventions trouvées`);
@@ -1803,10 +1872,11 @@ router.get('/interventions', async (req, res) => {
       updatedAt: intervention.updatedAt,
       technician: intervention.technician ? {
         id: intervention.technician.id,
-        firstName: intervention.technician.firstName,
-        lastName: intervention.technician.lastName,
-        email: intervention.technician.email,
-        phone: intervention.technician.phone
+        first_name: intervention.technician.first_name || '',
+        last_name: intervention.technician.last_name || '',
+        email: intervention.technician.email || '',
+        phone: intervention.technician.phone || '',
+        profile_image: intervention.technician.profile_image || null
       } : null,
       equipment: intervention.equipment ? {
         id: intervention.equipment.id,
@@ -1846,11 +1916,20 @@ router.post('/interventions', async (req, res) => {
       maintenance_offer_id
     } = req.body;
     
-    console.log(`🔧 Création d'une intervention pour user_id: ${userId}`);
+    let customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    if (!customerProfile) {
+      customerProfile = await CustomerProfile.create({
+        user_id: userId,
+        first_name: req.user.first_name || 'Client',
+        last_name: req.user.last_name || '',
+        phone: req.user.phone || ''
+      });
+    }
+    const actualCustomerId = customerProfile.id;
     
     // Créer l'intervention
     const interventionData = {
-      customerId: userId,
+      customer_id: actualCustomerId,
       equipmentId,
       type: type || 'maintenance',
       status: 'pending',
@@ -1886,23 +1965,28 @@ router.post('/interventions', async (req, res) => {
 
 router.get('/interventions/:id', async (req, res) => {
   try {
-    const { Intervention, User, Equipment } = require('../models');
+    const { Intervention, User, Equipment, CustomerProfile } = require('../models');
     const userId = req.user.id;
     const interventionId = req.params.id;
     
     console.log(`🔧 Récupération de l'intervention ${interventionId} pour user_id: ${userId}`);
     
-    // Récupérer l'intervention avec ses relations
+    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
+    if (!customerProfile) {
+      return res.status(404).json({ success: false, message: 'Profil client non trouvé' });
+    }
+
+    // Récupérer uniquement une intervention appartenant au profil client authentifié.
     const intervention = await Intervention.findOne({
       where: { 
         id: interventionId,
-        customerId: userId 
+        customer_id: customerProfile.id
       },
       include: [
         { 
           model: User, 
           as: 'technician',
-          attributes: ['id', 'firstName', 'lastName', 'email', 'phone']
+          attributes: ['id', 'first_name', 'last_name', 'email', 'phone', 'profile_image']
         },
         { 
           model: Equipment, 
@@ -1924,7 +2008,7 @@ router.get('/interventions/:id', async (req, res) => {
     // Formater les données
     const formattedIntervention = {
       id: intervention.id,
-      customerId: intervention.customerId,
+      customerId: intervention.customer_id,
       technicianId: intervention.technicianId,
       equipmentId: intervention.equipmentId,
       type: intervention.type,
@@ -1942,10 +2026,11 @@ router.get('/interventions/:id', async (req, res) => {
       updatedAt: intervention.updatedAt,
       technician: intervention.technician ? {
         id: intervention.technician.id,
-        firstName: intervention.technician.firstName,
-        lastName: intervention.technician.lastName,
-        email: intervention.technician.email,
-        phone: intervention.technician.phone
+        first_name: intervention.technician.first_name || '',
+        last_name: intervention.technician.last_name || '',
+        email: intervention.technician.email || '',
+        phone: intervention.technician.phone || '',
+        profile_image: intervention.technician.profile_image || null
       } : null,
       equipment: intervention.equipment ? {
         id: intervention.equipment.id,
@@ -2173,6 +2258,47 @@ router.get('/quotes/:id', async (req, res) => {
         success: false,
         message: 'Devis non trouvé',
       });
+    }
+
+    // 🔄 Auto-sync: S'assurer que si la commande liée au devis est payée, le devis bascule en 'paid'
+    try {
+      const { Order } = require('../models');
+      const quoteIdInt = parseInt(quoteId);
+      const paidOrder = await Order.findOne({
+        where: {
+          [require('sequelize').Op.or]: [
+            { quoteId: quoteIdInt },
+            { quoteId: quoteId }
+          ],
+          paymentStatus: 'paid'
+        },
+        order: [['createdAt', 'DESC']]
+      });
+
+      if (paidOrder) {
+        const isFull = (paidOrder.paymentType === 'full') || (paidOrder.paymentStep === 0);
+        if (isFull && quote.payment_status !== 'paid') {
+          await quote.update({
+            payment_status: 'paid',
+            payment_type: 'full'
+          });
+          console.log(`🔄 Auto-sync GET /quotes/${quoteId}: devis mis à jour -> status: paid, type: full`);
+        } else if (!isFull && paidOrder.paymentStep === 1 && quote.first_payment_status !== 'paid') {
+          await quote.update({
+            first_payment_status: 'paid',
+            payment_status: 'partial'
+          });
+          console.log(`🔄 Auto-sync GET /quotes/${quoteId}: devis mis à jour -> first_payment: paid`);
+        } else if (!isFull && paidOrder.paymentStep === 2 && quote.second_payment_status !== 'paid') {
+          await quote.update({
+            second_payment_status: 'paid',
+            payment_status: 'paid'
+          });
+          console.log(`🔄 Auto-sync GET /quotes/${quoteId}: devis mis à jour -> second_payment: paid`);
+        }
+      }
+    } catch (syncErr) {
+      console.error('⚠️ Auto-sync devis/order error:', syncErr.message);
     }
     
     // Formater les données
@@ -2754,58 +2880,84 @@ router.get('/export-data', authenticate, async (req, res) => {
   }
 });
 
+const {
+  getAvailableSlots,
+  rescheduleInterventionWithCapacity,
+  getTechnicianTrackingAccess
+} = require('../services/capacityAndTrackingService');
+
 /**
- * @swagger
- * /api/customer/interventions/{id}/reschedule:
- *   post:
- *     summary: Reprogrammer une intervention
- *     tags: [Customer]
+ * GET /api/customer/interventions/available-slots?date=YYYY-MM-DD
+ * Consulter les créneaux capacitaires disponibles pour une date
+ */
+router.get('/interventions/available-slots', async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) {
+      return res.status(400).json({ success: false, message: 'Le paramètre query "date" (YYYY-MM-DD) est requis' });
+    }
+    const slots = await getAvailableSlots(date);
+    res.json({ success: true, data: slots });
+  } catch (error) {
+    console.error('Erreur récupération créneaux capacitaires:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/customer/interventions/:id/reschedule
+ * Replanification self-service avec contrôle de capacité du créneau
  */
 router.post('/interventions/:id/reschedule', async (req, res) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
-    const { scheduled_date } = req.body;
+    const { scheduled_date, time_slot } = req.body;
 
     if (!scheduled_date) {
-      return res.status(400).json({ success: false, message: 'La date est requise' });
+      return res.status(400).json({ success: false, message: 'La date est requise (scheduled_date)' });
     }
 
-    const { CustomerProfile } = require('../models');
-    const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
-    
-    if (!customerProfile) {
-      return res.status(404).json({ success: false, message: 'Profil client non trouvé' });
-    }
-
-    const intervention = await Intervention.findOne({
-      where: { id, customer_id: customerProfile.id }
-    });
-
-    if (!intervention) {
-      return res.status(404).json({ success: false, message: 'Intervention non trouvée' });
-    }
-
-    await intervention.update({
-      scheduled_date: new Date(scheduled_date),
-      status: intervention.technician_id ? 'assigned' : 'scheduled'
+    const slotId = time_slot || '08:00-10:00';
+    const result = await rescheduleInterventionWithCapacity({
+      interventionId: id,
+      customerUserId: userId,
+      newDateString: scheduled_date,
+      newSlotId: slotId
     });
 
     // Notifier le back-office
     const notificationService = require('../services/notificationService');
     await notificationService.notifyAdmins({
       title: '📅 Intervention reprogrammée',
-      message: `Le client a reprogrammé l'intervention #${intervention.id} au ${new Date(scheduled_date).toLocaleString('fr-FR')}`,
+      message: `Le client a reprogrammé l'intervention #${id} au ${scheduled_date} (${slotId})`,
       type: 'alert',
-      related_id: intervention.id
+      related_id: id
     });
 
-    res.json({ success: true, message: 'Intervention reprogrammée avec succès' });
+    res.json({ success: true, message: 'Intervention reprogrammée avec succès', data: result });
   } catch (error) {
     console.error('Erreur reprogrammation intervention:', error);
-    res.status(500).json({ success: false, message: 'Erreur serveur' });
+    res.status(400).json({ success: false, message: error.message });
   }
 });
+
+/**
+ * GET /api/customer/interventions/:id/technician-tracking
+ * Géolocalisation & ETA du technicien accessible uniquement 1h avant et pendant la fenêtre de rdv
+ */
+router.get('/interventions/:id/technician-tracking', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const trackingInfo = await getTechnicianTrackingAccess({ interventionId: id, customerUserId: userId });
+    res.json({ success: true, data: trackingInfo });
+  } catch (error) {
+    console.error('Erreur suivi technicien:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 
 /**
  * @swagger

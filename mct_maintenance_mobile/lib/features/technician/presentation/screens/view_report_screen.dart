@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:share_plus/share_plus.dart';
+import 'package:mct_maintenance_mobile/config/environment.dart';
 
 class ViewReportScreen extends StatelessWidget {
   final Map<String, dynamic> intervention;
@@ -102,6 +103,12 @@ class ViewReportScreen extends StatelessWidget {
                     ],
                     const SizedBox(height: 24),
 
+                    // Travaux effectués
+                    if (report['tasks_done'] != null) ...[
+                      _buildTasksDoneSection(report['tasks_done']),
+                      const SizedBox(height: 24),
+                    ],
+
                     // Matériaux utilisés
                     if (report['materials_used'] != null &&
                         (report['materials_used'] as List).isNotEmpty)
@@ -111,9 +118,7 @@ class ViewReportScreen extends StatelessWidget {
                     const SizedBox(height: 24),
 
                     // Photos
-                    if (report['photos_count'] != null &&
-                        report['photos_count'] > 0)
-                      _buildPhotosSection(report['photos_count']),
+                    _buildPhotosGallerySection(report, intervention),
                     const SizedBox(height: 24),
 
                     // Observations
@@ -331,6 +336,82 @@ class ViewReportScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildTasksDoneSection(dynamic tasksData) {
+    if (tasksData == null || tasksData is! Map || tasksData.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    const taskLabels = {
+      'filtres_air': 'Nettoyage des filtres à air',
+      'batterie_evaporateur': 'Nettoyage de la batterie évaporateur',
+      'bacs_condensat': 'Nettoyage des bacs à condensat',
+      'turbine': 'Nettoyage de la turbine',
+      'volets_air': 'Nettoyage des volets d\'air',
+      'carrosserie_evaporateur': 'Nettoyage de la carrosserie évaporateur',
+      'tuyauterie_evacuation':
+          'Soufflement à forte pression de la tuyauterie d\'évacuation des condensats',
+    };
+
+    final hasCheckedTask = taskLabels.keys.any((key) => tasksData[key] == true);
+    if (!hasCheckedTask) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.checklist, color: Color(0xFF0a543d), size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Travaux Effectués',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0a543d),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0a543d).withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFF0a543d).withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var entry in taskLabels.entries)
+                if (tasksData[entry.key] == true)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle,
+                            color: Color(0xFF0a543d), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            entry.value,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMaterialsSection(List<dynamic> materials) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,21 +493,60 @@ class ViewReportScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPhotosSection(int photosCount) {
+  Widget _buildPhotosGallerySection(dynamic photosData, [dynamic extraImages]) {
+    final List<String> imageUrls = [];
+
+    void extractUrls(dynamic data) {
+      if (data == null) return;
+      if (data is String) {
+        final str = data.trim();
+        if (str.startsWith('[')) {
+          try {
+            final List decoded = json.decode(str);
+            for (var item in decoded) {
+              extractUrls(item);
+            }
+            return;
+          } catch (_) {}
+        }
+        if (str.isNotEmpty) {
+          if (str.startsWith('http://') || str.startsWith('https://')) {
+            imageUrls.add(str);
+          } else {
+            final clean = str.startsWith('/') ? str : '/$str';
+            imageUrls.add('${AppConfig.baseUrl}$clean');
+          }
+        }
+      } else if (data is Map) {
+        extractUrls(data['image_url'] ?? data['url'] ?? data['path']);
+      } else if (data is List) {
+        for (var item in data) {
+          extractUrls(item);
+        }
+      }
+    }
+
+    extractUrls(photosData);
+    extractUrls(extraImages);
+
+    final uniqueUrls = imageUrls.toSet().toList();
+
+    if (uniqueUrls.isEmpty) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             const Icon(
-              Icons.photo_library,
+              Icons.photo_library_rounded,
               color: Color(0xFF0a543d),
               size: 20,
             ),
             const SizedBox(width: 8),
-            const Text(
-              'Photos',
-              style: TextStyle(
+            Text(
+              'Photos (${uniqueUrls.length})',
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF0a543d),
@@ -435,38 +555,111 @@ class ViewReportScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.blue[200]!),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.image, color: Colors.blue[700], size: 24),
-              const SizedBox(width: 12),
-              Text(
-                '$photosCount photo${photosCount > 1 ? 's' : ''} jointe${photosCount > 1 ? 's' : ''}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.blue[700],
+        SizedBox(
+          height: 120,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: uniqueUrls.length,
+            itemBuilder: (context, index) {
+              final url = uniqueUrls[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: GestureDetector(
+                  onTap: () => _openImageDialog(context, url),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      color: Colors.grey[200],
+                      child: Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.broken_image_rounded, color: Colors.grey, size: 32),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Non disponible',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Les photos sont stockées sur le serveur',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-            fontStyle: FontStyle.italic,
+              );
+            },
           ),
         ),
       ],
+    );
+  }
+
+  void _openImageDialog(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      padding: const EdgeInsets.all(24),
+                      color: Colors.white,
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          SizedBox(height: 12),
+                          Text('Erreur de chargement de l\'image'),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: CircleAvatar(
+                backgroundColor: Colors.black.withValues(alpha: 0.6),
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -644,34 +837,50 @@ Rapport officiel soumis
   }
 
   Widget _buildEquipmentCard(dynamic equipment, int index) {
-    final state = equipment['state']?.toString() ?? '';
-    final type = equipment['type']?.toString() ?? '';
-    final name = equipment['name']?.toString() ?? '';
-    final brand = equipment['brand']?.toString() ?? '';
-    final pression = equipment['pression']?.toString() ?? '';
-    final puissance = equipment['puissance']?.toString() ?? '';
-    final intensite = equipment['intensite']?.toString() ?? '';
-    final tension = equipment['tension']?.toString() ?? '';
+    final eqMap = equipment is Map ? equipment : {};
+    final state = (eqMap['state'] ?? eqMap['equipment_state'])?.toString() ?? '';
+    final type = (eqMap['type'] ?? eqMap['equipment_type'])?.toString() ?? '';
+    final name = (eqMap['name'] ?? eqMap['equipment_name'])?.toString() ?? '';
+    final brand = (eqMap['brand'] ?? eqMap['equipment_brand'])?.toString() ?? '';
+    final location = eqMap['location']?.toString() ?? '';
+    final tested = eqMap['tested'];
 
-    final freon = equipment['freon']?.toString() ?? '';
+    // Données techniques AVANT
+    final bPression = (eqMap['before_pression'] ?? eqMap['pression'])?.toString() ?? '';
+    final bPuissance = (eqMap['before_puissance'] ?? eqMap['puissance'])?.toString() ?? '';
+    final bIntensite = (eqMap['before_intensite'] ?? eqMap['intensite'])?.toString() ?? '';
+    final bTension = (eqMap['before_tension'] ?? eqMap['tension'])?.toString() ?? '';
+    final bFreon = (eqMap['before_freon'] ?? eqMap['freon'])?.toString() ?? '';
 
-    final hasMeasures = pression.isNotEmpty ||
-        puissance.isNotEmpty ||
-        intensite.isNotEmpty ||
-        tension.isNotEmpty ||
-        freon.isNotEmpty;
+    final hasBeforeMeasures = bPression.isNotEmpty ||
+        bPuissance.isNotEmpty ||
+        bIntensite.isNotEmpty ||
+        bTension.isNotEmpty ||
+        bFreon.isNotEmpty;
+
+    // Données techniques APRÈS
+    final aPression = eqMap['after_pression']?.toString() ?? '';
+    final aPuissance = eqMap['after_puissance']?.toString() ?? '';
+    final aIntensite = eqMap['after_intensite']?.toString() ?? '';
+    final aTension = eqMap['after_tension']?.toString() ?? '';
+    final aFreon = eqMap['after_freon']?.toString() ?? '';
+
+    final hasAfterMeasures = aPression.isNotEmpty ||
+        aPuissance.isNotEmpty ||
+        aIntensite.isNotEmpty ||
+        aTension.isNotEmpty ||
+        aFreon.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.blue.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // En-tête avec numéro
           Row(
             children: [
               Container(
@@ -721,13 +930,23 @@ Rapport officiel soumis
             _buildInfoRow('Marque', brand),
             const SizedBox(height: 8),
           ],
-          if (hasMeasures) ...[
+          if (location.isNotEmpty) ...[
+            _buildInfoRow('Emplacement', location),
+            const SizedBox(height: 8),
+          ],
+          if (tested != null) ...[
+            _buildInfoRow('Test équipement', tested == true ? 'Oui' : 'Non'),
+            const SizedBox(height: 8),
+          ],
+
+          if (hasBeforeMeasures) ...[
             const Divider(),
             const Text(
-              'Mesures Techniques',
+              '🟢 Données Techniques — AVANT Intervention',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 13,
+                color: Color(0xFF0a543d),
               ),
             ),
             const SizedBox(height: 8),
@@ -735,18 +954,49 @@ Rapport officiel soumis
               spacing: 16,
               runSpacing: 12,
               children: [
-                if (pression.isNotEmpty)
+                if (bPression.isNotEmpty)
                   _buildMeasureItem(
-                      Icons.compress, 'Pression', '$pression bar'),
-                if (puissance.isNotEmpty)
-                  _buildMeasureItem(Icons.power, 'Puissance', '$puissance CV'),
-                if (intensite.isNotEmpty)
+                      Icons.compress, 'Pression', '$bPression bar'),
+                if (bPuissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$bPuissance CV'),
+                if (bIntensite.isNotEmpty)
                   _buildMeasureItem(
-                      Icons.electrical_services, 'Intensité', '$intensite A'),
-                if (tension.isNotEmpty)
-                  _buildMeasureItem(Icons.bolt, 'Tension', '$tension V'),
-                if (freon.isNotEmpty)
-                  _buildMeasureItem(Icons.cloud, 'Fréon', freon),
+                      Icons.electrical_services, 'Intensité', '$bIntensite A'),
+                if (bTension.isNotEmpty)
+                  _buildMeasureItem(Icons.bolt, 'Tension', '$bTension V'),
+                if (bFreon.isNotEmpty)
+                  _buildMeasureItem(Icons.cloud, 'Fréon', bFreon),
+              ],
+            ),
+          ],
+
+          if (hasAfterMeasures) ...[
+            const Divider(),
+            Text(
+              '🟠 Données Techniques — APRÈS Intervention',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: Colors.orange.shade900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                if (aPression.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.compress, 'Pression', '$aPression bar'),
+                if (aPuissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$aPuissance CV'),
+                if (aIntensite.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.electrical_services, 'Intensité', '$aIntensite A'),
+                if (aTension.isNotEmpty)
+                  _buildMeasureItem(Icons.bolt, 'Tension', '$aTension V'),
+                if (aFreon.isNotEmpty)
+                  _buildMeasureItem(Icons.cloud, 'Fréon', aFreon),
               ],
             ),
           ],

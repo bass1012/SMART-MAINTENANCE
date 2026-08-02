@@ -65,20 +65,24 @@ class _TechnicianReviewsScreenState extends State<TechnicianReviewsScreen> {
 
           // Liste des avis
           _reviews = (data['reviews'] as List? ?? []).map((item) {
-            final customerName =
-                item['customer_name'] ?? item['customer']?['name'] ?? 'Client';
+            final rawDate = (item['date'] ?? item['created_at'])?.toString() ?? '';
+            String formattedDate = '';
+            if (rawDate.isNotEmpty) {
+              final parsed = DateTime.tryParse(rawDate);
+              if (parsed != null) {
+                formattedDate = '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+              } else {
+                formattedDate = rawDate.split('T')[0];
+              }
+            }
+
             return {
               'id': item['id'],
-              'customer': customerName,
-              'avatar': _getInitials(customerName),
               'rating': (item['rating'] ?? 0).toDouble(),
-              'date': item['date'] ??
-                  item['created_at']?.toString().split(' ')[0] ??
-                  DateTime.now().toString().split(' ')[0],
+              'date': formattedDate,
               'intervention': item['intervention_title'] ??
                   item['intervention']?['title'] ??
                   'Intervention',
-              'comment': item['comment'] ?? item['review'] ?? '',
             };
           }).toList();
           _isLoading = false;
@@ -90,16 +94,6 @@ class _TechnicianReviewsScreenState extends State<TechnicianReviewsScreen> {
         SnackBarHelper.showError(context, 'Erreur: $e');
       }
     }
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    } else if (parts.isNotEmpty && parts[0].isNotEmpty) {
-      return parts[0].substring(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
-    }
-    return 'CL';
   }
 
   @override
@@ -131,6 +125,35 @@ class _TechnicianReviewsScreenState extends State<TechnicianReviewsScreen> {
                       _buildRatingsSummary(),
                       const SizedBox(height: 24),
                       _buildRatingsBreakdown(),
+                      const SizedBox(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 12),
+                        child: Text(
+                          'Évaluations reçues (${_reviews.length})',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      if (_reviews.isEmpty)
+                        Card(
+                          elevation: 1,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(24.0),
+                            child: Center(
+                              child: Text(
+                                'Aucune évaluation reçue pour le moment.',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        ..._reviews.map((review) => _buildReviewCard(review)),
                     ],
                   ),
                 ),
@@ -281,6 +304,8 @@ class _TechnicianReviewsScreenState extends State<TechnicianReviewsScreen> {
   }
 
   Widget _buildReviewCard(Map<String, dynamic> review) {
+    final String dateStr = review['date'] ?? '';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
@@ -288,99 +313,35 @@ class _TechnicianReviewsScreenState extends State<TechnicianReviewsScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+        child: Row(
           children: [
-            Row(
-              children: [
-                // Avatar
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor:
-                      Theme.of(context).primaryColor.withValues(alpha: 0.2),
-                  child: Text(
-                    review['avatar'],
-                    style: TextStyle(
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    review['intervention'],
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
+                      fontSize: 14,
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        review['customer'],
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        review['intervention'],
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _buildStarRating(review['rating'] as double),
+                  if (dateStr.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
-                      review['date'],
+                      dateStr,
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[500],
                       ),
                     ),
                   ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              review['comment'],
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[800],
-                height: 1.4,
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: () async {
-                    final reply = await _showReplyDialog(review['customer']);
-                    if (reply != null && reply.isNotEmpty) {
-                      try {
-                        await _interventionRepository.replyToReview(review['id'], reply);
-                        SnackBarHelper.showSuccess(context, 'Réponse envoyée',
-                            emoji: '✓');
-                        _loadReviews();
-                      } catch (e) {
-                        SnackBarHelper.showError(context, 'Erreur: $e');
-                      }
-                    }
-                  },
-                  icon: const Icon(Icons.reply, size: 18),
-                  label: const Text('Répondre'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Theme.of(context).primaryColor,
-                  ),
-                ),
-              ],
-            ),
+            const SizedBox(width: 12),
+            _buildStarRating(review['rating'] as double),
           ],
         ),
       ),
@@ -415,39 +376,6 @@ class _TechnicianReviewsScreenState extends State<TechnicianReviewsScreen> {
           );
         }
       }),
-    );
-  }
-
-  Future<String?> _showReplyDialog(String customerName) async {
-    final TextEditingController controller = TextEditingController();
-
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Répondre à $customerName'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Votre réponse...',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 4,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-            ),
-            child: const Text('Envoyer'),
-          ),
-        ],
-      ),
     );
   }
 }

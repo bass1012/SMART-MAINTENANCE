@@ -73,16 +73,21 @@ class ContractSchedulingService {
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + duration_months);
 
+    const numericPrice = parseFloat(price || 0);
+    const isFreePrice = numericPrice === 0;
+
     // Créer la souscription en attente de paiement
     const subscription = await Subscription.create({
-      customer_id: userId, // Important: User.id, pas CustomerProfile.id
+      customer_id: userId,
       maintenance_offer_id,
+      installation_service_id,
+      repair_service_id,
       equipment_description,
       equipment_model,
       split_id,
       equipment_count,
       equipment_used: 0,
-      status: 'pending_payment', // En attente de paiement
+      status: isFreePrice ? 'active' : 'pending_payment',
       contract_type: 'scheduled',
       visits_total,
       visits_completed: 0,
@@ -91,8 +96,10 @@ class ContractSchedulingService {
       next_visit_date: startDate,
       start_date: startDate,
       end_date: endDate,
-      price,
-      payment_status: 'pending'
+      price: numericPrice,
+      payment_status: isFreePrice ? 'paid' : 'pending',
+      first_payment_status: isFreePrice ? 'paid' : 'pending',
+      second_payment_status: isFreePrice ? 'paid' : null
     });
 
     console.log(`✅ Souscription #${subscription.id} créée (en attente de paiement)`);
@@ -351,10 +358,14 @@ class ContractSchedulingService {
     }
 
     if (!subscription && intervention.maintenance_offer_id) {
+      const customerUserId = intervention.customer?.user_id;
+      if (!customerUserId) {
+        throw new Error(`Identité utilisateur absente du profil client de l'intervention #${intervention.id}`);
+      }
       console.log(`🔍 Recherche souscription par maintenance_offer_id: ${intervention.maintenance_offer_id}`);
       subscription = await Subscription.findOne({
         where: {
-          customer_id: intervention.customer?.user_id || intervention.customer_id,
+          customer_id: customerUserId,
           maintenance_offer_id: intervention.maintenance_offer_id,
           contract_type: 'scheduled',
           status: 'active'

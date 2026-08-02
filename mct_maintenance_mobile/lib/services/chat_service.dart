@@ -26,7 +26,11 @@ class ChatService {
   final _typingController = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionController = StreamController<bool>.broadcast();
   final _messagesReadController = StreamController<List<int>>.broadcast();
+  final _statusChangedController = StreamController<Map<String, dynamic>>.broadcast();
   Completer<void>? _connectionCompleter; // Pour attendre la connexion
+
+  Stream<Map<String, dynamic>> get onTechnicianStatusChanged =>
+      _statusChangedController.stream;
 
   bool _isConnected = false;
   String? _userId;
@@ -359,6 +363,14 @@ class ChatService {
       if (data['messageIds'] != null && data['messageIds'] is List) {
         final messageIds = List<int>.from(data['messageIds']);
         _messagesReadController.add(messageIds);
+      }
+    });
+
+    _socket!.on('technician_status_changed', (data) {
+      if (kDebugMode)
+        debugPrint('⚡ [ChatService] technician_status_changed reçu: $data');
+      if (data is Map) {
+        _statusChangedController.add(Map<String, dynamic>.from(data));
       }
     });
 

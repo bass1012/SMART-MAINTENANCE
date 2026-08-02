@@ -1,7 +1,12 @@
-import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 
+/// Écran des revenus technicien.
+///
+/// ⚠️  En attente de connexion à l'endpoint API `/api/technician/earnings`.
+/// Les données fictives ont été supprimées. L'écran affiche un état vide
+/// informatif jusqu'à l'implémentation complète du service de revenus.
 class TechnicianEarningsScreen extends StatefulWidget {
   const TechnicianEarningsScreen({super.key});
 
@@ -11,392 +16,100 @@ class TechnicianEarningsScreen extends StatefulWidget {
 }
 
 class _TechnicianEarningsScreenState extends State<TechnicianEarningsScreen> {
-  bool _isLoading = true;
-  String _selectedPeriod = 'month'; // month, week, year
+  final bool _isLoading = false;
 
-  // Données fictives
-  final Map<String, double> _earnings = {
-    'month': 385000,
-    'week': 95000,
-    'year': 1250000,
-  };
-
-  final List<Map<String, dynamic>> _transactions = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadEarnings();
-  }
-
-  Future<void> _loadEarnings() async {
-    setState(() => _isLoading = true);
-
-    // Simuler un chargement
-    await Future.delayed(const Duration(seconds: 1));
-
-    if (mounted) {
-      setState(() {
-        _transactions.addAll([
-          {
-            'date': '2025-10-26',
-            'title': 'Réparation climatisation',
-            'customer': 'Jean Dupont',
-            'amount': 45000,
-            'status': 'paid',
-          },
-          {
-            'date': '2025-10-25',
-            'title': 'Installation pompe',
-            'customer': 'Marie Kouassi',
-            'amount': 65000,
-            'status': 'paid',
-          },
-          {
-            'date': '2025-10-24',
-            'title': 'Maintenance préventive',
-            'customer': 'Société ABC',
-            'amount': 85000,
-            'status': 'pending',
-          },
-          {
-            'date': '2025-10-23',
-            'title': 'Dépannage électrique',
-            'customer': 'Paul Bamba',
-            'amount': 35000,
-            'status': 'paid',
-          },
-          {
-            'date': '2025-10-22',
-            'title': 'Vérification système alarme',
-            'customer': 'Restaurant Le Palmier',
-            'amount': 55000,
-            'status': 'paid',
-          },
-        ]);
-        _isLoading = false;
-      });
-    }
-  }
+  static const _green = Color(0xFF0a543d);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FA),
       appBar: AppBar(
-        title: const Text('Mes Revenus'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: _showFilterDialog,
+        elevation: 0,
+        backgroundColor: _green,
+        title: Text(
+          'Mes Revenus',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 20,
+            color: Colors.white,
           ),
-        ],
+        ),
       ),
       body: _isLoading
           ? const Center(child: LoadingIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadEarnings,
-              child: ListView(
-                padding: const EdgeInsets.all(16.0),
+          : _buildEmptyState(),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FFF4),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _green.withValues(alpha: 0.2),
+                  width: 2,
+                ),
+              ),
+              child: const Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 48,
+                color: _green,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Revenus à venir',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF1A202C),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Le suivi de vos revenus sera disponible\ndès la connexion à l\'API de facturation.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 32),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
                 children: [
-                  _buildEarningsSummary(),
-                  const SizedBox(height: 24),
-                  _buildPeriodSelector(),
-                  const SizedBox(height: 24),
-                  _buildTransactionsList(),
+                  Icon(Icons.info_outline,
+                      color: Colors.orange.shade700, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Endpoint prévu : GET /api/technician/earnings',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.orange.shade800,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
-    );
-  }
-
-  Widget _buildEarningsSummary() {
-    final currentEarnings = _earnings[_selectedPeriod] ?? 0;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).primaryColor,
-              Theme.of(context).primaryColor.withValues(alpha: 0.7),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.attach_money,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.download, color: Colors.white),
-                  onPressed: () {
-                    SnackBarHelper.showInfo(
-                        context, 'Télécharger le rapport - À implémenter');
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Revenus totaux',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${currentEarnings.toStringAsFixed(0)} FCFA',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _getPeriodLabel(),
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPeriodSelector() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildPeriodChip('week', 'Semaine', Icons.calendar_today),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildPeriodChip('month', 'Mois', Icons.calendar_month),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildPeriodChip('year', 'Année', Icons.calendar_view_month),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPeriodChip(String period, String label, IconData icon) {
-    final isSelected = _selectedPeriod == period;
-
-    return InkWell(
-      onTap: () {
-        setState(() => _selectedPeriod = period);
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? Theme.of(context).primaryColor : Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? Colors.white : Colors.grey[600],
-              size: 24,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey[600],
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTransactionsList() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Transactions récentes',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                SnackBarHelper.showInfo(context, 'Voir tout - À implémenter');
-              },
-              child: const Text('Voir tout'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        ..._transactions
-            .map((transaction) => _buildTransactionCard(transaction)),
-      ],
-    );
-  }
-
-  Widget _buildTransactionCard(Map<String, dynamic> transaction) {
-    final isPaid = transaction['status'] == 'paid';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isPaid
-                ? Colors.green.withValues(alpha: 0.1)
-                : Colors.orange.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            isPaid ? Icons.check_circle : Icons.schedule,
-            color: isPaid ? Colors.green : Colors.orange,
-          ),
-        ),
-        title: Text(
-          transaction['title'],
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(transaction['customer']),
-            const SizedBox(height: 2),
-            Text(
-              transaction['date'],
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '${transaction['amount']} FCFA',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: isPaid
-                    ? Colors.green.withValues(alpha: 0.1)
-                    : Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                isPaid ? 'Payé' : 'En attente',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isPaid ? Colors.green : Colors.orange,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getPeriodLabel() {
-    switch (_selectedPeriod) {
-      case 'week':
-        return 'Cette semaine';
-      case 'month':
-        return 'Ce mois-ci';
-      case 'year':
-        return 'Cette année';
-      default:
-        return '';
-    }
-  }
-
-  void _showFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Filtrer les transactions'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.all_inclusive),
-              title: const Text('Toutes'),
-              onTap: () {
-                Navigator.pop(context);
-                SnackBarHelper.showInfo(
-                    context, 'Afficher toutes les transactions');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.check_circle, color: Colors.green),
-              title: const Text('Payées'),
-              onTap: () {
-                Navigator.pop(context);
-                SnackBarHelper.showInfo(
-                    context, 'Afficher transactions payées');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.schedule, color: Colors.orange),
-              title: const Text('En attente'),
-              onTap: () {
-                Navigator.pop(context);
-                SnackBarHelper.showInfo(
-                    context, 'Afficher transactions en attente');
-              },
             ),
           ],
         ),

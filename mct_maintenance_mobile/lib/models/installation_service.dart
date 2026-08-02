@@ -1,7 +1,7 @@
 class InstallationService {
   final int id;
   final String title;
-  final String model;
+  final String? model;
   final double? price;
   final String? description;
   final String? availabilityInfo;
@@ -12,7 +12,7 @@ class InstallationService {
   InstallationService({
     required this.id,
     required this.title,
-    required this.model,
+    this.model,
     this.price,
     this.description,
     this.availabilityInfo,
@@ -23,15 +23,19 @@ class InstallationService {
 
   factory InstallationService.fromJson(Map<String, dynamic> json) {
     return InstallationService(
-      id: json['id'],
-      title: json['title'],
+      id: json['id'] is int ? json['id'] : int.tryParse(json['id']?.toString() ?? '') ?? 0,
+      title: json['title'] ?? '',
       model: json['model'],
       price: json['price'] != null ? double.tryParse(json['price'].toString()) : null,
       description: json['description'],
       availabilityInfo: json['availabilityInfo'] ?? json['availability_info'],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
-      createdAt: DateTime.parse(json['createdAt'] ?? json['created_at']),
-      updatedAt: DateTime.parse(json['updatedAt'] ?? json['updated_at']),
+      createdAt: json['createdAt'] != null || json['created_at'] != null
+          ? DateTime.parse(json['createdAt'] ?? json['created_at'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null || json['updated_at'] != null
+          ? DateTime.parse(json['updatedAt'] ?? json['updated_at'])
+          : DateTime.now(),
     );
   }
 

@@ -473,6 +473,8 @@ router.post('/:id/renew', authenticate, authorize('admin', 'manager'), async (re
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + offer.duration);
     
+    const isFreeOffer = parseFloat(offer.price || 0) === 0;
+
     const newSubscription = await Subscription.create({
       customer_id: oldSubscription.customer_id,
       maintenance_offer_id: oldSubscription.maintenance_offer_id,
@@ -480,7 +482,9 @@ router.post('/:id/renew', authenticate, authorize('admin', 'manager'), async (re
       start_date: startDate,
       end_date: endDate,
       price: offer.price,
-      payment_status: 'pending'
+      payment_status: isFreeOffer ? 'paid' : 'pending',
+      first_payment_status: isFreeOffer ? 'paid' : 'pending',
+      second_payment_status: isFreeOffer ? 'paid' : null
     });
     
     console.log(`✅ Subscription ${id} renewed - New ID: ${newSubscription.id}`);

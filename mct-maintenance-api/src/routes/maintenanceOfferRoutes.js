@@ -91,22 +91,26 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req, res)
 // POST create new maintenance offer (admin only)
 router.post('/', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
-    const { title, description, price, duration, features, isActive } = req.body;
+    const { title, description, price, duration, features, isActive, priceNote, price_note } = req.body;
     
-    console.log('📝 POST /api/maintenance-offers - Creating new offer:', title);
+    console.log('📝 POST /api/maintenance-offers - Creating new offer:', title, 'req.body:', req.body);
     
-    if (!title || !price) {
+    const parsedPrice = (price !== undefined && price !== null && price !== '') ? Number(price) : NaN;
+
+    if (!title || Number.isNaN(parsedPrice)) {
+      console.log(`❌ Bad Request /api/maintenance-offers: title="${title}", price=${price}, parsedPrice=${parsedPrice}`);
       return res.status(400).json({
         success: false,
-        message: 'Le titre et le prix sont requis'
+        message: 'Le titre et un prix valide (ex: 0) sont requis'
       });
     }
     
     const offer = await MaintenanceOffer.create({
       title,
       description,
-      price,
+      price: parsedPrice,
       duration,
+      priceNote: priceNote !== undefined ? priceNote : price_note,
       features: features || [],
       isActive: isActive !== undefined ? isActive : true
     });
@@ -180,7 +184,7 @@ router.post('/', authenticate, authorize('admin', 'manager'), async (req, res) =
 router.put('/:id', authenticate, authorize('admin', 'manager'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, price, duration, features, isActive } = req.body;
+    const { title, description, price, duration, features, isActive, priceNote, price_note } = req.body;
     
     console.log(`📝 PUT /api/maintenance-offers/${id} - Updating offer`);
     
@@ -193,11 +197,15 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req, res)
       });
     }
     
+    const finalPriceNote = priceNote !== undefined ? priceNote : (price_note !== undefined ? price_note : offer.priceNote);
+    const parsedPrice = (price !== undefined && price !== null && price !== '') ? Number(price) : offer.price;
+
     await offer.update({
       title: title || offer.title,
       description: description !== undefined ? description : offer.description,
-      price: price || offer.price,
+      price: !Number.isNaN(parsedPrice) ? parsedPrice : offer.price,
       duration: duration || offer.duration,
+      priceNote: finalPriceNote,
       features: features !== undefined ? features : offer.features,
       isActive: isActive !== undefined ? isActive : offer.isActive
     });

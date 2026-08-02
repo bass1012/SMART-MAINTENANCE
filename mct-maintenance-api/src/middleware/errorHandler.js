@@ -109,25 +109,28 @@ class AppError extends Error {
   }
 }
 
+const { maskSensitiveData } = require('../utils/piiMasker');
+
 // Middleware pour logger les erreurs
 const errorLogger = (err, req, res, next) => {
-  const errorData = {
+  const errorData = maskSensitiveData({
     timestamp: new Date().toISOString(),
+    correlationId: req.correlationId || null,
     method: req.method,
     url: req.originalUrl,
     ip: req.ip,
     userAgent: req.get('User-Agent'),
     userId: req.user ? req.user.id : 'anonymous',
+    body: req.body,
     error: {
       message: err.message,
       stack: err.stack,
       name: err.name
     }
-  };
+  });
 
   // En production, envoyer à un service de logging
   if (process.env.NODE_ENV === 'production') {
-    // Ici vous pourriez intégrer Sentry, LogRocket, etc.
     console.error('Production Error:', JSON.stringify(errorData, null, 2));
   } else {
     console.error('Development Error:', errorData);

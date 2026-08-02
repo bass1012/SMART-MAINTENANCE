@@ -76,11 +76,22 @@ class NotificationService {
     message,
     data = null,
     priority = 'medium',
-    actionUrl = null
+    actionUrl = null,
+    idempotencyKey = null
   }) {
     try {
+      if (
+        idempotencyKey !== null
+        && (typeof idempotencyKey !== 'string' || !idempotencyKey.trim())
+      ) {
+        throw new TypeError('La clé d’idempotence de notification doit être une chaîne non vide');
+      }
+      if (idempotencyKey && idempotencyKey.length > 191) {
+        throw new TypeError('La clé d’idempotence de notification dépasse 191 caractères');
+      }
+
       // Créer la notification en base de données
-      const notification = await Notification.create({
+      const values = {
         user_id: userId,
         type,
         title,
@@ -88,8 +99,24 @@ class NotificationService {
         data,
         priority,
         action_url: actionUrl,
+        dedupe_key: idempotencyKey,
         is_read: false
-      });
+      };
+      let notification;
+      let created = true;
+      if (idempotencyKey) {
+        [notification, created] = await Notification.findOrCreate({
+          where: { user_id: userId, dedupe_key: idempotencyKey },
+          defaults: values
+        });
+      } else {
+        notification = await Notification.create(values);
+      }
+
+      if (!created) {
+        console.log(`↩️ Notification déjà traitée [ID: ${notification.id}] pour user ${userId}`);
+        return notification;
+      }
 
       console.log(`📬 Notification créée [ID: ${notification.id}] pour user ${userId}: ${title}`);
 
@@ -110,9 +137,10 @@ class NotificationService {
           data: notification.data,
           priority: notification.priority,
           action_url: notification.action_url,
-          created_at: notification.created_at,
-          updated_at: notification.updated_at,
-          is_read: notification.is_read,
+          created_at: notification.created_at || notification.createdAt || new Date().toISOString(),
+          createdAt: notification.createdAt || notification.created_at || new Date().toISOString(),
+          updated_at: notification.updated_at || notification.updatedAt || new Date().toISOString(),
+          is_read: notification.is_read ?? false,
           user_id: notification.user_id
         });
         

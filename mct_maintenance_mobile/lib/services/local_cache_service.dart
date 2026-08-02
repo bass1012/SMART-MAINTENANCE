@@ -108,7 +108,8 @@ class LocalCacheService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    if (kDebugMode) debugPrint('💾 Intervention ${intervention['id']} mise en cache');
+    if (kDebugMode)
+      debugPrint('💾 Intervention ${intervention['id']} mise en cache');
   }
 
   /// Récupérer toutes les interventions en cache
@@ -122,12 +123,15 @@ class LocalCacheService {
           try {
             final dataString = map['data'] as String?;
             if (dataString == null || dataString.isEmpty) {
-              if (kDebugMode) debugPrint('⚠️ Intervention avec data null/vide, id: ${map['id']}');
+              if (kDebugMode)
+                debugPrint(
+                    '⚠️ Intervention avec data null/vide, id: ${map['id']}');
               return null;
             }
             return jsonDecode(dataString) as Map<String, dynamic>;
           } catch (e) {
-            if (kDebugMode) debugPrint('❌ Erreur décodage intervention ${map['id']}: $e');
+            if (kDebugMode)
+              debugPrint('❌ Erreur décodage intervention ${map['id']}: $e');
             return null;
           }
         })
@@ -156,7 +160,10 @@ class LocalCacheService {
 
     // Récupérer intervention actuelle
     final cached = await getCachedIntervention(id);
-    if (cached == null) return;
+    if (cached == null) {
+      await cacheIntervention({'id': id, ...updates});
+      return;
+    }
 
     // Fusionner modifications
     final merged = {...cached, ...updates};
@@ -250,11 +257,23 @@ class LocalCacheService {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Récupérer les éléments en dead-letter (ayant atteint max_retries)
+  Future<List<Map<String, dynamic>>> getDeadLetterSyncItems() async {
+    final db = await database;
+    return await db.query(
+      'sync_queue',
+      where: 'retry_count >= max_retries',
+      orderBy: 'created_at DESC',
+    );
+  }
+
   /// Nettoyer complètement la queue de synchronisation
   Future<void> clearSyncQueue() async {
     final db = await database;
     final count = await db.delete('sync_queue');
-    if (kDebugMode) debugPrint('🗑️ Queue de synchronisation vidée: $count éléments supprimés');
+    if (kDebugMode)
+      debugPrint(
+          '🗑️ Queue de synchronisation vidée: $count éléments supprimés');
   }
 
   /// Nettoyer les éléments de sync bloqués ou anciens (plus de 24h)
@@ -262,15 +281,24 @@ class LocalCacheService {
     final db = await database;
     final yesterday = DateTime.now().subtract(const Duration(hours: 24));
 
-    // Supprimer les éléments créés il y a plus de 24h OU qui ont atteint max_retries
+    // Ne jamais purger automatiquement les constats/rapports terrain.
+    // Ils doivent rester visibles et réessayables jusqu'à synchronisation.
     final count = await db.delete(
       'sync_queue',
-      where: 'created_at < ? OR retry_count >= max_retries',
-      whereArgs: [yesterday.toIso8601String()],
+      where: '''
+        (created_at < ? OR retry_count >= max_retries)
+        AND type NOT IN ('report_upload', 'diagnostic_report_upload')
+        AND NOT (
+          type = 'intervention_status'
+          AND data LIKE ?
+        )
+      ''',
+      whereArgs: [yesterday.toIso8601String(), '%"action":"start"%'],
     );
 
     if (count > 0) {
-      if (kDebugMode) debugPrint('🧹 $count élément(s) de sync obsolètes/bloqués nettoyés');
+      if (kDebugMode)
+        debugPrint('🧹 $count élément(s) de sync obsolètes/bloqués nettoyés');
     }
     return count;
   }
@@ -363,7 +391,14 @@ class LocalCacheService {
     if (kDebugMode) debugPrint('🧹 Cache ancien nettoyé');
   }
 
-  /// Réinitialiser toute la base (pour tests)
+  /// Effacer le cache des interventions non modifiées
+  Future<void> clearCachedInterventions() async {
+    final db = await database;
+    await db.delete('cached_interventions', where: 'is_modified = 0');
+    if (kDebugMode) debugPrint('🧹 Cache des interventions nettoyé');
+  }
+
+  /// Réinitialiser toute la base (pour tests / déconnexion)
   Future<void> clearAllData() async {
     final db = await database;
     await db.delete('cached_interventions');

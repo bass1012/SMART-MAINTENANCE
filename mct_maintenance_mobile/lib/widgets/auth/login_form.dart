@@ -9,7 +9,6 @@ import 'package:mct_maintenance_mobile/utils/test_keys.dart';
 import 'package:mct_maintenance_mobile/features/auth/presentation/screens/email_verification_screen.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter/foundation.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
@@ -136,6 +135,7 @@ class _LoginFormState extends State<LoginForm> {
           }
 
           // Rediriger en fonction du rôle (supporter anglais et français)
+          if (!mounted) return;
           if (role.contains('technician') || role.contains('technicien')) {
             Navigator.pushReplacementNamed(context, '/technician');
           } else if (role.contains('manager')) {

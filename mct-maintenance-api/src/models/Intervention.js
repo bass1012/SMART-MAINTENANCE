@@ -49,9 +49,11 @@ const Intervention = sequelize.define('Intervention', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'users',
+      model: 'customer_profiles',
       key: 'id'
-    }
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE'
   },
   technician_id: {
     type: DataTypes.INTEGER,
@@ -163,6 +165,36 @@ const Intervention = sequelize.define('Intervention', {
     type: DataTypes.DATE,
     allowNull: true,
     comment: 'Date du paiement des frais de diagnostic'
+  },
+  // Paiement en deux étapes (50% acompte, 50% solde)
+  payment_option: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'full',
+    comment: 'Option de paiement : full (100%) ou split (50%/50%)'
+  },
+  total_price: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'Prix total de l\'intervention'
+  },
+  second_payment_amount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0,
+    comment: 'Montant du second paiement (50% solde)'
+  },
+  second_payment_status: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'none',
+    comment: 'Statut du second paiement (none, pending, paid)'
+  },
+  second_payment_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Date du second paiement'
   },
   // Confirmation client du rapport
   customer_confirmed: {

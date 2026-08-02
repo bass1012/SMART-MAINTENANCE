@@ -13,6 +13,8 @@ import 'package:mct_maintenance_mobile/features/customer/presentation/screens/no
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/subscription_payment_screen.dart';
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/contract_payment_screen.dart';
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/profile_screen.dart';
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/technician_main_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/customer_main_screen.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:mct_maintenance_mobile/features/interventions/data/repositories/intervention_repository_impl.dart';
 import 'package:mct_maintenance_mobile/features/customer/domain/repositories/service_repository.dart';
@@ -149,6 +151,29 @@ class NotificationNavigationService {
 
       // Alerte - naviguer vers l'intervention si un ID est fourni, sinon vers le profil (adresse requise)
       case 'alert':
+      case 'availability_changed':
+      case 'availability_changed_by_admin':
+        final title = (notificationData['title'] ?? '').toString().toLowerCase();
+        final message = (notificationData['message'] ?? '').toString().toLowerCase();
+        if (title.contains('disponib') || message.contains('disponib')) {
+          if (navigator.canPop()) {
+            navigator.popUntil((route) => route.isFirst);
+          } else {
+            final role = notificationData['role'];
+            if (role == 'technician') {
+              navigator.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const TechnicianMainScreen()),
+                (route) => false,
+              );
+            } else {
+              navigator.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const CustomerMainScreen()),
+                (route) => false,
+              );
+            }
+          }
+          break;
+        }
         if (notificationData['relatedId'] != null || 
             notificationData['related_id'] != null ||
             notificationData['interventionId'] != null ||
@@ -688,6 +713,30 @@ class NotificationNavigationService {
 
       // Alerte adresse requise - naviguer vers le profil
       case 'alert':
+      case 'availability_changed':
+      case 'availability_changed_by_admin':
+        final title = (notificationData['title'] ?? '').toString().toLowerCase();
+        final message = (notificationData['message'] ?? '').toString().toLowerCase();
+        if (title.contains('disponib') || message.contains('disponib')) {
+          final nav = Navigator.of(context);
+          if (nav.canPop()) {
+            nav.popUntil((route) => route.isFirst);
+          } else {
+            final role = notificationData['role'];
+            if (role == 'technician') {
+              nav.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const TechnicianMainScreen()),
+                (route) => false,
+              );
+            } else {
+              nav.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const CustomerMainScreen()),
+                (route) => false,
+              );
+            }
+          }
+          break;
+        }
         if (notificationData['relatedId'] != null || 
             notificationData['related_id'] != null ||
             notificationData['interventionId'] != null ||

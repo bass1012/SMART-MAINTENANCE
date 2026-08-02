@@ -198,25 +198,31 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: paymentStatus == 'paid'
-                        ? Colors.green.withValues(alpha: 0.2)
-                        : paymentStatus == 'partial'
-                            ? Colors.blue.withValues(alpha: 0.2)
-                            : Colors.orange.withValues(alpha: 0.2),
+                    color: price == 0
+                        ? Colors.blue.withValues(alpha: 0.2)
+                        : (paymentStatus == 'paid'
+                            ? Colors.green.withValues(alpha: 0.2)
+                            : paymentStatus == 'partial'
+                                ? Colors.blue.withValues(alpha: 0.2)
+                                : Colors.orange.withValues(alpha: 0.2)),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    paymentStatus == 'paid'
-                        ? 'Payé'
-                        : paymentStatus == 'partial'
-                            ? 'Acompte Payé (50%)'
-                            : 'En attente',
+                    price == 0
+                        ? 'Gratuit'
+                        : (paymentStatus == 'paid'
+                            ? 'Payé'
+                            : paymentStatus == 'partial'
+                                ? 'Acompte Payé (50%)'
+                                : 'En attente'),
                     style: TextStyle(
-                      color: paymentStatus == 'paid'
-                          ? Colors.green
-                          : paymentStatus == 'partial'
-                              ? Colors.blue.shade700
-                              : Colors.orange,
+                      color: price == 0
+                          ? Colors.blue.shade700
+                          : (paymentStatus == 'paid'
+                              ? Colors.green
+                              : paymentStatus == 'partial'
+                                  ? Colors.blue.shade700
+                                  : Colors.orange),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),

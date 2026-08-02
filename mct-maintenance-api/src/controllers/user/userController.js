@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const User = require('../../models/User');
+const TechnicianProfile = require('../../models/TechnicianProfile');
 
 // GET /api/users
 exports.listUsers = async (req, res, next) => {
@@ -31,15 +32,30 @@ exports.listUsers = async (req, res, next) => {
 
     const { rows, count } = await User.findAndCountAll({
       where,
+      include: [{
+        model: TechnicianProfile,
+        as: 'technicianProfile',
+        required: false
+      }],
       limit,
       offset,
       order: [['createdAt', 'DESC']]
     });
 
+    const formattedUsers = rows.map(u => {
+      const plain = u.toJSON();
+      if (plain.technicianProfile) {
+        plain.availability_status = plain.technicianProfile.availability_status || 'offline';
+      } else if (plain.role === 'technician') {
+        plain.availability_status = 'offline';
+      }
+      return plain;
+    });
+
     return res.json({
       success: true,
       data: {
-        users: rows,
+        users: formattedUsers,
         total: count,
         page,
         limit,
@@ -54,9 +70,23 @@ exports.listUsers = async (req, res, next) => {
 // GET /api/users/:id
 exports.getUser = async (req, res, next) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findByPk(req.params.id, {
+      include: [{
+        model: TechnicianProfile,
+        as: 'technicianProfile',
+        required: false
+      }]
+    });
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
-    return res.json({ success: true, data: user });
+    
+    const plain = user.toJSON();
+    if (plain.technicianProfile) {
+      plain.availability_status = plain.technicianProfile.availability_status || 'offline';
+    } else if (plain.role === 'technician') {
+      plain.availability_status = 'offline';
+    }
+    
+    return res.json({ success: true, data: plain });
   } catch (err) {
     next(err);
   }

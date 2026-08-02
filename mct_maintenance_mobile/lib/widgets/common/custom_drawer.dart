@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
 import 'package:mct_maintenance_mobile/features/auth/presentation/screens/login_screen.dart';
-import 'package:mct_maintenance_mobile/features/customer/presentation/screens/invoices_screen.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/documents_hub_screen.dart';
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/support_screen.dart';
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/profile_screen.dart';
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/settings_screen.dart';
@@ -161,14 +161,14 @@ class _CustomDrawerState extends State<CustomDrawer> {
                 ),
                 _buildMenuItem(
                   context,
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Factures',
+                  icon: Icons.folder_open_outlined,
+                  title: 'Mes Documents',
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const InvoicesScreen(),
+                        builder: (context) => const DocumentsHubScreen(),
                       ),
                     );
                   },
@@ -333,12 +333,12 @@ class _CustomDrawerState extends State<CustomDrawer> {
         ),
         onPressed: () async {
           // Afficher une boîte de dialogue de confirmation
+          final authRepository = context.read<AuthRepository>();
           final shouldLogout = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Déconnexion'),
-              content:
-                  const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
+              content: const Text('Voulez-vous vraiment vous déconnecter ?'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
@@ -356,8 +356,8 @@ class _CustomDrawerState extends State<CustomDrawer> {
           );
 
           if (shouldLogout == true) {
+            final nav = Navigator.of(context);
             try {
-              final authRepository = context.read<AuthRepository>();
               await FCMService().clearOnLogout();
               await authRepository.logout();
             } catch (e) {
@@ -365,8 +365,7 @@ class _CustomDrawerState extends State<CustomDrawer> {
             }
 
             if (mounted) {
-              Navigator.pushAndRemoveUntil(
-                context,
+              nav.pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const LoginScreen()),
                 (route) => false,
               );

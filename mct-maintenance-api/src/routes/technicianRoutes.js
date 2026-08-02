@@ -29,6 +29,8 @@ router.put('/profile', (req, res) => {
 
 // Technician availability routes
 router.put('/availability', technicianController.updateAvailability);
+router.patch('/:id/availability', technicianController.updateTechnicianAvailabilityByAdmin);
+router.put('/:id/availability', technicianController.updateTechnicianAvailabilityByAdmin);
 
 // Technician location routes
 router.put('/location', technicianController.updateLocation);
@@ -602,107 +604,209 @@ router.get('/calendar', async (req, res) => {
   }
 });
 
-// Get technician's submitted reports
+// Get technician's submitted reports (Maintenance & Diagnostic)
 router.get('/reports', async (req, res, next) => {
   try {
     const technicianId = req.user.id;
     const status = req.query.status; // draft, submitted, approved
     
-    console.log(`📋 Technicien ${technicianId}: Récupération des rapports`);
+    console.log(`📋 Technicien ${technicianId}: Récupération des rapports (Maintenance + Diagnostic)`);
 
-    // Construire le where
-    const where = {
-      technician_id: technicianId,
-      report_submitted_at: { [Op.not]: null } // Seulement avec rapport
-    };
-
-    // Filtre par statut si spécifié
-    if (status && status !== 'all') {
-      // Le statut est dans report_data JSON, on devra filtrer après
-    }
-
-    // Récupérer les interventions avec rapport
-    const interventions = await Intervention.findAll({
-      where,
-      order: [['report_submitted_at', 'DESC']],
+    // 1. Récupérer les interventions assignées au technicien
+    const techInterventions = await Intervention.findAll({
+      where: { technician_id: technicianId },
+      order: [['id', 'DESC']],
       include: [
         {
           model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'first_name', 'last_name', 'company_name']
+          targetKey: 'user_id',
+          attributes: ['id', 'user_id', 'first_name', 'last_name', 'company_name'],
+          required: false
         }
       ]
     });
 
-    // Formater les données pour le mobile
-    const reports = interventions.map(intervention => {
+    const techInterventionIds = techInterventions.map(i => i.id);
+
+    // Interventions avec rapport de maintenance
+    const maintenanceInterventions = techInterventions.filter(
+      i => i.report_submitted_at != null || i.report_data != null
+    );
+
+    // 2. Récupérer les rapports de diagnostic soumis par le technicien ou associés à ses interventions
+    const diagWhere = techInterventionIds.length > 0
+      ? {
+          [Op.or]: [
+            { technician_id: technicianId },
+            { intervention_id: { [Op.in]: techInterventionIds } }
+          ]
+        }
+      : { technician_id: technicianId };
+
+    const diagnosticReports = await DiagnosticReport.findAll({
+      where: diagWhere,
+      order: [['id', 'DESC']],
+      include: [
+        {
+          model: Intervention,
+          as: 'intervention',
+          required: false,
+          include: [
+            {
+              model: CustomerProfile,
+              as: 'customer',
+              targetKey: 'user_id',
+              attributes: ['id', 'user_id', 'first_name', 'last_name', 'company_name'],
+              required: false
+            }
+          ]
+        }
+      ]
+    });
+
+    // Formater les rapports de maintenance
+    const formattedMaintenanceReports = maintenanceInterventions.map(intervention => {
       const reportData = intervention.report_data ? 
         (typeof intervention.report_data === 'string' ? 
           JSON.parse(intervention.report_data) : intervention.report_data) 
         : {};
 
-      // Récupérer le nom du client (customer est CustomerProfile)
+      const customerProfile = intervention.customer;
+      const customerName = customerProfile ? 
+        `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() :
+        'Client non renseigné';
+      const customerCompany = customerProfile?.company_name || '';
+      const reportDate = intervention.report_submitted_at || intervention.updatedAt || intervention.createdAt;
+
+      return {
+        id: intervention.id,
+        report_type: 'maintenance',
+        intervention_title: intervention.title || 'Intervention de Maintenance',
+        title: intervention.title ? `Maintenance - ${intervention.title}` : 'Rapport de Maintenance',
+        address: intervention.address || 'Non spécifiée',
+        customer_name: customerName || 'Client non renseigné',
+        customer_phone: '',
+        customer_email: '',
+        customer_company: customerCompany,
+        created_at: reportDate,
+        date: reportDate,
+        status: reportData.status || intervention.status || 'submitted',
+        work_description: reportData.work_description || intervention.description || '',
+        duration: reportData.duration || 0,
+        materials_used: reportData.materials_used || [],
+        observations: reportData.observations || '',
+        photos_count: reportData.photos_count || (Array.isArray(reportData.photos) ? reportData.photos.length : 0),
+        total_cost: 0,
+        pression: reportData.pression || '',
+        freon: reportData.freon || '',
+        puissance: reportData.puissance || reportData.temperature || '',
+        intensite: reportData.intensite || '',
+        tension: reportData.tension || '',
+        equipments: reportData.equipments || [],
+        equipment_state: reportData.equipment_state || '',
+        equipment_type: reportData.equipment_type || '',
+        equipment_brand: reportData.equipment_brand || '',
+        technician_name: reportData.technician_name || '',
+        intervention_date: reportData.intervention_date || '',
+        start_time: reportData.start_time || '',
+        end_time: reportData.end_time || '',
+        intervention_nature: reportData.intervention_nature || '',
+        spare_parts: reportData.spare_parts || [],
+      };
+    });
+
+    // Formater les rapports de diagnostic
+    const formattedDiagnosticReports = diagnosticReports.map(diag => {
+      const intervention = diag.intervention || {};
       const customerProfile = intervention.customer;
       const customerName = customerProfile ? 
         `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() :
         'Client non renseigné';
       const customerCompany = customerProfile?.company_name || '';
 
+      let partsNeeded = [];
+      if (diag.parts_needed) {
+        try {
+          partsNeeded = typeof diag.parts_needed === 'string' ? JSON.parse(diag.parts_needed) : diag.parts_needed;
+        } catch (e) {
+          partsNeeded = [];
+        }
+      }
+
+      let photosList = [];
+      if (diag.photos) {
+        try {
+          photosList = typeof diag.photos === 'string' ? JSON.parse(diag.photos) : diag.photos;
+        } catch (e) {
+          photosList = [];
+        }
+      }
+
+      let equipmentsList = [];
+      if (diag.equipments) {
+        try {
+          equipmentsList = typeof diag.equipments === 'string' ? JSON.parse(diag.equipments) : diag.equipments;
+        } catch (e) {
+          equipmentsList = [];
+        }
+      }
+
+      const reportDate = diag.createdAt || diag.submitted_at || new Date();
+
       return {
-        id: intervention.id,
-        intervention_title: intervention.title,
+        id: intervention.id || diag.intervention_id || diag.id,
+        diagnostic_report_id: diag.id,
+        report_type: 'diagnostic',
+        intervention_title: intervention.title || 'Diagnostic Technique',
+        title: intervention.title ? `Diagnostic - ${intervention.title}` : `Rapport Diagnostic #${diag.id}`,
         address: intervention.address || 'Non spécifiée',
         customer_name: customerName || 'Client non renseigné',
         customer_phone: '',
         customer_email: '',
         customer_company: customerCompany,
-        created_at: intervention.report_submitted_at,
-        date: intervention.report_submitted_at,
-        status: reportData.status || 'submitted',
-        work_description: reportData.work_description || '',
-        duration: reportData.duration || 0,
-        materials_used: reportData.materials_used || [],
-        observations: reportData.observations || '',
-        photos_count: reportData.photos_count || 0,
-        total_cost: 0, // À calculer si besoin
-        // Mesures techniques
-        pression: reportData.pression || '',
-        freon: reportData.freon || '',
-        puissance: reportData.puissance || reportData.temperature || '',
-        intensite: reportData.intensite || '',
-        tension: reportData.tension || '',
-        // Section Équipements (nouveau format - tableau)
-        equipments: reportData.equipments || [],
-        // Section Équipement (format legacy)
-        equipment_state: reportData.equipment_state || '',
-        equipment_type: reportData.equipment_type || '',
-        equipment_brand: reportData.equipment_brand || '',
-        // Section Détail Intervention
-        technician_name: reportData.technician_name || '',
-        intervention_date: reportData.intervention_date || '',
-        start_time: reportData.start_time || '',
-        end_time: reportData.end_time || '',
-        intervention_nature: reportData.intervention_nature || '',
-        // Pièces de rechange
-        spare_parts: reportData.spare_parts || [],
+        created_at: reportDate,
+        date: reportDate,
+        status: diag.status || 'submitted',
+        work_description: diag.problem_description || '',
+        observations: diag.recommended_solution || diag.notes || '',
+        duration: diag.estimated_duration || '1h',
+        materials_used: partsNeeded,
+        photos_count: Array.isArray(photosList) ? photosList.length : 0,
+        total_cost: diag.estimated_total || 0,
+        pression: diag.pression || '',
+        freon: diag.freon || '',
+        puissance: diag.puissance || '',
+        intensite: diag.intensite || '',
+        tension: diag.tension || '',
+        equipments: Array.isArray(equipmentsList) ? equipmentsList : [],
+        spare_parts: partsNeeded,
       };
     });
 
+    // Combiner et trier par date décroissante
+    let allReports = [...formattedMaintenanceReports, ...formattedDiagnosticReports];
+    allReports.sort((a, b) => new Date(b.date) - new Date(a.date));
+
     // Filtrer par statut si spécifié
-    let filteredReports = reports;
     if (status && status !== 'all') {
-      filteredReports = reports.filter(r => r.status === status);
+      allReports = allReports.filter(r => r.status === status);
     }
 
-    console.log(`✅ ${filteredReports.length} rapport(s) trouvé(s)`);
+    console.log(`✅ ${allReports.length} rapport(s) trouvé(s) (${formattedMaintenanceReports.length} maintenance, ${formattedDiagnosticReports.length} diagnostic)`);
 
     res.json({
       success: true,
-      data: filteredReports,
+      data: allReports,
     });
   } catch (error) {
     console.error('❌ Erreur récupération rapports technicien:', error);
-    next(error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des rapports',
+      error: error.message,
+      detail: error.original ? error.original.message : null
+    });
   }
 });
 
@@ -718,8 +822,7 @@ router.get('/reports/:interventionId/download', async (req, res, next) => {
     const intervention = await Intervention.findOne({
       where: {
         id: interventionId,
-        technician_id: technicianId,
-        report_submitted_at: { [Op.not]: null }
+        technician_id: technicianId
       },
       include: [
         {
@@ -735,17 +838,41 @@ router.get('/reports/:interventionId/download', async (req, res, next) => {
       ]
     });
 
-    if (!intervention) {
+    let diagReport = null;
+    if (intervention) {
+      diagReport = await DiagnosticReport.findOne({
+        where: { intervention_id: intervention.id, technician_id: technicianId }
+      });
+    }
+
+    if (!intervention || (!intervention.report_submitted_at && !diagReport)) {
       return res.status(404).json({
         success: false,
         message: 'Rapport non trouvé'
       });
     }
 
-    const reportData = intervention.report_data ? 
-      (typeof intervention.report_data === 'string' ? 
-        JSON.parse(intervention.report_data) : intervention.report_data) 
-      : {};
+    let reportData = {};
+    if (diagReport) {
+      let partsNeeded = [];
+      try { partsNeeded = typeof diagReport.parts_needed === 'string' ? JSON.parse(diagReport.parts_needed) : diagReport.parts_needed || []; } catch(e) {}
+      reportData = {
+        work_description: diagReport.problem_description,
+        observations: diagReport.recommended_solution,
+        pression: diagReport.pression,
+        freon: diagReport.freon,
+        puissance: diagReport.puissance,
+        intensite: diagReport.intensite,
+        tension: diagReport.tension,
+        spare_parts: partsNeeded,
+        duration: diagReport.estimated_duration || '1h'
+      };
+    } else {
+      reportData = intervention.report_data ? 
+        (typeof intervention.report_data === 'string' ? 
+          JSON.parse(intervention.report_data) : intervention.report_data) 
+        : {};
+    }
 
     // Fonction pour échapper le HTML
     const escapeHtml = (text) => {
@@ -931,6 +1058,13 @@ router.get('/reviews', async (req, res) => {
         status: 'completed',
         rating: { [Op.not]: null }
       },
+      include: [
+        {
+          model: CustomerProfile,
+          as: 'customer',
+          attributes: ['first_name', 'last_name']
+        }
+      ],
       order: [['completed_at', 'DESC']]
     });
 
@@ -944,11 +1078,18 @@ router.get('/reviews', async (req, res) => {
       sumRatings += rating;
       ratingsBreakdown[rating]++;
 
+      const customerName = intervention.customer
+        ? `${intervention.customer.first_name || ''} ${intervention.customer.last_name || ''}`.trim()
+        : 'Client';
+
       return {
         id: intervention.id,
         rating: rating,
+        review: intervention.review || '',
+        comment: intervention.review || '',
+        customer_name: customerName || 'Client',
         intervention_title: intervention.title,
-        date: intervention.completed_at,
+        date: intervention.completed_at ? intervention.completed_at.toISOString().split('T')[0] : (intervention.updated_at ? intervention.updated_at.toISOString().split('T')[0] : ''),
         created_at: intervention.updated_at
       };
     });

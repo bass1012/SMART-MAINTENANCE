@@ -937,7 +937,6 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.pop(context, false);
             },
             child: const Text('Fermer'),
           ),

@@ -9,7 +9,8 @@ Application complète de gestion de maintenance et de climatisation comprenant :
 
 ## 📋 DOCUMENTATION CENTRALE
 
-👉 **[PROJET_MCT_MAINTENANCE.md](./PROJET_MCT_MAINTENANCE.md)** - Document unique centralisé
+👉 **[PROJET_MCT_MAINTENANCE.md](./PROJET_MCT_MAINTENANCE.md)** - Document unique centralisé (Roadmap, Fonctionnalités)
+👉 **[tasks/lessons.md](./tasks/lessons.md)** - Base de connaissances techniques (Résolutions de bugs, Bonnes pratiques)
 
 Ce document contient :
 - ✅ État d'avancement complet (96%)
@@ -46,12 +47,16 @@ Ce document contient :
 - ✅ Statistiques et tableaux de bord
 
 ### Backend API
-- ✅ Architecture RESTful
+- ✅ Architecture RESTful & Outbox Transactionnelle
+- ✅ Machine d'état centralisée des interventions (`interventionStateMachineService.js`)
+- ✅ Endpoints d'observabilité (`GET /live` Liveness, `GET /ready` Readiness DB)
+- ✅ Traçabilité distribuée (`X-Correlation-ID`) & masquage PII dans les journaux
+- ✅ Gestion des litiges et remboursements idempotents (`/api/refunds`)
 - ✅ WebSocket (Socket.IO) pour le temps réel
-- ✅ Authentification JWT
-- ✅ Upload de fichiers
-- ✅ Notifications FCM
+- ✅ Authentification JWT & politiques d'accès étanches
+- ✅ Notifications FCM & SMS (HSMS)
 - ✅ Base de données SQLite (dev) / PostgreSQL (prod)
+- ✅ Intégration Continue (GitHub Actions CI pour Node.js et Flutter)
 
 ## 📋 Prérequis
 
@@ -93,6 +98,24 @@ flutter pub get
 flutter run
 ```
 
+## 🚀 Déploiement & Production
+
+### Backend API (PM2)
+En production (sur le VPS), le backend utilise **PM2** en mode cluster :
+```bash
+pm2 start ecosystem.config.js
+```
+
+### Application Mobile (Automatisation)
+Un script de déploiement est fourni pour faciliter la génération des builds Android et l'incrémentation de version :
+```bash
+./deploy_mobile.sh
+```
+Pour iOS, l'intégration continue est gérée automatiquement via **Xcode Cloud** (compilation et déploiement TestFlight/App Store).
+
+### Dashboard Web (Nginx)
+Le tableau de bord React doit être compilé (`npm run build`) et les fichiers statiques servis par **Nginx**.
+
 ## 📁 Structure du Projet
 
 ```
@@ -116,10 +139,12 @@ MAINTENANCE/
 │
 ├── mct_maintenance_mobile/        # App Flutter
 │   ├── lib/
-│   │   ├── screens/
-│   │   ├── services/
-│   │   ├── models/
-│   │   └── widgets/
+│   │   ├── config/                # Configuration et environnement
+│   │   ├── core/                  # Code cœur et utilitaires partagés
+│   │   ├── features/              # Architecture Feature-First (modules)
+│   │   ├── models/                # Modèles de données globaux
+│   │   ├── screens/               # Écrans historiques (en migration)
+│   │   └── services/              # Services API et locaux
 │   └── pubspec.yaml
 │
 └── INTERVENTION/                  # Documentation
@@ -131,6 +156,8 @@ MAINTENANCE/
 ```env
 PORT=3000
 JWT_SECRET=your_secret_key
+# SQLite est utilisé en développement local. 
+# En production, utilisez une URL PostgreSQL (ex: postgres://user:pass@host:5432/db)
 DATABASE_URL=sqlite://database.sqlite
 FIREBASE_SERVICE_ACCOUNT=path/to/firebase-key.json
 ```
@@ -146,30 +173,34 @@ Modifier `lib/config/environment.dart` pour l'URL de l'API
 ## 📱 Technologies Utilisées
 
 ### Mobile
-- Flutter 3.38.4
+- Flutter 3.x
 - Provider (state management)
+- Architecture hybride (vers Feature-First)
 - Socket.IO Client
-- Firebase Messaging
+- Firebase Messaging (Push Notifications)
 - Dio (HTTP client)
-- Geolocator
-- Image Picker
+- Geolocator & Image Picker
 
 ### Backend
 - Node.js / Express
-- Sequelize ORM
-- Socket.IO
-- Firebase Admin SDK
-- JWT
-- Multer
-- SQLite / PostgreSQL
+- Sequelize ORM (PostgreSQL en prod / SQLite en dev)
+- Socket.IO (Temps réel)
+- PM2 (Cluster Management)
+- JWT (Authentification)
+- Firebase Messaging API v1
+- FineoPay (Passerelle de paiement en ligne)
 
 ### Dashboard
-- React 18
-- TypeScript
+- React 18 / TypeScript
 - Material-UI
 - Axios
 - Socket.IO Client
 - React Router v6
+
+### CI/CD & Déploiement
+- Script bash automatisé (Android APK/AAB)
+- Xcode Cloud (CI iOS & TestFlight)
+- Nginx (Reverse Proxy & Fichiers statiques)
 
 ## 🤝 Contribution
 

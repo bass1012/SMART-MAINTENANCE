@@ -1,45 +1,46 @@
 import 'package:flutter/material.dart';
-import 'package:mct_maintenance_mobile/features/admin/presentation/screens/suggest_technicians_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+/// Écran d'accueil racine.
+/// Redirige automatiquement vers le bon tableau de bord selon le rôle
+/// via le RouterGuard défini dans main.dart.
+/// Cet écran ne s'affiche qu'en cas de problème de routage.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Accueil'),
-      ),
+      backgroundColor: const Color(0xFFF7F8FA),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Bienvenue sur MCT Maintenance Mobile'),
-            const SizedBox(height: 40),
-
-            // Bouton de test pour suggestions techniciens
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SuggestTechniciansScreen(
-                      interventionId: 141,
-                      interventionTitle: 'Réparation fuite eau - Test',
-                    ),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.person_search),
-              label: const Text('🧪 Test Suggestions Techniciens'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
+            const Icon(
+              Icons.build_circle_outlined,
+              size: 72,
+              color: Color(0xFF0a543d),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'MCT Maintenance',
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF0a543d),
               ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Chargement en cours…',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 32),
+            const CircularProgressIndicator(
+              color: Color(0xFF0a543d),
             ),
           ],
         ),

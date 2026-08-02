@@ -614,11 +614,13 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      offer.title,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        offer.title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -672,20 +674,35 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${offer.price.toStringAsFixed(0)} FCFA',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${offer.price.toStringAsFixed(0)} FCFA',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
                           ),
-                        ),
-                      ],
+                          if (offer.priceNote != null && offer.priceNote!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              offer.priceNote!,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 12),
                     ElevatedButton(
                       onPressed: () {
                         _showSubscriptionDialog(offer);
@@ -983,14 +1000,16 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                 fontSize: 16,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Modèle: ${service.model}',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 14,
+            if (service.model != null && service.model!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Modèle: ${service.model}',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 4),
             if (service.price != null)
               Text(
@@ -1114,14 +1133,16 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                 fontSize: 16,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Type: ${service.model}',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 14,
+            if (service.model != null && service.model!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Type: ${service.model}',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 4),
             if (service.price != null)
               Text(
@@ -1437,42 +1458,52 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: paymentStatus == 'paid'
-                        ? Colors.green.withValues(alpha: 0.1)
-                        : paymentStatus == 'partial'
-                            ? Colors.blue.withValues(alpha: 0.1)
-                            : Colors.orange.withValues(alpha: 0.1),
+                    color: price == 0
+                        ? Colors.blue.withValues(alpha: 0.1)
+                        : (paymentStatus == 'paid'
+                            ? Colors.green.withValues(alpha: 0.1)
+                            : paymentStatus == 'partial'
+                                ? Colors.blue.withValues(alpha: 0.1)
+                                : Colors.orange.withValues(alpha: 0.1)),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        paymentStatus == 'paid'
-                            ? Icons.check_circle
-                            : paymentStatus == 'partial'
-                                ? Icons.check_circle_outline
-                                : Icons.schedule,
+                        price == 0
+                            ? Icons.card_giftcard
+                            : (paymentStatus == 'paid'
+                                ? Icons.check_circle
+                                : paymentStatus == 'partial'
+                                    ? Icons.check_circle_outline
+                                    : Icons.schedule),
                         size: 16,
-                        color: paymentStatus == 'paid'
-                            ? Colors.green
-                            : paymentStatus == 'partial'
-                                ? Colors.blue.shade700
-                                : Colors.orange,
+                        color: price == 0
+                            ? Colors.blue.shade700
+                            : (paymentStatus == 'paid'
+                                ? Colors.green
+                                : paymentStatus == 'partial'
+                                    ? Colors.blue.shade700
+                                    : Colors.orange),
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        paymentStatus == 'paid'
-                            ? 'Payé'
-                            : paymentStatus == 'partial'
-                                ? 'Acompte Payé (50%)'
-                                : 'En attente',
+                        price == 0
+                            ? 'Gratuit'
+                            : (paymentStatus == 'paid'
+                                ? 'Payé'
+                                : paymentStatus == 'partial'
+                                    ? 'Acompte Payé (50%)'
+                                    : 'En attente'),
                         style: TextStyle(
-                          color: paymentStatus == 'paid'
-                              ? Colors.green
-                              : paymentStatus == 'partial'
-                                  ? Colors.blue.shade700
-                                  : Colors.orange,
+                          color: price == 0
+                              ? Colors.blue.shade700
+                              : (paymentStatus == 'paid'
+                                  ? Colors.green
+                                  : paymentStatus == 'partial'
+                                      ? Colors.blue.shade700
+                                      : Colors.orange),
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
@@ -2270,14 +2301,16 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                           color: Color(0xFF0a543d),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        service.model,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
+                      if (service.model != null && service.model!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          service.model!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
-                      ),
+                      ],
                       if (service.availabilityInfo != null) ...[
                         const SizedBox(height: 4),
                         Row(
@@ -2582,14 +2615,16 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
                           color: Colors.orange,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        service.model,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
+                      if (service.model != null && service.model!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          service.model!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

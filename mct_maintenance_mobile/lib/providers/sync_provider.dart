@@ -3,7 +3,6 @@ import 'package:mct_maintenance_mobile/services/local_cache_service.dart';
 import 'package:mct_maintenance_mobile/services/connectivity_service.dart';
 import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
-import 'package:mct_maintenance_mobile/features/interventions/data/repositories/intervention_repository_impl.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -17,8 +16,8 @@ import 'dart:convert';
 class SyncProvider extends ChangeNotifier {
   final LocalCacheService _cacheService = LocalCacheService();
   final ConnectivityService _connectivityService = ConnectivityService();
-  final BaseApiService _apiService = BaseApiService();
-  late final InterventionRepository _interventionRepository;
+  final BaseApiService _apiService;
+  final InterventionRepository _interventionRepository;
 
   // État synchronisation
   bool _isSyncing = false;
@@ -38,8 +37,7 @@ class SyncProvider extends ChangeNotifier {
   StreamSubscription? _connectivitySubscription;
   Timer? _periodicSyncTimer;
 
-  SyncProvider() {
-    _interventionRepository = InterventionRepositoryImpl(_apiService);
+  SyncProvider(this._apiService, this._interventionRepository) {
     _init();
   }
 
@@ -60,13 +58,16 @@ class SyncProvider extends ChangeNotifier {
         notifyListeners();
 
         if (isConnected) {
-          if (kDebugMode) debugPrint('🟢 Retour en ligne - Démarrage synchronisation auto...');
+          if (kDebugMode)
+            debugPrint(
+                '🟢 Retour en ligne - Démarrage synchronisation auto...');
           // Petit délai pour stabiliser la connexion
           Future.delayed(const Duration(seconds: 2), () {
             syncAll();
           });
         } else {
-          if (kDebugMode) debugPrint('🔴 Passage hors ligne - Mode cache activé');
+          if (kDebugMode)
+            debugPrint('🔴 Passage hors ligne - Mode cache activé');
         }
       },
     );
@@ -184,7 +185,8 @@ class SyncProvider extends ChangeNotifier {
     }
 
     if (!_connectivityService.isConnected) {
-      if (kDebugMode) debugPrint('⚠️ Pas de connexion, synchronisation impossible');
+      if (kDebugMode)
+        debugPrint('⚠️ Pas de connexion, synchronisation impossible');
       return;
     }
 
@@ -231,6 +233,7 @@ class SyncProvider extends ChangeNotifier {
           final actionOrder = {
             'accept': 0,
             'on-the-way': 1,
+            'on_the_way': 1,
             'arrived': 2,
             'start': 3,
             'complete': 4,
@@ -272,16 +275,21 @@ class SyncProvider extends ChangeNotifier {
 
           if (isReallyObsolete) {
             // Action vraiment obsolète = on la supprime
-            if (kDebugMode) debugPrint('⚠️ Élément ${item['id']} obsolète: $errorMessage');
+            if (kDebugMode)
+              debugPrint('⚠️ Élément ${item['id']} obsolète: $errorMessage');
             await _cacheService.markSyncItemComplete(item['id'] as int);
-            if (kDebugMode) debugPrint('🗑️ Élément ${item['id']} supprimé de la queue');
+            if (kDebugMode)
+              debugPrint('🗑️ Élément ${item['id']} supprimé de la queue');
           } else if (isOrderError) {
             // Erreur d'ordre = on garde et réessayera au prochain cycle
-            if (kDebugMode) debugPrint('⏭️ Élément ${item['id']} reporté (ordre): $errorMessage');
+            if (kDebugMode)
+              debugPrint(
+                  '⏭️ Élément ${item['id']} reporté (ordre): $errorMessage');
             // Ne pas incrémenter retry_count - il sera réessayé automatiquement
           } else {
             // Autre erreur (réseau, serveur, etc.) = on incrémente retry
-            if (kDebugMode) debugPrint('❌ Échec sync élément ${item['id']}: $errorMessage');
+            if (kDebugMode)
+              debugPrint('❌ Échec sync élément ${item['id']}: $errorMessage');
             await _cacheService.incrementRetryCount(
               item['id'] as int,
               errorMessage,
@@ -292,7 +300,6 @@ class SyncProvider extends ChangeNotifier {
 
       _lastSyncTime = DateTime.now();
       final totalItems = sortedItems.length;
-      final pendingItems = totalItems - _syncedItemsCount;
       if (kDebugMode) {
         debugPrint(
             '✅ Synchronisation terminée: $_syncedItemsCount/$totalItems réussis');
@@ -342,17 +349,22 @@ class SyncProvider extends ChangeNotifier {
         break;
 
       default:
-        if (kDebugMode) debugPrint('⚠️ Type de sync inconnu: $type');
+        throw Exception('Type de synchronisation inconnu: $type');
     }
   }
 
   /// Synchroniser mise à jour intervention
   Future<void> _syncInterventionUpdate(
       int interventionId, Map<String, dynamic> data) async {
-    // TODO: Implémenter avec la bonne méthode API quand disponible
     if (kDebugMode) debugPrint('🔄 Sync intervention update: $interventionId');
-    // Simulation réussite pour le moment
-    await Future.delayed(const Duration(milliseconds: 500));
+    final response = await _apiService.put(
+      '/interventions/$interventionId',
+      body: data,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>?;
+      throw Exception(decoded?['message'] ?? 'Échec de la mise à jour de l’intervention (${response.statusCode})');
+    }
   }
 
   /// Synchroniser changement statut intervention
@@ -364,27 +376,46 @@ class SyncProvider extends ChangeNotifier {
       throw Exception('Action manquante dans les données de sync');
     }
 
-    if (kDebugMode) debugPrint('🔄 Sync intervention status: $interventionId -> $action');
+    if (kDebugMode)
+      debugPrint('🔄 Sync intervention status: $interventionId -> $action');
 
     // Appeler le bon endpoint selon l'action
+    late Map<String, dynamic> response;
     switch (action) {
       case 'accept':
-        await _interventionRepository.acceptIntervention(interventionId);
+        response =
+            await _interventionRepository.acceptIntervention(interventionId);
         break;
       case 'on-the-way':
-        await _interventionRepository.markInterventionOnTheWay(interventionId);
+      case 'on_the_way':
+        response = await _interventionRepository
+            .markInterventionOnTheWay(interventionId);
         break;
       case 'arrived':
-        await _interventionRepository.markInterventionArrived(interventionId);
+        response = await _interventionRepository
+            .markInterventionArrived(interventionId);
         break;
       case 'start':
-        await _interventionRepository.startIntervention(interventionId);
+        final rawReportData = data['report_data'];
+        final reportData = rawReportData is Map
+            ? Map<String, dynamic>.from(rawReportData)
+            : null;
+        response = await _interventionRepository.startIntervention(
+          interventionId,
+          reportData: reportData,
+        );
         break;
       case 'complete':
-        await _interventionRepository.completeIntervention(interventionId);
+        response =
+            await _interventionRepository.completeIntervention(interventionId);
         break;
       default:
         throw Exception('Action inconnue: $action');
+    }
+
+    if (response['success'] != true) {
+      throw Exception(
+          response['message'] ?? 'Échec de synchronisation de l’intervention');
     }
 
     if (kDebugMode) debugPrint('✅ Statut synchronisé: $action');
@@ -393,13 +424,15 @@ class SyncProvider extends ChangeNotifier {
   /// Synchroniser upload rapport
   Future<void> _syncReportUpload(
       int interventionId, Map<String, dynamic> reportData) async {
-    if (kDebugMode) debugPrint('📝 Début upload rapport intervention $interventionId');
+    if (kDebugMode)
+      debugPrint('📝 Début upload rapport intervention $interventionId');
 
     try {
       // IMPORTANT: S'assurer que l'intervention est marquée comme completed côté serveur
       // avant de soumettre le rapport
       try {
-        if (kDebugMode) debugPrint('🔄 Vérification/Marquage intervention comme terminée...');
+        if (kDebugMode)
+          debugPrint('🔄 Vérification/Marquage intervention comme terminée...');
         await _interventionRepository.completeIntervention(interventionId);
         if (kDebugMode) debugPrint('✅ Intervention marquée comme terminée');
       } catch (e) {
@@ -407,10 +440,13 @@ class SyncProvider extends ChangeNotifier {
         // Si déjà terminée ou déjà en cours, c'est OK
         if (errorMessage.contains('déjà terminée') ||
             errorMessage.contains('doit être en cours')) {
-          if (kDebugMode) debugPrint('ℹ️ Intervention déjà dans le bon état: $errorMessage');
+          if (kDebugMode)
+            debugPrint('ℹ️ Intervention déjà dans le bon état: $errorMessage');
         } else {
           // Autre erreur, on continue quand même car le rapport peut être valide
-          if (kDebugMode) debugPrint('⚠️ Erreur marquage terminée (on continue): $errorMessage');
+          if (kDebugMode)
+            debugPrint(
+                '⚠️ Erreur marquage terminée (on continue): $errorMessage');
         }
       }
 
@@ -418,7 +454,8 @@ class SyncProvider extends ChangeNotifier {
       final photos = await _cacheService.getUnuploadedPhotos(interventionId);
 
       if (photos.isNotEmpty) {
-        if (kDebugMode) debugPrint('📷 ${photos.length} photo(s) à uploader depuis le cache');
+        if (kDebugMode)
+          debugPrint('📷 ${photos.length} photo(s) à uploader depuis le cache');
 
         // Les photos sont déjà dans reportData['photos'] avec leurs chemins locaux
         // L'API va les uploader via multipart
@@ -442,7 +479,8 @@ class SyncProvider extends ChangeNotifier {
         for (final photo in photos) {
           await _cacheService.markPhotoUploaded(photo['id'] as int);
         }
-        if (kDebugMode) debugPrint('✅ ${photos.length} photo(s) marquées comme uploadées');
+        if (kDebugMode)
+          debugPrint('✅ ${photos.length} photo(s) marquées comme uploadées');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Erreur upload rapport: $e');
@@ -453,25 +491,33 @@ class SyncProvider extends ChangeNotifier {
   /// Synchroniser upload rapport de diagnostic
   Future<void> _syncDiagnosticReportUpload(
       int interventionId, Map<String, dynamic> diagnosticData) async {
-    if (kDebugMode) debugPrint('🔬 Début upload rapport diagnostic intervention $interventionId');
+    if (kDebugMode)
+      debugPrint(
+          '🔬 Début upload rapport diagnostic intervention $interventionId');
 
     try {
-      // Soumettre le rapport de diagnostic
-      await _apiService.post(
+      final response = await _apiService.post(
         '/diagnostic-reports',
         body: {
           'intervention_id': interventionId,
-          'problem_description': diagnosticData['problem_description'],
-          'recommended_solution': diagnosticData['recommended_solution'],
-          'parts_needed': diagnosticData['parts_needed'] ?? [],
+          'equipments': diagnosticData['equipments'] ?? diagnosticData['equipment'] ?? [],
+          'materials_needed': diagnosticData['materials_needed'] ?? diagnosticData['parts_needed'] ?? [],
+          'problem_description': diagnosticData['problem_description'] ?? diagnosticData['panne_description'] ?? '',
+          'recommended_solution': diagnosticData['recommended_solution'] ?? '',
+          'parts_needed': diagnosticData['parts_needed'] ?? diagnosticData['materials_needed'] ?? [],
           'labor_cost': diagnosticData['labor_cost'] ?? 0,
           'estimated_total': diagnosticData['estimated_total'] ?? 0,
           'urgency_level': diagnosticData['urgency_level'] ?? 'medium',
           'estimated_duration': diagnosticData['estimated_duration'] ?? '',
-          'photos': [], // TODO: Support photos diagnostic
+          'photos': diagnosticData['photos'] ?? [],
           'notes': diagnosticData['notes'] ?? '',
         },
       );
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>?;
+        throw Exception(decoded?['message'] ?? 'Échec d’upload du rapport diagnostic (${response.statusCode})');
+      }
 
       if (kDebugMode) debugPrint('✅ Rapport diagnostic uploadé avec succès');
     } catch (e) {
@@ -483,9 +529,17 @@ class SyncProvider extends ChangeNotifier {
   /// Synchroniser upload photo
   Future<void> _syncPhotoUpload(
       int interventionId, Map<String, dynamic> photoData) async {
-    final filePath = photoData['file_path'] as String;
-    // TODO: Implémenter upload photo depuis cache
+    final filePath = photoData['file_path'] as String?;
+    if (filePath == null || filePath.isEmpty) {
+      throw Exception('Chemin de fichier photo manquant pour l’intervention $interventionId');
+    }
     if (kDebugMode) debugPrint('📷 Upload photo: $filePath');
+    final reportData = Map<String, dynamic>.from(photoData['report_data'] as Map? ?? {});
+    reportData['photos'] = [filePath];
+    await _interventionRepository.submitInterventionReport(
+      interventionId,
+      reportData,
+    );
   }
 
   /// Ajouter élément à la queue de synchronisation

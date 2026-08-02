@@ -130,6 +130,8 @@ class _TechnicianNotificationsScreenState
     // Construire les données de navigation
     final notificationData = {
       'type': notification['type'],
+      'title': notification['title'],
+      'message': notification['message'],
       'role': 'technician', // Forcer le rôle technicien
       // Essayer d'abord dans 'data', puis directement dans notification
       'interventionId': additionalData?['interventionId'] ??

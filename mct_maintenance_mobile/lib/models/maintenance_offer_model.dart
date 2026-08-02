@@ -3,6 +3,7 @@ class MaintenanceOffer {
   final String title;
   final String description;
   final double price;
+  final String? priceNote;
   final int duration; // durée en mois
   final List<String> features;
   final bool isActive;
@@ -14,6 +15,7 @@ class MaintenanceOffer {
     required this.title,
     required this.description,
     required this.price,
+    this.priceNote,
     required this.duration,
     required this.features,
     required this.isActive,
@@ -27,6 +29,7 @@ class MaintenanceOffer {
       title: json['title'] ?? 'Offre sans titre',
       description: json['description'] ?? '',
       price: (json['price'] ?? 0.0).toDouble(),
+      priceNote: json['priceNote'] ?? json['price_note'],
       duration: json['duration'] is int ? json['duration'] : int.tryParse(json['duration'].toString()) ?? 12,
       features: json['features'] != null ? List<String>.from(json['features']) : [],
       isActive: json['isActive'] ?? json['is_active'] ?? true,
@@ -41,6 +44,7 @@ class MaintenanceOffer {
       'title': title,
       'description': description,
       'price': price,
+      'priceNote': priceNote,
       'duration': duration,
       'features': features,
       'isActive': isActive,

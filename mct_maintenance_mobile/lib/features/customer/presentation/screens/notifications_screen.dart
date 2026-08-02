@@ -131,6 +131,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     // Créer l'objet de données pour la navigation
     final Map<String, dynamic> notificationData = {
       'type': notification['type'],
+      'title': notification['title'],
+      'message': notification['message'],
       'role': notification['role'] ??
           'customer', // Par défaut customer pour cet écran
       // Essayer d'abord dans 'data', puis directement dans notification (pour compatibilité)

@@ -60,8 +60,8 @@ class SchedulingService {
         throw new Error('Intervention déjà assignée');
       }
 
-      // 2. Récupérer tous les techniciens actifs et disponibles avec coordonnées (SQL directe)
-      const technicians = await sequelize.query(`
+      // 2. Récupérer tous les techniciens actifs et disponibles (avec fallback si aucun 'available')
+      let technicians = await sequelize.query(`
         SELECT 
           u.id, 
           u.first_name, 
@@ -82,7 +82,36 @@ class SchedulingService {
       });
 
       if (technicians.length === 0) {
-        throw new Error('Aucun technicien disponible');
+        console.log('ℹ️ Aucun technicien en statut "available", fallback sur tous les techniciens actifs...');
+        technicians = await sequelize.query(`
+          SELECT 
+            u.id, 
+            u.first_name, 
+            u.last_name, 
+            u.email, 
+            u.phone, 
+            u.profile_image,
+            tp.current_location_lat AS latitude,
+            tp.current_location_lng AS longitude,
+            COALESCE(tp.availability_status, 'offline') AS availability_status
+          FROM users u
+          LEFT JOIN technician_profiles tp ON tp.user_id = u.id
+          WHERE u.role = 'technician' 
+            AND u.status = 'active'
+        `, {
+          type: sequelize.QueryTypes.SELECT
+        });
+      }
+
+      if (technicians.length === 0) {
+        console.log('⚠️ Aucun technicien actif trouvé dans le système.');
+        return {
+          intervention,
+          suggestions: [],
+          total: 0,
+          weights,
+          generated_at: new Date()
+        };
       }
 
       // 3. Calculer les scores pour chaque technicien
@@ -118,8 +147,8 @@ class SchedulingService {
           weights
         );
 
-        // Filtrer techniciens trop éloignés
-        if (scores.distance_km > this.MAX_DISTANCE_KM) {
+        // Ne pas exclure si la liste de suggestions est encore courte
+        if (scores.distance_km > this.MAX_DISTANCE_KM && suggestions.length >= 3) {
           continue;
         }
 
@@ -129,6 +158,7 @@ class SchedulingService {
           email: technician.email,
           phone: technician.phone,
           avatar: technician.profile_image,
+          availability_status: technician.availability_status || 'offline',
           total_score: scores.total_score,
           daily_interventions: dailyCount,
           details: {
@@ -147,8 +177,13 @@ class SchedulingService {
         });
       }
 
-      // 4. Trier par score décroissant
-      suggestions.sort((a, b) => b.total_score - a.total_score);
+      // 4. Trier : Techniciens en ligne/disponibles en premier, puis par score décroissant
+      suggestions.sort((a, b) => {
+        const isAvailA = a.availability_status === 'available' ? 1 : 0;
+        const isAvailB = b.availability_status === 'available' ? 1 : 0;
+        if (isAvailA !== isAvailB) return isAvailB - isAvailA;
+        return b.total_score - a.total_score;
+      });
 
       // 5. Limiter résultats
       const maxResults = options.max_results || 5;
@@ -526,7 +561,7 @@ class SchedulingService {
       const intervention = await Intervention.findByPk(interventionId, {
         include: [
           {
-            model: require('../models').Customer,
+            model: require('../models').CustomerProfile,
             as: 'customer',
             include: [{ model: require('../models').User, as: 'user' }]
           }
@@ -546,38 +581,40 @@ class SchedulingService {
         status: 'assigned'
       });
 
-      // 3. Envoyer les notifications
-      const notificationService = require('./notificationService');
-      
-      // Notification au technicien
-      await notificationService.create({
-        userId: bestTechnician.technician_id,
-        type: 'intervention_assigned',
-        title: '🔧 Nouvelle intervention assignée (Auto)',
-        message: `Une intervention vous a été assignée automatiquement à ${intervention.address}.`,
-        data: {
-          intervention_id: intervention.id,
-          role: 'technician'
-        },
-        priority: 'high',
-        actionUrl: `/interventions/${intervention.id}`
-      });
-
-      // Notification au client
-      if (intervention.customer && intervention.customer.user_id) {
+      // 3. Envoyer les notifications, sauf lorsqu'un orchestrateur durable les prend en charge.
+      if (options.sendNotifications !== false) {
+        const notificationService = require('./notificationService');
+        const notificationKey = options.notificationIdempotencyKey || null;
         await notificationService.create({
-          userId: intervention.customer.user_id,
-          type: 'technician_found',
-          title: '✅ Technicien assigné',
-          message: `Bonne nouvelle ! Le technicien ${bestTechnician.name} a été assigné à votre demande d'intervention.`,
+          userId: bestTechnician.technician_id,
+          type: 'intervention_assigned',
+          title: '🔧 Nouvelle intervention assignée (Auto)',
+          message: `Une intervention vous a été assignée automatiquement à ${intervention.address}.`,
           data: {
             intervention_id: intervention.id,
-            technician_id: bestTechnician.technician_id,
-            role: 'client'
+            role: 'technician'
           },
           priority: 'high',
-          actionUrl: `/interventions/${intervention.id}`
+          actionUrl: `/interventions/${intervention.id}`,
+          idempotencyKey: notificationKey ? `${notificationKey}:technician` : null
         });
+
+        if (intervention.customer && intervention.customer.user_id) {
+          await notificationService.create({
+            userId: intervention.customer.user_id,
+            type: 'technician_assigned',
+            title: '✅ Technicien assigné',
+            message: `Bonne nouvelle ! Le technicien ${bestTechnician.name} a été assigné à votre demande d'intervention.`,
+            data: {
+              intervention_id: intervention.id,
+              technician_id: bestTechnician.technician_id,
+              role: 'client'
+            },
+            priority: 'high',
+            actionUrl: `/interventions/${intervention.id}`,
+            idempotencyKey: notificationKey ? `${notificationKey}:customer` : null
+          });
+        }
       }
 
       // 4. Retourner résultat

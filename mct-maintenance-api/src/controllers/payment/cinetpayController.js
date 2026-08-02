@@ -545,15 +545,15 @@ const handleDiagnosticNotification = async (req, res) => {
             await notificationService.create({
               userId: intervention.customer.user_id,
               type: 'diagnostic_payment_confirmed',
-              title: '✅ Frais de diagnostic payés',
-              message: `Votre paiement des frais de diagnostic a été confirmé. Le technicien va finaliser son rapport.`,
+              title: '✅ Paiement d\'intervention confirmé',
+              message: `Votre paiement pour l'intervention #${interventionId} a été confirmé. Notre équipe s'en occupe.`,
               data: {
                 interventionId: interventionId,
                 intervention_id: interventionId
               },
               priority: 'high'
             });
-            console.log(`📲 Notification diagnostic envoyée au client`);
+            console.log(`📲 Notification d'intervention envoyée au client`);
           }
           
           // Notification au technicien
@@ -561,8 +561,8 @@ const handleDiagnosticNotification = async (req, res) => {
             await notificationService.create({
               userId: intervention.technician_id,
               type: 'diagnostic_payment_confirmed',
-              title: '💳 Frais de diagnostic payés',
-              message: `Le client a payé les frais de diagnostic pour l'intervention #${interventionId}. Vous pouvez finaliser le rapport.`,
+              title: '💳 Intervention confirmée',
+              message: `Le client a payé/validé l'intervention #${interventionId}. Vous pouvez intervenir.`,
               data: {
                 interventionId: interventionId,
                 intervention_id: interventionId,
@@ -570,7 +570,7 @@ const handleDiagnosticNotification = async (req, res) => {
               },
               priority: 'high'
             });
-            console.log(`📲 Notification diagnostic envoyée au technicien`);
+            console.log(`📲 Notification d'intervention envoyée au technicien`);
           }
           
           // Notification aux admins et managers
@@ -578,8 +578,8 @@ const handleDiagnosticNotification = async (req, res) => {
             `${intervention.customer.first_name} ${intervention.customer.last_name || ''}`.trim() : 'Un client';
           await notificationService.notifyAdmins({
             type: 'diagnostic_payment_received',
-            title: '💰 Paiement diagnostic reçu',
-            message: `Paiement des frais de diagnostic reçu de ${customerName} (intervention #${interventionId})`,
+            title: '💰 Paiement d\'intervention reçu',
+            message: `Paiement reçu de ${customerName} (intervention #${interventionId})`,
             data: {
               interventionId: interventionId,
               intervention_id: interventionId,

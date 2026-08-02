@@ -23,6 +23,15 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    interventionId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'intervention_id',
+      references: {
+        model: 'interventions',
+        key: 'id'
+      }
+    },
     amount: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
@@ -34,19 +43,65 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Devise (XOF pour Franc CFA)'
     },
     provider: {
-      type: DataTypes.ENUM('stripe', 'wave', 'orange_money', 'mtn_money', 'moov_money', 'cash'),
+      type: DataTypes.STRING(32),
       allowNull: false,
+      validate: {
+        isIn: [[
+          'fineopay',
+          'stripe',
+          'wave',
+          'orange_money',
+          'mtn_money',
+          'moov_money',
+          'cash'
+        ]]
+      },
       comment: 'Provider de paiement utilisé'
     },
     paymentId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(255),
       field: 'payment_id',
       comment: 'ID du paiement chez le provider'
     },
     status: {
-      type: DataTypes.ENUM('pending', 'processing', 'succeeded', 'failed', 'refunded', 'cancelled', 'completed'),
+      type: DataTypes.STRING(32),
       defaultValue: 'pending',
+      validate: {
+        isIn: [[
+          'pending',
+          'processing',
+          'succeeded',
+          'failed',
+          'refunded',
+          'cancelled',
+          'completed'
+        ]]
+      },
       comment: 'Statut du paiement'
+    },
+    paymentStep: {
+      type: DataTypes.SMALLINT,
+      allowNull: true,
+      field: 'payment_step'
+    },
+    purpose: {
+      type: DataTypes.STRING(32),
+      allowNull: true
+    },
+    syncRef: {
+      type: DataTypes.STRING(191),
+      allowNull: true,
+      field: 'sync_ref'
+    },
+    gatewayCheckoutId: {
+      type: DataTypes.STRING(191),
+      allowNull: true,
+      field: 'gateway_checkout_id'
+    },
+    verifiedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: 'verified_at'
     },
     paymentMethod: {
       type: DataTypes.STRING,
@@ -107,7 +162,9 @@ module.exports = (sequelize, DataTypes) => {
         fields: ['order_id']
       },
       {
-        fields: ['payment_id']
+        name: 'payments_provider_payment_id_uq',
+        unique: true,
+        fields: ['provider', 'payment_id']
       },
       {
         fields: ['status']
@@ -127,6 +184,11 @@ module.exports = (sequelize, DataTypes) => {
     Payment.belongsTo(models.Subscription, {
       foreignKey: 'subscriptionId',
       as: 'subscription'
+    });
+
+    Payment.belongsTo(models.Intervention, {
+      foreignKey: 'interventionId',
+      as: 'intervention'
     });
   };
 

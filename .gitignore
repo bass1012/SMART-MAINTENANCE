@@ -78,3 +78,10 @@ node_modules/
 
 # Builds locaux
 releases/
+*.xcarchive
+tmp.xcarchive/
+
+# Patchs et résidus de merge
+*.orig
+*.rej
+

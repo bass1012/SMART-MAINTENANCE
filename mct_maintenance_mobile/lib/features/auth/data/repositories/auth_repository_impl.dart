@@ -4,12 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart'
     show AppConfig;
 import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:mct_maintenance_mobile/services/fcm_service.dart';
+import 'package:mct_maintenance_mobile/services/local_cache_service.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final BaseApiService _apiService;
@@ -125,7 +127,23 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<String> uploadAvatar(String imagePath) async {
-    final file = await http.MultipartFile.fromPath('avatar', imagePath);
+    String mimeType = 'image/jpeg';
+    final lowerPath = imagePath.toLowerCase();
+    if (lowerPath.endsWith('.png')) {
+      mimeType = 'image/png';
+    } else if (lowerPath.endsWith('.gif')) {
+      mimeType = 'image/gif';
+    } else if (lowerPath.endsWith('.webp')) {
+      mimeType = 'image/webp';
+    } else if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
+      mimeType = 'image/jpeg';
+    }
+
+    final file = await http.MultipartFile.fromPath(
+      'avatar',
+      imagePath,
+      contentType: http_parser.MediaType.parse(mimeType),
+    );
     final response = await _apiService
         .multipart('POST', '/api/upload/avatar', files: [file]);
 
@@ -134,7 +152,7 @@ class AuthRepositoryImpl implements AuthRepository {
       // Le backend peut renvoyer data['url'] ou data['data']['url']
       return data['data']?['url'] ?? data['url'] ?? '';
     } else {
-      throw Exception(data['message'] ?? 'Échec de l\'upload de l\'avatar');
+      throw Exception(data['message'] ?? data['error'] ?? 'Échec de l\'upload de l\'avatar');
     }
   }
 
@@ -338,6 +356,12 @@ class AuthRepositoryImpl implements AuthRepository {
       await FCMService().setAuthToken(null);
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Erreur suppression FCM token: $e');
+    }
+
+    try {
+      await LocalCacheService().clearAllData();
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Erreur vidage LocalCacheService: $e');
     }
   }
 }

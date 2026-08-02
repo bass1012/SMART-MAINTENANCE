@@ -67,8 +67,9 @@ deploy_dashboard() {
     
     # Envoyer vers le serveur
     echo -e "   ${YELLOW}📤 Envoi vers le serveur...${NC}"
-    ssh $SERVER_USER@$SERVER_IP "mkdir -p $APP_DIR/dashboard"
+    ssh $SERVER_USER@$SERVER_IP "mkdir -p $APP_DIR/dashboard $APP_DIR/mct-maintenance-dashboard/build"
     rsync -avz --delete build/ $SERVER_USER@$SERVER_IP:$APP_DIR/dashboard/
+    rsync -avz --delete build/ $SERVER_USER@$SERVER_IP:$APP_DIR/mct-maintenance-dashboard/build/
     
     cd ..
     

@@ -192,7 +192,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                         ),
                                       ),
                                       Text(
-                                        '${_formatAmount(halfAmount)} FCFA maintenant + ${_formatAmount(halfAmount)} FCFA après la 3ᵉ intervention',
+                                        '${_formatAmount(halfAmount)} FCFA maintenant + ${_formatAmount(halfAmount)} FCFA après l\'intervention',
                                         style: const TextStyle(
                                             fontSize: 11, color: Colors.grey),
                                       ),
@@ -502,83 +502,6 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
       if (kDebugMode) debugPrint('💰 Premier paiement (50%): $firstPaymentAmount FCFA');
 
       if (mounted) {
-        // Si c'est une intervention planifiée pour plus tard
-        if (!executeNow && scheduledDate != null) {
-          // Afficher confirmation avec date planifiée, pas de redirection paiement
-          final formattedDate =
-              '${scheduledDate.day.toString().padLeft(2, '0')}/${scheduledDate.month.toString().padLeft(2, '0')}/${scheduledDate.year}';
-          final formattedTime =
-              '${scheduledDate.hour.toString().padLeft(2, '0')}:${scheduledDate.minute.toString().padLeft(2, '0')}';
-
-          await showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              icon:
-                  const Icon(Icons.check_circle, color: Colors.green, size: 48),
-              title: const Text('Devis accepté'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Votre intervention est planifiée pour :',
-                    style: TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0a543d).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.calendar_today,
-                            color: Color(0xFF0a543d)),
-                        const SizedBox(width: 8),
-                        Text(
-                          '$formattedDate à $formattedTime',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Color(0xFF0a543d),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Le paiement sera effectué le jour de l\'intervention.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0a543d),
-                  ),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-
-          if (mounted) {
-            Navigator.pop(context, true);
-          }
-          return;
-        }
-
-        // Exécution immédiate → rediriger vers paiement
-        if (mounted) {
-          SnackBarHelper.showSuccess(context, 'Devis accepté avec succès',
-              emoji: '✓');
-        }
-
         // Utiliser order_id retourné directement par acceptQuote (pas de race condition)
         Map<String, dynamic> recentOrder = {};
         final directOrderId = acceptResponse['order_id'];
@@ -625,38 +548,37 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
             // Paiement intégral (100%)
             amountToPay = _quote.amount;
             paymentStep = 0; // 0 = paiement complet
-            print(
-                '💰 Paiement intégral: ${_formatAmount(amountToPay)} FCFA (100%)');
+            if (kDebugMode) {
+              debugPrint('💰 Paiement intégral: ${_formatAmount(amountToPay)} FCFA (100%)');
+            }
           } else if (firstPaymentAmount != null && firstPaymentAmount > 0) {
             amountToPay = firstPaymentAmount;
             paymentStep = 1;
-            print(
-                '💰 Paiement split (API): ${_formatAmount(amountToPay)} FCFA (50% - étape 1)');
+            if (kDebugMode) {
+              debugPrint('💰 Paiement split (API): ${_formatAmount(amountToPay)} FCFA (50% - étape 1)');
+            }
           } else if (_quote.paymentType == 'split' &&
               _quote.firstPaymentAmount != null) {
             amountToPay = _quote.firstPaymentAmount!;
             paymentStep = 1;
-            print(
-                '💰 Paiement split (quote): ${_formatAmount(amountToPay)} FCFA (50% - étape 1)');
+            if (kDebugMode) {
+              debugPrint('💰 Paiement split (quote): ${_formatAmount(amountToPay)} FCFA (50% - étape 1)');
+            }
           } else {
             // Fallback: utiliser le montant de la commande directement
-            // Note: totalAmount de la commande est DÉJÀ le montant 50% pour split payment
             final orderAmount = recentOrder['totalAmount'];
             if (orderAmount != null && orderAmount > 0) {
               amountToPay = (orderAmount as num).toDouble();
-              print(
-                  '💰 Paiement (order totalAmount): ${_formatAmount(amountToPay)} FCFA');
             } else {
-              // Si pas de totalAmount, calculer 50% du total du devis
               amountToPay = (_quote.amount / 2).ceilToDouble();
-              print(
-                  '💰 Paiement (quote 50%): ${_formatAmount(amountToPay)} FCFA');
             }
             paymentStep = 1;
           }
 
-          // Naviguer directement vers l'écran de paiement
-          Navigator.pushReplacement(
+          setState(() => _isLoading = false);
+
+          // Naviguer vers l'écran de paiement et attendre le résultat
+          final paymentSuccess = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
               builder: (context) => PaymentScreen(
@@ -667,9 +589,84 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
               ),
             ),
           );
-        } else {
-          // Aucune commande trouvée (order_id absent et fallback GET /orders vide)
+
+          // Après le retour de l'écran de paiement, si c'était une intervention planifiée et que le paiement a réussi
           if (mounted) {
+            if (!executeNow && scheduledDate != null) {
+              if (paymentSuccess == true) {
+                final formattedDate =
+                    '${scheduledDate.day.toString().padLeft(2, '0')}/${scheduledDate.month.toString().padLeft(2, '0')}/${scheduledDate.year}';
+                final formattedTime =
+                    '${scheduledDate.hour.toString().padLeft(2, '0')}:${scheduledDate.minute.toString().padLeft(2, '0')}';
+
+                await showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    icon: const Icon(Icons.check_circle, color: Colors.green, size: 48),
+                    title: const Text('Intervention planifiée avec succès !'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Votre paiement a été confirmé et l\'intervention est planifiée pour :',
+                          style: TextStyle(fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0a543d).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.calendar_today, color: Color(0xFF0a543d)),
+                              const SizedBox(width: 8),
+                              Text(
+                                '$formattedDate à $formattedTime',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Color(0xFF0a543d),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0a543d),
+                        ),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                SnackBarHelper.showWarning(
+                  context,
+                  'Paiement non finalisé. Vous pouvez régler le paiement à tout moment ci-dessous.',
+                );
+              }
+            } else if (executeNow && paymentSuccess == true) {
+              SnackBarHelper.showSuccess(
+                context,
+                'Paiement confirmé et intervention transmise avec succès !',
+                emoji: '🟢',
+              );
+            }
+            await _refreshQuote();
+          }
+        } else {
+          // Aucune commande trouvée
+          if (mounted) {
+            setState(() => _isLoading = false);
             Navigator.pop(context, true);
           }
         }
@@ -1150,133 +1147,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                       ),
                     if (_quote.items.isNotEmpty) const SizedBox(height: 16),
 
-                    const SizedBox(height: 24),
-
-                    // Explication des options de paiement pour les devis en attente
-                    if (_quote.status == 'pending' || _quote.status == 'sent')
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: Colors.blue.shade400, width: 1.5),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.payment,
-                                  color: Colors.blue.shade700,
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 10),
-                                const Expanded(
-                                  child: Text(
-                                    'Options de paiement',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            // Option 1 - 50%
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              margin: const EdgeInsets.only(bottom: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.looks_one,
-                                      color: Colors.blue.shade600, size: 28),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Payer 50% maintenant',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${_formatAmount((_quote.amount / 2).ceil())} FCFA à l\'acceptation + ${_formatAmount((_quote.amount / 2).ceil())} FCFA après la 3ᵉ intervention',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Option 2 - 100%
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.looks_two,
-                                      color: Colors.green.shade600, size: 28),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Payer la totalité',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${_formatAmount(_quote.amount.toInt())} FCFA en une seule fois',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Vous pourrez choisir votre option lors de l\'acceptation du devis.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontStyle: FontStyle.italic,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    const SizedBox(height: 16),
 
                     // Boutons d'action
                     if (_quote.status == 'pending' || _quote.status == 'sent')
@@ -1359,41 +1230,153 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                   const SizedBox(height: 12),
                                   const Divider(),
                                   const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        _quote.paymentStatus == 'paid'
-                                            ? Icons.payment
-                                            : _quote.paymentStatus == 'deferred'
-                                                ? Icons.schedule
-                                                : Icons.hourglass_empty,
-                                        color: _quote.paymentStatus == 'paid'
-                                            ? Colors.green.shade700
-                                            : _quote.paymentStatus == 'deferred'
-                                                ? Colors.blue.shade700
-                                                : Colors.orange.shade700,
-                                        size: 20,
+
+                                  // 1. Paiement 100% complet (status 'paid' ou second paiement effectué)
+                                  if (_quote.paymentStatus == 'paid' ||
+                                      _quote.secondPaymentStatus == 'paid') ...[
+                                    if (_quote.paymentType == 'split' &&
+                                        _quote.firstPaymentStatus == 'paid' &&
+                                        _quote.secondPaymentStatus == 'paid') ...[
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green.shade700,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Premier paiement (acompte 50%) effectué',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.green.shade700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _quote.paymentStatus == 'paid'
-                                            ? 'Paiement effectué'
-                                            : _quote.paymentStatus == 'deferred'
-                                                ? 'Paiement reporté'
-                                                : 'Paiement en attente',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          color: _quote.paymentStatus == 'paid'
-                                              ? Colors.green.shade700
-                                              : _quote.paymentStatus ==
-                                                      'deferred'
-                                                  ? Colors.blue.shade700
-                                                  : Colors.orange.shade700,
-                                        ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green.shade700,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Deuxième paiement (solde 50%) effectué',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.green.shade700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ] else ...[
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.check_circle,
+                                            color: Colors.green.shade700,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Paiement intégral (100%) effectué',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.green.shade700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
-                                  ),
+                                  ]
+                                  // 2. Premier paiement seul (Acompte payé, solde en attente)
+                                  else if (_quote.firstPaymentStatus == 'paid' ||
+                                      _quote.paymentStatus == 'partial') ...[
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle,
+                                          color: Colors.green.shade700,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Premier paiement (acompte 50%) effectué',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.green.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.hourglass_empty,
+                                          color: Colors.orange.shade700,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Paiement du solde (50%) en attente',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.orange.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ]
+                                  // 3. Aucun paiement effectué
+                                  else ...[
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          _quote.paymentStatus == 'deferred'
+                                              ? Icons.schedule
+                                              : Icons.hourglass_empty,
+                                          color: _quote.paymentStatus == 'deferred'
+                                              ? Colors.blue.shade700
+                                              : Colors.orange.shade700,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            _quote.paymentStatus == 'deferred'
+                                                ? 'Paiement reporté'
+                                                : 'Paiement en attente',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                              color: _quote.paymentStatus == 'deferred'
+                                                  ? Colors.blue.shade700
+                                                  : Colors.orange.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ],
                             ),
@@ -1412,7 +1395,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
                                       ? (_quote.firstPaymentStatus == 'paid' || _quote.secondPaymentStatus == 'paid'
                                           ? 'Payer le solde (50%) : ${_formatAmount(((_quote.secondPaymentAmount ?? (_quote.amount - (_quote.firstPaymentAmount ?? (_quote.amount / 2).ceilToDouble()))).clamp(0, double.infinity)))} FCFA'
                                           : 'Payer l\'acompte (50%) : ${_formatAmount((_quote.firstPaymentAmount ?? (_quote.amount / 2).ceilToDouble()))} FCFA')
-                                      : 'Payer le solde : ${_formatAmount(_quote.amount)} FCFA',
+                                      : 'Payer la totalité : ${_formatAmount(_quote.amount)} FCFA',
                                   style: const TextStyle(fontSize: 16),
                                 ),
                                 style: ElevatedButton.styleFrom(

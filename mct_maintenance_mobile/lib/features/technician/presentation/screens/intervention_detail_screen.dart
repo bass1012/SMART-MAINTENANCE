@@ -219,47 +219,69 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         });
 
         SnackBarHelper.showSuccess(
-            context, response['message'] ?? 'Action effectuée avec succès',
+            context, response['message'] ?? 'Intervention terminée avec succès',
             emoji: '✓');
-
-        // Si l'intervention est terminée, proposer de créer un rapport
-        if (_intervention['status'] == 'completed') {
-          // Afficher un dialogue pour proposer de créer le rapport
-          final createReport = await showDialog<bool>(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              title: const Text('Intervention terminée'),
-              content: const Text(
-                'L\'intervention est maintenant terminée. Voulez-vous créer le rapport maintenant ?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Plus tard'),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0a543d),
-                  ),
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Créer le rapport'),
-                ),
-              ],
-            ),
-          );
-
-          if (createReport == true && mounted) {
-            // Aller à l'écran de création de rapport
-            await _goToReport();
-          }
-        }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         SnackBarHelper.showError(context, 'Erreur: $e');
       }
+    }
+  }
+
+  Future<void> _reloadIntervention() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final interventionRepository = context.read<InterventionRepository>();
+      final response = await interventionRepository
+          .getInterventionById(_intervention['id']);
+      if (response['success'] == true && response['data'] != null) {
+        if (mounted) {
+          setState(() {
+            _intervention = Map<String, dynamic>.from(response['data']);
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Erreur rechargement intervention: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _onStartPressed() async {
+    final interventionType =
+        (_intervention['intervention_type'] ?? '').toString().toLowerCase();
+
+    final requiresDiagnosticReport = interventionType == 'diagnostic' ||
+        interventionType == 'repair' ||
+        interventionType == 'reparation' ||
+        interventionType == 'réparation' ||
+        interventionType == 'installation' ||
+        interventionType == 'depannage' ||
+        interventionType == 'dépannage';
+
+    if (!requiresDiagnosticReport) {
+      // Intervention de type Maintenance : ouvrir le constat initial (Étape 1)
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CreateReportScreen(
+            intervention: _intervention,
+            isInitialStep: true,
+          ),
+        ),
+      );
+      if (result == true && mounted) {
+        await _reloadIntervention();
+      }
+    } else {
+      // Diagnostic, réparation, etc. : démarrer directement
+      await _performAction('start');
     }
   }
 
@@ -823,19 +845,6 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         );
         break;
 
-      case 'execution_confirmed':
-        // Exécution confirmée: technicien doit démarrer l'exécution
-        mainButton = ElevatedButton.icon(
-          onPressed: _isLoading ? null : () => _performAction('in_progress'),
-          icon: const Icon(Icons.play_arrow),
-          label: const Text('Exécuter la tâche'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0a543d),
-            minimumSize: const Size(double.infinity, 50),
-          ),
-        );
-        break;
-
       case 'accepted':
         mainButton = ElevatedButton.icon(
           onPressed: _isLoading ? null : () => _performAction('on_the_way'),
@@ -861,54 +870,8 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         break;
 
       case 'arrived':
-        // COMMENTÉ TEMPORAIREMENT POUR LES TESTS - Scanner QR désactivé
-        // TODO: Réactiver le scan QR plus tard
-        /*
-        // Si le split n'a pas encore été scanné, afficher le bouton de scan
-        if (_scannedSplit == null && _intervention['split_id'] == null) {
-          mainButton = Column(
-            children: [
-              // Message d'avertissement
-              Container(
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.qr_code_scanner, color: Colors.orange.shade700),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Veuillez scanner le QR code du split avant de démarrer l\'intervention',
-                        style: TextStyle(color: Colors.orange.shade800),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Bouton de scan
-              ElevatedButton.icon(
-                onPressed: _isLoading ? null : _scanSplitQR,
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Scanner le Split'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-              ),
-            ],
-          );
-        } else {
-        */
-        // Split déjà scanné, afficher les infos et le bouton démarrer
         mainButton = Column(
           children: [
-            // Afficher les infos du split scanné
             if (_scannedSplit != null) _buildScannedSplitInfo(),
             if (_scannedSplit != null) const SizedBox(height: 12),
             Row(
@@ -929,7 +892,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : () => _performAction('start'),
+                    onPressed: _isLoading ? null : _onStartPressed,
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Démarrer', style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
@@ -943,42 +906,72 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
             ),
           ],
         );
-        // } // Fin du bloc commenté
         break;
 
-      case 'in_progress':
+      case 'quote_accepted':
+        mainButton = Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.amber.shade300),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.hourglass_top, color: Colors.amber.shade800),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Devis accepté par le client. En attente de la confirmation du paiement.',
+                  style: TextStyle(color: Colors.amber.shade900, fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        );
+        break;
+
+      case 'execution_confirmed':
         mainButton = ElevatedButton.icon(
-          onPressed: _isLoading ? null : () => _performAction('complete'),
-          icon: const Icon(Icons.done),
-          label: const Text('Terminer l\'intervention'),
+          onPressed: _isLoading ? null : () => _performAction('start'),
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('Démarrer l\'intervention'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
+            backgroundColor: const Color(0xFF0a543d),
+            foregroundColor: Colors.white,
             minimumSize: const Size(double.infinity, 50),
           ),
         );
         break;
 
-      case 'completed':
-        // Vérifier si un rapport a déjà été soumis
-        final hasReport = _intervention['report_submitted_at'] != null;
+      case 'in_progress':
+        final rawType = (_intervention['intervention_type'] ?? _intervention['type'] ?? '').toString().toLowerCase();
+        final hasQuote = _intervention['quote_id'] != null;
 
-        if (hasReport) {
-          // Si rapport déjà soumis, afficher bouton "Voir le rapport"
+        // Cas spécial : tâche d'exécution post-devis payé
+        // -> le technicien a déjà fait le diagnostic + devis, donc pas de rapport supplémentaire
+        final isPostQuoteExecution = rawType == 'execution' || (hasQuote && rawType == 'execution');
+
+        if (isPostQuoteExecution) {
+          // Pas de rapport : terminer directement
           mainButton = ElevatedButton.icon(
-            onPressed: _isLoading ? null : _viewReport,
-            icon: const Icon(Icons.visibility),
-            label: const Text('Voir le rapport'),
+            onPressed: _isLoading ? null : () => _performAction('complete'),
+            icon: const Icon(Icons.done),
+            label: const Text('Terminer l\'intervention'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 50),
             ),
           );
         } else {
-          // Sinon, afficher bouton "Créer le rapport"
+          // Pour toutes les autres interventions : le technicien rédige un rapport
+          // Diagnostic / dépannage / installation / réparation -> rapport de diagnostic
+          // Maintenance / entretien -> rapport de maintenance (CreateReportScreen)
           mainButton = ElevatedButton.icon(
             onPressed: _isLoading ? null : _goToReport,
-            icon: const Icon(Icons.description),
-            label: const Text('Créer le rapport'),
+            icon: const Icon(Icons.assignment),
+            label: const Text('Rédiger le rapport'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0a543d),
               minimumSize: const Size(double.infinity, 50),
@@ -987,17 +980,21 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         }
         break;
 
+      case 'completed':
       case 'diagnostic_submitted':
-        // Rapport de diagnostic soumis - afficher bouton "Voir le rapport"
-        mainButton = ElevatedButton.icon(
-          onPressed: _isLoading ? null : _viewReport,
-          icon: const Icon(Icons.visibility),
-          label: const Text('Voir le rapport de diagnostic'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
-            minimumSize: const Size(double.infinity, 50),
-          ),
-        );
+        final hasReport = _intervention['report_submitted_at'] != null || _intervention['report_data'] != null || _intervention['diagnostic_report_id'] != null;
+
+        if (hasReport) {
+          mainButton = ElevatedButton.icon(
+            onPressed: _isLoading ? null : _viewReport,
+            icon: const Icon(Icons.visibility),
+            label: const Text('Voir le rapport de diagnostic'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              minimumSize: const Size(double.infinity, 50),
+            ),
+          );
+        }
         break;
 
       default:

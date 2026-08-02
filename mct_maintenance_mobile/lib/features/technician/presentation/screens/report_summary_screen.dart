@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:mct_maintenance_mobile/config/environment.dart' show AppConfig;
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -23,6 +25,17 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
   late final InterventionRepository _interventionRepository;
   bool _isLoading = false;
 
+  static const Map<String, String> _taskLabels = {
+    'filtres_air': 'Nettoyage des filtres à air',
+    'batterie_evaporateur': 'Nettoyage de la batterie évaporateur',
+    'bacs_condensat': 'Nettoyage des bacs à condensat',
+    'turbine': 'Nettoyage de la turbine',
+    'volets_air': 'Nettoyage des volets d\'air',
+    'carrosserie_evaporateur': 'Nettoyage de la carrosserie évaporateur',
+    'tuyauterie_evacuation':
+        'Soufflement à forte pression de la tuyauterie d\'évacuation des condensats',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +52,6 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
       );
 
       if (mounted) {
-        // Vérifier si le rapport a été mis en queue (mode offline)
         if (response['queued'] == true) {
           SnackBarHelper.showSuccess(
             context,
@@ -56,7 +68,6 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
           );
         }
 
-        // Retourner avec succès (2 pops pour revenir à l'écran de détail)
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -81,45 +92,12 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     final observations = reportData['observations'] ?? '';
     final workDescription = reportData['work_description'] ?? '';
 
-    // Mesures techniques
-    final pression = reportData['pression'] ?? '';
-    final puissance = reportData['puissance'] ?? '';
-    final intensite = reportData['intensite'] ?? '';
-    final tension = reportData['tension'] ?? '';
-    final freon = reportData['freon'] ?? '';
-
-    // Créer le message de partage
     String materialsText = '';
     if (materials.isNotEmpty) {
       materialsText = '\n📦 Matériaux utilisés:\n';
       for (var material in materials) {
         materialsText +=
-            '  • ${material['name']} - Qté: ${material['quantity']} - ${material['unit_price']} FCFA\n';
-      }
-    }
-
-    // Mesures techniques texte
-    String measuresText = '';
-    if (pression.toString().isNotEmpty ||
-        puissance.toString().isNotEmpty ||
-        intensite.toString().isNotEmpty ||
-        tension.toString().isNotEmpty ||
-        freon.toString().isNotEmpty) {
-      measuresText = '\n📊 Mesures techniques:\n';
-      if (pression.toString().isNotEmpty) {
-        measuresText += '  • Pression: $pression bar\n';
-      }
-      if (puissance.toString().isNotEmpty) {
-        measuresText += '  • Puissance: $puissance CV\n';
-      }
-      if (intensite.toString().isNotEmpty) {
-        measuresText += '  • Intensité: $intensite A\n';
-      }
-      if (tension.toString().isNotEmpty) {
-        measuresText += '  • Tension: $tension V\n';
-      }
-      if (freon.toString().isNotEmpty) {
-        measuresText += '  • Fréon: $freon Kg\n';
+            '  • ${material['name']} - Qté: ${material['quantity']}\n';
       }
     }
 
@@ -130,19 +108,17 @@ Intervention #${intervention['id']}
 ${intervention['title'] ?? 'Sans titre'}
 
 📅 Date: ${dateFormat.format(DateTime.now())}
-⏱️ Durée: ${duration}h
+⏱️ Durée: ${duration}min
 
 📝 Description des travaux:
 $workDescription
-$measuresText
-${observations.isNotEmpty ? '💡 Observations:\n$observations\n' : ''}
+${observations.isNotEmpty ? '\n💡 Observations:\n$observations\n' : ''}
 $materialsText
 ---
 Smart Maintenance - Service de qualité
     '''
         .trim();
 
-    // Obtenir la position du bouton pour iOS
     final box = context.findRenderObject() as RenderBox?;
     final sharePositionOrigin =
         box != null ? box.localToGlobal(Offset.zero) & box.size : null;
@@ -168,33 +144,96 @@ Smart Maintenance - Service de qualité
     return customer.toString();
   }
 
+  Widget _buildPhotoThumbnail(String rawPath) {
+    final pathLower = rawPath.toLowerCase();
+    final isVideo = pathLower.endsWith('.mp4') ||
+        pathLower.endsWith('.mov') ||
+        pathLower.endsWith('.avi');
+    final isNetwork = rawPath.startsWith('http://') ||
+        rawPath.startsWith('https://') ||
+        rawPath.startsWith('/uploads/');
+
+    if (isVideo) {
+      return Container(
+        width: 84,
+        height: 84,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.videocam, size: 28, color: Colors.grey.shade600),
+            const SizedBox(height: 2),
+            Text('Vidéo',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+          ],
+        ),
+      );
+    } else if (isNetwork) {
+      final fullUrl = rawPath.startsWith('/uploads/')
+          ? '${AppConfig.baseUrl}$rawPath'
+          : rawPath;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          fullUrl,
+          width: 84,
+          height: 84,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            width: 84,
+            height: 84,
+            color: Colors.grey.shade200,
+            child: const Icon(Icons.broken_image, color: Colors.grey),
+          ),
+        ),
+      );
+    } else {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          File(rawPath),
+          width: 84,
+          height: 84,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            width: 84,
+            height: 84,
+            color: Colors.grey.shade200,
+            child: const Icon(Icons.broken_image, color: Colors.grey),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final reportData = widget.reportData;
     final dateFormat = DateFormat('dd/MM/yyyy', 'fr_FR');
 
-    // === SECTION ÉQUIPEMENTS (nouveau format) ===
+    // Équipements
     final List<dynamic> equipments = reportData['equipments'] as List? ?? [];
 
-    // === SECTION ÉQUIPEMENT (format legacy pour rétrocompatibilité) ===
+    // Fallback legacy
     final equipmentState = reportData['equipment_state']?.toString() ?? '';
     final equipmentType = reportData['equipment_type']?.toString() ?? '';
     final equipmentBrand = reportData['equipment_brand']?.toString() ?? '';
-    final pression = reportData['pression']?.toString() ?? '';
-    final puissance = reportData['puissance']?.toString() ?? '';
-    final intensite = reportData['intensite']?.toString() ?? '';
-    final tension = reportData['tension']?.toString() ?? '';
 
     final hasEquipmentInfo = equipments.isNotEmpty ||
         equipmentState.isNotEmpty ||
         equipmentType.isNotEmpty ||
         equipmentBrand.isNotEmpty;
-    final hasTechnicalMeasures = pression.isNotEmpty ||
-        puissance.isNotEmpty ||
-        intensite.isNotEmpty ||
-        tension.isNotEmpty;
 
-    // === SECTION DÉTAIL INTERVENTION ===
+    // Travaux effectués & Photos
+    final tasksDone = reportData['tasks_done'] as Map?;
+    final photosBefore = (reportData['photos_before'] as List?) ?? [];
+    final photosAfter = (reportData['photos_after'] as List?) ?? [];
+    final photos = (reportData['photos'] as List?) ?? [];
+
+    // Détails
     final technicianName = reportData['technician_name']?.toString() ?? '';
     final interventionDateStr = reportData['intervention_date']?.toString();
     DateTime? interventionDate;
@@ -211,13 +250,9 @@ Smart Maintenance - Service de qualité
         '';
     final observations = reportData['observations']?.toString() ?? '';
 
-    // === SECTION PIÈCES DE RECHANGE ===
     final spareParts = reportData['spare_parts'] as List? ??
         reportData['materials_used'] as List? ??
         [];
-
-    // Photos
-    final photos = reportData['photos'] as List? ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -235,7 +270,6 @@ Smart Maintenance - Service de qualité
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Bannière d'information
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -281,7 +315,7 @@ Smart Maintenance - Service de qualité
                   const SizedBox(height: 24),
 
                   // === SECTION ÉQUIPEMENTS ===
-                  if (hasEquipmentInfo || hasTechnicalMeasures) ...[
+                  if (hasEquipmentInfo) ...[
                     _buildSection(
                       'Équipements (${equipments.isNotEmpty ? equipments.length : 1})',
                       Icons.build,
@@ -289,81 +323,127 @@ Smart Maintenance - Service de qualité
                           ? Column(
                               children: [
                                 for (int i = 0; i < equipments.length; i++) ...[
-                                  _buildEquipmentCard(equipments[i], i + 1),
+                                  _buildEquipmentCard(
+                                      Map<String, dynamic>.from(equipments[i]),
+                                      i + 1),
                                   if (i < equipments.length - 1)
                                     const SizedBox(height: 12),
                                 ],
                               ],
                             )
-                          : Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.blue.shade200),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (equipmentState.isNotEmpty) ...[
-                                    _buildInfoRow(Icons.settings,
-                                        'État équipement', equipmentState),
-                                    const SizedBox(height: 8),
-                                  ],
-                                  if (equipmentType.isNotEmpty) ...[
-                                    _buildInfoRow(
-                                        Icons.category, 'Type', equipmentType),
-                                    const SizedBox(height: 8),
-                                  ],
-                                  if (equipmentBrand.isNotEmpty) ...[
-                                    _buildInfoRow(Icons.branding_watermark,
-                                        'Marque', equipmentBrand),
-                                    const SizedBox(height: 8),
-                                  ],
-                                  if (hasTechnicalMeasures) ...[
-                                    const Divider(),
-                                    const Text(
-                                      'Mesures Techniques',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
+                          : _buildEquipmentCard(reportData, 1),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // === SECTION TRAVAUX EFFECTUÉS ===
+                  if (tasksDone != null && tasksDone.isNotEmpty) ...[
+                    _buildSection(
+                      'Travaux Effectués',
+                      Icons.checklist,
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color:
+                                  const Color(0xFF0a543d).withValues(alpha: 0.2)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (var entry in _taskLabels.entries)
+                              if (tasksDone[entry.key] == true)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 6.0),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.check_circle,
+                                          color: Color(0xFF0a543d), size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          entry.value,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                      spacing: 16,
-                                      runSpacing: 12,
-                                      children: [
-                                        if (pression.isNotEmpty)
-                                          _buildMeasureItem(
-                                            Icons.compress,
-                                            'Pression',
-                                            '$pression bar',
-                                          ),
-                                        if (puissance.isNotEmpty)
-                                          _buildMeasureItem(
-                                            Icons.power,
-                                            'Puissance',
-                                            '$puissance CV',
-                                          ),
-                                        if (intensite.isNotEmpty)
-                                          _buildMeasureItem(
-                                            Icons.electrical_services,
-                                            'Intensité',
-                                            '$intensite A',
-                                          ),
-                                        if (tension.isNotEmpty)
-                                          _buildMeasureItem(
-                                            Icons.bolt,
-                                            'Tension',
-                                            '$tension V',
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                ],
-                              ),
+                                    ],
+                                  ),
+                                ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // === SECTION PHOTOS & MÉDIAS ===
+                  if (photosBefore.isNotEmpty ||
+                      photosAfter.isNotEmpty ||
+                      photos.isNotEmpty) ...[
+                    _buildSection(
+                      'Photos & Médias',
+                      Icons.photo_library,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (photosBefore.isNotEmpty) ...[
+                            const Text(
+                              '📸 Photos AVANT intervention',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Color(0xFF0a543d)),
                             ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: photosBefore
+                                  .map((p) =>
+                                      _buildPhotoThumbnail(p.toString()))
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+                          if (photosAfter.isNotEmpty) ...[
+                            Text(
+                              '📸 Photos APRÈS intervention',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Colors.orange.shade900),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: photosAfter
+                                  .map((p) =>
+                                      _buildPhotoThumbnail(p.toString()))
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+                          if (photosBefore.isEmpty &&
+                              photosAfter.isEmpty &&
+                              photos.isNotEmpty) ...[
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: photos
+                                  .map((p) =>
+                                      _buildPhotoThumbnail(p.toString()))
+                                  .toList(),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -459,18 +539,20 @@ Smart Maintenance - Service de qualité
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.check_circle,
-                                    color: const Color(0xFF0a543d), size: 20),
+                                const Icon(Icons.check_circle,
+                                    color: Color(0xFF0a543d), size: 20),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    part['name'] ?? part.toString(),
+                                    part is Map
+                                        ? (part['name'] ?? part.toString())
+                                        : part.toString(),
                                     style: const TextStyle(fontSize: 15),
                                   ),
                                 ),
                                 if (part is Map && part['quantity'] != null)
                                   Text(
-                                    'x${part['quantity']} ${part['unit'] ?? ''}',
+                                    'x${part['quantity']}',
                                     style: TextStyle(
                                       color: Colors.grey.shade700,
                                       fontWeight: FontWeight.w500,
@@ -485,40 +567,9 @@ Smart Maintenance - Service de qualité
                     const SizedBox(height: 24),
                   ],
 
-                  // Photos
-                  if (photos.isNotEmpty) ...[
-                    _buildSection(
-                      'Photos',
-                      Icons.photo_library,
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.check_circle,
-                                color: Colors.green.shade700),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${photos.length} photo(s) jointe(s)',
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.green.shade900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
                   // Boutons d'action
                   Row(
                     children: [
-                      // Bouton Modifier
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: _isLoading
@@ -539,7 +590,6 @@ Smart Maintenance - Service de qualité
                         ),
                       ),
                       const SizedBox(width: 12),
-                      // Bouton Soumettre
                       Expanded(
                         flex: 2,
                         child: ElevatedButton.icon(
@@ -555,47 +605,21 @@ Smart Maintenance - Service de qualité
                                 )
                               : const Icon(Icons.send, size: 18),
                           label: Text(
-                            _isLoading ? 'Soumission...' : 'Soumettre',
+                            _isLoading ? 'Envoi...' : 'Soumettre le rapport',
                             style: const TextStyle(fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0a543d),
                             foregroundColor: Colors.white,
                             minimumSize: const Size(0, 50),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-
-                  // Message d'information
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.amber.shade200),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.notifications_active,
-                            color: Colors.amber.shade700, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Une notification sera envoyée au client et à l\'administrateur après la soumission',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.amber.shade900,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -611,7 +635,7 @@ Smart Maintenance - Service de qualité
       children: [
         Row(
           children: [
-            Icon(icon, color: const Color(0xFF0a543d), size: 24),
+            Icon(icon, color: const Color(0xFF0a543d), size: 22),
             const SizedBox(width: 8),
             Text(
               title,
@@ -630,63 +654,78 @@ Smart Maintenance - Service de qualité
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: const Color(0xFF0a543d), size: 18),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
-              ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: Colors.grey.shade600),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 130,
+          child: Text(
+            '$label:',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 14,
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 15),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 14,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  // Widget pour afficher une carte d'équipement dans le récapitulatif
-  Widget _buildEquipmentCard(dynamic equipment, int index) {
-    final state = equipment['state']?.toString() ?? '';
-    final type = equipment['type']?.toString() ?? '';
-    final name = equipment['name']?.toString() ?? '';
-    final brand = equipment['brand']?.toString() ?? '';
-    final pression = equipment['pression']?.toString() ?? '';
-    final puissance = equipment['puissance']?.toString() ?? '';
-    final intensite = equipment['intensite']?.toString() ?? '';
-    final tension = equipment['tension']?.toString() ?? '';
-    final freon = equipment['freon']?.toString() ?? '';
+  Widget _buildEquipmentCard(Map<String, dynamic> equipment, int index) {
+    final state = (equipment['state'] ?? equipment['equipment_state'])?.toString() ?? '';
+    final type = (equipment['type'] ?? equipment['equipment_type'])?.toString() ?? '';
+    final name = (equipment['name'] ?? equipment['equipment_name'])?.toString() ?? '';
+    final brand = (equipment['brand'] ?? equipment['equipment_brand'])?.toString() ?? '';
+    final location = equipment['location']?.toString() ?? '';
+    final tested = equipment['tested'];
 
-    final hasMeasures = pression.isNotEmpty ||
-        puissance.isNotEmpty ||
-        intensite.isNotEmpty ||
-        tension.isNotEmpty ||
-        freon.isNotEmpty;
+    // Données techniques AVANT
+    final bPression = (equipment['before_pression'] ?? equipment['pression'])?.toString() ?? '';
+    final bPuissance = (equipment['before_puissance'] ?? equipment['puissance'])?.toString() ?? '';
+    final bIntensite = (equipment['before_intensite'] ?? equipment['intensite'])?.toString() ?? '';
+    final bTension = (equipment['before_tension'] ?? equipment['tension'])?.toString() ?? '';
+    final bFreon = (equipment['before_freon'] ?? equipment['freon'])?.toString() ?? '';
+
+    final hasBeforeMeasures = bPression.isNotEmpty ||
+        bPuissance.isNotEmpty ||
+        bIntensite.isNotEmpty ||
+        bTension.isNotEmpty ||
+        bFreon.isNotEmpty;
+
+    // Données techniques APRÈS
+    final aPression = equipment['after_pression']?.toString() ?? '';
+    final aPuissance = equipment['after_puissance']?.toString() ?? '';
+    final aIntensite = equipment['after_intensite']?.toString() ?? '';
+    final aTension = equipment['after_tension']?.toString() ?? '';
+    final aFreon = equipment['after_freon']?.toString() ?? '';
+
+    final hasAfterMeasures = aPression.isNotEmpty ||
+        aPuissance.isNotEmpty ||
+        aIntensite.isNotEmpty ||
+        aTension.isNotEmpty ||
+        aFreon.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.blue.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // En-tête avec numéro
           Row(
             children: [
               Container(
@@ -736,13 +775,24 @@ Smart Maintenance - Service de qualité
             _buildInfoRow(Icons.branding_watermark, 'Marque', brand),
             const SizedBox(height: 8),
           ],
-          if (hasMeasures) ...[
+          if (location.isNotEmpty) ...[
+            _buildInfoRow(Icons.place, 'Emplacement', location),
+            const SizedBox(height: 8),
+          ],
+          if (tested != null) ...[
+            _buildInfoRow(Icons.playlist_add_check, 'Test équipement',
+                tested == true ? 'Oui' : 'Non'),
+            const SizedBox(height: 8),
+          ],
+
+          if (hasBeforeMeasures) ...[
             const Divider(),
             const Text(
-              'Mesures Techniques',
+              '🟢 Données Techniques — AVANT Intervention',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 13,
+                color: Color(0xFF0a543d),
               ),
             ),
             const SizedBox(height: 8),
@@ -750,18 +800,49 @@ Smart Maintenance - Service de qualité
               spacing: 16,
               runSpacing: 12,
               children: [
-                if (pression.isNotEmpty)
+                if (bPression.isNotEmpty)
                   _buildMeasureItem(
-                      Icons.compress, 'Pression', '$pression bar'),
-                if (puissance.isNotEmpty)
-                  _buildMeasureItem(Icons.power, 'Puissance', '$puissance CV'),
-                if (intensite.isNotEmpty)
+                      Icons.compress, 'Pression', '$bPression bar'),
+                if (bPuissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$bPuissance CV'),
+                if (bIntensite.isNotEmpty)
                   _buildMeasureItem(
-                      Icons.electrical_services, 'Intensité', '$intensite A'),
-                if (tension.isNotEmpty)
-                  _buildMeasureItem(Icons.bolt, 'Tension', '$tension V'),
-                if (freon.isNotEmpty)
-                  _buildMeasureItem(Icons.cloud, 'Fréon', freon),
+                      Icons.electrical_services, 'Intensité', '$bIntensite A'),
+                if (bTension.isNotEmpty)
+                  _buildMeasureItem(Icons.bolt, 'Tension', '$bTension V'),
+                if (bFreon.isNotEmpty)
+                  _buildMeasureItem(Icons.cloud, 'Fréon', bFreon),
+              ],
+            ),
+          ],
+
+          if (hasAfterMeasures) ...[
+            const Divider(),
+            Text(
+              '🟠 Données Techniques — APRÈS Intervention',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: Colors.orange.shade900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                if (aPression.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.compress, 'Pression', '$aPression bar'),
+                if (aPuissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$aPuissance CV'),
+                if (aIntensite.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.electrical_services, 'Intensité', '$aIntensite A'),
+                if (aTension.isNotEmpty)
+                  _buildMeasureItem(Icons.bolt, 'Tension', '$aTension V'),
+                if (aFreon.isNotEmpty)
+                  _buildMeasureItem(Icons.cloud, 'Fréon', aFreon),
               ],
             ),
           ],
@@ -774,24 +855,24 @@ Smart Maintenance - Service de qualité
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: Colors.orange.shade700, size: 20),
-        const SizedBox(width: 8),
+        Icon(icon, size: 16, color: Colors.orange.shade700),
+        const SizedBox(width: 4),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: Colors.grey.shade600,
               ),
             ),
             Text(
               value,
-              style: TextStyle(
-                fontSize: 16,
+              style: const TextStyle(
+                fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: Colors.orange.shade900,
+                color: Colors.orange,
               ),
             ),
           ],

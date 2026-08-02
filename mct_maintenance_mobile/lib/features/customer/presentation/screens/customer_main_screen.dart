@@ -28,6 +28,7 @@ import 'package:mct_maintenance_mobile/features/customer/presentation/screens/se
 import 'package:mct_maintenance_mobile/features/customer/presentation/screens/notifications_screen.dart';
 import 'package:mct_maintenance_mobile/features/auth/presentation/screens/login_screen.dart';
 import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:mct_maintenance_mobile/features/customer/presentation/screens/documents_hub_screen.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:mct_maintenance_mobile/features/common/domain/repositories/notification_repository.dart';
 
@@ -717,6 +718,9 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
 
                       const SizedBox(height: 24),
 
+                      // Zone "À faire maintenant" — items actionnables uniquement
+                      if (_stats != null) ..._buildTodoNowSection(),
+
                       // Grille des fonctionnalités
                       Padding(
                         padding: EdgeInsets.symmetric(
@@ -822,14 +826,14 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
       case 2:
         return _buildFeatureCard(
           context,
-          icon: Icons.description_outlined,
-          title: 'Devis et Contrat',
+          icon: Icons.folder_open_outlined,
+          title: 'Mes Documents',
           color: const Color(0xFF0d6b4d),
           onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const QuotesContractsScreen(),
+                builder: (context) => const DocumentsHubScreen(),
               ),
             );
           },
@@ -914,6 +918,235 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  /// Zone "À faire maintenant" — affiche uniquement les items actionnables.
+  /// Chaque item est une carte tappable menant directement à l'écran concerné.
+  List<Widget> _buildTodoNowSection() {
+    final s = _stats!;
+    final horizontalPadding =
+        ResponsiveHelper.getHorizontalPadding(context).clamp(24.0, 48.0);
+
+    // Construire la liste des tâches actives
+    final List<Map<String, dynamic>> todoItems = [];
+
+    if (s.pendingInterventions > 0) {
+      todoItems.add({
+        'icon': Icons.build_circle_outlined,
+        'label': s.pendingInterventions == 1
+            ? '1 intervention en attente de paiement'
+            : '${s.pendingInterventions} interventions en attente',
+        'color': const Color(0xFFE53E3E),
+        'bgColor': const Color(0xFFFFF5F5),
+        'route': () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const InterventionsListScreen()),
+            ),
+      });
+    }
+
+    if (s.pendingQuotes > 0) {
+      todoItems.add({
+        'icon': Icons.description_outlined,
+        'label': s.pendingQuotes == 1
+            ? '1 devis en attente de votre réponse'
+            : '${s.pendingQuotes} devis en attente',
+        'color': const Color(0xFFD97706),
+        'bgColor': const Color(0xFFFFFBEB),
+        'route': () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const QuotesContractsScreen()),
+            ),
+      });
+    }
+
+    if (s.upcomingMaintenances > 0) {
+      todoItems.add({
+        'icon': Icons.event_outlined,
+        'label': s.upcomingMaintenances == 1
+            ? '1 rendez-vous de maintenance à venir'
+            : '${s.upcomingMaintenances} rendez-vous à venir',
+        'color': const Color(0xFF3182CE),
+        'bgColor': const Color(0xFFEBF8FF),
+        'route': () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const InterventionsListScreen()),
+            ),
+      });
+    }
+
+    if (s.totalSpent > 0) {
+      todoItems.add({
+        'icon': Icons.account_balance_wallet_outlined,
+        'label': 'Solde total dépensé : ${s.totalSpent.toStringAsFixed(0)} FCFA',
+        'color': const Color(0xFF0a543d),
+        'bgColor': const Color(0xFFF0FFF4),
+        'route': () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const InvoicesScreen()),
+            ),
+      });
+    }
+
+    // Rien à faire → section masquée
+    if (todoItems.isEmpty) return [];
+
+    return [
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE53E3E),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFE53E3E).withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.notifications_active,
+                      color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'À faire maintenant',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE53E3E),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${todoItems.length}',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.92),
+                    Colors.white.withValues(alpha: 0.78),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFE53E3E).withValues(alpha: 0.2),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFE53E3E).withValues(alpha: 0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: todoItems.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final item = entry.value;
+                  final isLast = i == todoItems.length - 1;
+                  return InkWell(
+                    onTap: item['route'] as VoidCallback,
+                    borderRadius: i == 0
+                        ? const BorderRadius.vertical(top: Radius.circular(20))
+                        : isLast
+                            ? const BorderRadius.vertical(
+                                bottom: Radius.circular(20))
+                            : BorderRadius.zero,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        border: isLast
+                            ? null
+                            : Border(
+                                bottom: BorderSide(
+                                  color: Colors.grey.withValues(alpha: 0.12),
+                                  width: 1,
+                                ),
+                              ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: (item['bgColor'] as Color),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              item['icon'] as IconData,
+                              color: item['color'] as Color,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              item['label'] as String,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF1A202C),
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: Colors.grey.withValues(alpha: 0.5),
+                            size: 22,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 24),
+    ];
   }
 
   /// Section des statistiques (affichage responsive)

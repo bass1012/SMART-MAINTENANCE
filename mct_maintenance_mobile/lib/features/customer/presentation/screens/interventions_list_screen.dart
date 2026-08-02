@@ -1239,12 +1239,15 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
                       const Icon(Icons.local_offer,
                           size: 16, color: Color(0xFF0a543d)),
                       const SizedBox(width: 4),
-                      Text(
-                        'Offre: ${intervention['maintenance_offer']['title']}',
-                        style: const TextStyle(
-                          color: Color(0xFF0a543d),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                      Flexible(
+                        child: Text(
+                          'Offre: ${intervention['maintenance_offer']['title']}',
+                          style: const TextStyle(
+                            color: Color(0xFF0a543d),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

@@ -7,6 +7,7 @@ import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_re
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:mct_maintenance_mobile/features/common/domain/repositories/notification_repository.dart';
 import 'package:mct_maintenance_mobile/services/fcm_service.dart';
+import 'package:mct_maintenance_mobile/services/chat_service.dart';
 import 'package:mct_maintenance_mobile/services/notification_navigation_service.dart';
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
@@ -32,16 +33,21 @@ class TechnicianMainScreen extends StatefulWidget {
   State<TechnicianMainScreen> createState() => _TechnicianMainScreenState();
 }
 
-class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
+class _TechnicianMainScreenState extends State<TechnicianMainScreen>
+    with WidgetsBindingObserver {
   bool _isLoading = true;
   UserModel? _user;
   TechnicianStats? _stats;
+  String _availabilityStatus = 'offline';
   int _unreadNotifications = 0;
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
+  StreamSubscription<Map<String, dynamic>>? _statusSocketSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     // Écouter les clics de notification en temps réel
     _notificationSubscription = FCMService().onNotificationTap.listen((data) {
       if (kDebugMode)
@@ -52,6 +58,28 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
         navigationService.navigateFromNotification(context, data);
       }
     });
+
+    // Écouter les événements Socket.io de changement de statut de disponibilité
+    _statusSocketSubscription =
+        ChatService().onTechnicianStatusChanged.listen((data) {
+      if (kDebugMode)
+        debugPrint('⚡ [TechnicianMainScreen] Changement statut Socket: $data');
+      if (mounted) {
+        final targetId = data['user_id']?.toString();
+        final myId = _user?.id.toString();
+        if (targetId != null && myId != null && targetId == myId) {
+          final newStatus = data['availability_status']?.toString();
+          if (newStatus != null) {
+            setState(() {
+              _availabilityStatus = newStatus;
+            });
+          }
+        } else {
+          _loadDashboardData();
+        }
+      }
+    });
+
     // Retarder le chargement pour éviter les conflits de layout
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -63,7 +91,18 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      if (kDebugMode)
+        debugPrint('🔄 [TechnicianMainScreen] App reprise -> Rechargement');
+      _loadDashboardData();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _statusSocketSubscription?.cancel();
     _notificationSubscription?.cancel();
     super.dispose();
   }
@@ -102,8 +141,21 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
       final statsData = results[1];
 
       if (mounted) {
+        String status = 'offline';
+        if (profileData['data'] != null) {
+          final p = profileData['data'];
+          if (p['profile'] != null && p['profile']['availability_status'] != null) {
+            status = p['profile']['availability_status'].toString();
+          } else if (p['technicianProfile'] != null && p['technicianProfile']['availability_status'] != null) {
+            status = p['technicianProfile']['availability_status'].toString();
+          } else if (p['availability_status'] != null) {
+            status = p['availability_status'].toString();
+          }
+        }
+
         setState(() {
           _user = UserModel.fromJson(profileData['data']);
+          _availabilityStatus = status;
 
           // Utiliser les stats du backend ou données fictives si non disponibles
           final data = statsData['data'] ?? {};
@@ -120,6 +172,12 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
           );
           _isLoading = false;
         });
+
+        // 🔌 Connecter le socket ChatService avec l'ID utilisateur
+        if (_user != null) {
+          if (kDebugMode) debugPrint('🔌 [TechnicianMainScreen] Connexion Socket.IO pour user ${_user!.id}');
+          ChatService().connect();
+        }
       }
 
       // Recharger le compteur de notifications
@@ -127,7 +185,9 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        SnackBarHelper.showError(context, 'Erreur lors du chargement: $e');
+        try {
+          SnackBarHelper.showError(context, 'Erreur de connexion. Veuillez réessayer.');
+        } catch (_) {}
       }
     }
   }
@@ -187,6 +247,9 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
                         const Color(0xFF0a543d).withValues(alpha: 0.1),
                     foregroundImage: AvatarHelper.hasAvatar(_user?.profileImage)
                         ? AvatarHelper.buildImageProvider(_user!.profileImage)
+                        : null,
+                    onForegroundImageError: AvatarHelper.hasAvatar(_user?.profileImage)
+                        ? (_, __) {}
                         : null,
                     child: Text(
                       (_user?.firstName?.isNotEmpty == true
@@ -567,26 +630,50 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
           const SizedBox(width: 8),
           // Avatar avec menu
           Padding(
-            padding: const EdgeInsets.only(right: 8.0),
+            padding: const EdgeInsets.only(right: 12.0),
             child: GestureDetector(
               onTap: _showAvatarMenu,
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.white,
-                foregroundImage: AvatarHelper.hasAvatar(_user?.profileImage)
-                    ? AvatarHelper.buildImageProvider(_user!.profileImage)
-                    : null,
-                child: Text(
-                  (_user?.firstName?.isNotEmpty == true
-                          ? _user!.firstName![0]
-                          : 'T')
-                      .toUpperCase(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0a543d),
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: Colors.white,
+                    foregroundImage: AvatarHelper.hasAvatar(_user?.profileImage)
+                        ? AvatarHelper.buildImageProvider(_user!.profileImage)
+                        : null,
+                    onForegroundImageError: AvatarHelper.hasAvatar(_user?.profileImage)
+                        ? (_, __) {}
+                        : null,
+                    child: Text(
+                      (_user?.firstName?.isNotEmpty == true
+                              ? _user!.firstName![0]
+                              : 'T')
+                          .toUpperCase(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0a543d),
+                      ),
+                    ),
                   ),
-                ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: _availabilityStatus == 'available'
+                            ? const Color(0xFF4CAF50)
+                            : _availabilityStatus == 'busy'
+                                ? const Color(0xFFFF9800)
+                                : Colors.grey,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -664,63 +751,199 @@ class _TechnicianMainScreenState extends State<TechnicianMainScreen> {
     );
   }
 
+  Map<String, dynamic> _getStatusColors() {
+    switch (_availabilityStatus) {
+      case 'available':
+        return {
+          'color': const Color(0xFF2E7D32),
+          'bgColor': const Color(0xFFE8F5E9),
+          'lightTint': const Color(0xFFF1F8E9),
+          'label': 'En ligne (Disponible)',
+          'shortLabel': 'Disponible',
+        };
+      case 'busy':
+        return {
+          'color': const Color(0xFFE65100),
+          'bgColor': const Color(0xFFFFF3E0),
+          'lightTint': const Color(0xFFFFF8E1),
+          'label': 'Occupé (En intervention)',
+          'shortLabel': 'Occupé',
+        };
+      case 'offline':
+      default:
+        return {
+          'color': const Color(0xFF616161),
+          'bgColor': const Color(0xFFF5F5F5),
+          'lightTint': const Color(0xFFFAFAFA),
+          'label': 'Hors ligne',
+          'shortLabel': 'Hors ligne',
+        };
+    }
+  }
+
+  Widget _buildAvailabilityBadge() {
+    final statusInfo = _getStatusColors();
+    final Color color = statusInfo['color'];
+    final Color bgColor = statusInfo['bgColor'];
+    final String label = statusInfo['label'];
+
+    return InkWell(
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const TechnicianAvailabilityScreen(),
+          ),
+        );
+        _loadDashboardData();
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.5), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.6),
+                    blurRadius: 4,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.swap_horiz_rounded, size: 15, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildWelcomeCard() {
-    return Container(
+    final statusInfo = _getStatusColors();
+    final Color statusColor = statusInfo['color'];
+    final Color lightTint = statusInfo['lightTint'];
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            lightTint,
+            Colors.white,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: statusColor.withValues(alpha: 0.65),
+          width: 2.2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: statusColor.withValues(alpha: 0.18),
+            blurRadius: 16,
+            spreadRadius: 1,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
           children: [
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF0a543d),
-                    Color(0xFF0d6b4d),
-                    Color(0xFF0f7d59)
-                  ],
+            // Décoration d'arrière-plan pastel
+            Positioned(
+              top: -18,
+              right: -18,
+              child: Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: statusColor.withValues(alpha: 0.08),
                 ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.engineering,
-                size: 32,
-                color: Colors.white,
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Padding(
+              padding: const EdgeInsets.all(18.0),
+              child: Row(
                 children: [
-                  Text(
-                    'Bonjour ${_user?.firstName ?? 'Technicien'} !',
-                    style: GoogleFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0a543d),
+                  // Icône avec dégradé et bordure aux couleurs de l'état
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          statusColor,
+                          statusColor.withValues(alpha: 0.8),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: statusColor.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.engineering_rounded,
+                      size: 30,
+                      color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Prêt pour une nouvelle journée de travail !',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: Colors.grey[600],
+                  const SizedBox(width: 14),
+                  // Salutation et Badge de statut
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Bonjour ${_user?.firstName ?? 'Technicien'} !',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF0a543d),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        _buildAvailabilityBadge(),
+                      ],
                     ),
                   ),
                 ],

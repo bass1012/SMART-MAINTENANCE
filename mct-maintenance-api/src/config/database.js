@@ -11,14 +11,14 @@ let sequelize;
 if (isProduction && databaseUrl) {
   // Production: PostgreSQL via DATABASE_URL
   console.log('🐘 Connecting to PostgreSQL...');
-  const dbSslRejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED?.toLowerCase() === 'false';
+  const dbSslRejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED?.toLowerCase() === 'false' ? false : true;
   sequelize = new Sequelize(databaseUrl, {
     dialect: 'postgres',
     logging: false,
     dialectOptions: {
       ssl: {
         require: true,
-        rejectUnauthorized: false // nosemgrep: bypass-tls-verification - Certificat auto-signé sur le serveur local
+        rejectUnauthorized: dbSslRejectUnauthorized // Desactivable via DB_SSL_REJECT_UNAUTHORIZED=false pour certificats auto-signés
       }
     },
     pool: {

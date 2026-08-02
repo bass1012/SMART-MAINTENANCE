@@ -13,6 +13,8 @@ exports.submitReport = async (req, res) => {
   try {
     const { 
       intervention_id, 
+      equipments,
+      materials_needed,
       problem_description, 
       recommended_solution,
       parts_needed, // Array of {name, quantity, unit_price}
@@ -69,8 +71,10 @@ exports.submitReport = async (req, res) => {
     const report = await DiagnosticReport.create({
       intervention_id,
       technician_id,
-      problem_description,
-      recommended_solution,
+      equipments: JSON.stringify(equipments || []),
+      materials_needed,
+      problem_description: problem_description || 'Diagnostic effectué',
+      recommended_solution: recommended_solution || problem_description || 'Diagnostic effectué',
       parts_needed: JSON.stringify(parts_needed || []),
       labor_cost: labor_cost || 0,
       estimated_total: finalEstimatedTotal,
@@ -177,13 +181,20 @@ exports.getReportById = async (req, res) => {
       return res.status(403).json({ message: 'Accès non autorisé' });
     }
 
-    // Parser parts_needed si c'est un string JSON
+    // Parser parts_needed et equipments si c'est un string JSON
     const reportData = report.toJSON();
     if (typeof reportData.parts_needed === 'string') {
       try {
         reportData.parts_needed = JSON.parse(reportData.parts_needed);
       } catch (e) {
         reportData.parts_needed = [];
+      }
+    }
+    if (typeof reportData.equipments === 'string') {
+      try {
+        reportData.equipments = JSON.parse(reportData.equipments);
+      } catch (e) {
+        reportData.equipments = [];
       }
     }
 
@@ -237,7 +248,7 @@ exports.listReports = async (req, res) => {
       offset
     });
 
-    // Parser parts_needed pour chaque rapport si c'est un string JSON
+    // Parser parts_needed et equipments pour chaque rapport si c'est un string JSON
     const reportsData = rows.map(report => {
       const reportJson = report.toJSON();
       if (typeof reportJson.parts_needed === 'string') {
@@ -245,6 +256,13 @@ exports.listReports = async (req, res) => {
           reportJson.parts_needed = JSON.parse(reportJson.parts_needed);
         } catch (e) {
           reportJson.parts_needed = [];
+        }
+      }
+      if (typeof reportJson.equipments === 'string') {
+        try {
+          reportJson.equipments = JSON.parse(reportJson.equipments);
+        } catch (e) {
+          reportJson.equipments = [];
         }
       }
       return reportJson;
