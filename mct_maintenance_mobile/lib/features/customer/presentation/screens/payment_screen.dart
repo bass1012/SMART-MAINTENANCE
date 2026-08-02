@@ -5,7 +5,6 @@ import 'package:mct_maintenance_mobile/features/customer/domain/repositories/pay
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'payment_webview_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
   final String invoiceId;
@@ -578,8 +577,8 @@ class _PaymentScreenState extends State<PaymentScreen>
           _stopPolling();
 
           if (mounted) {
-            // Afficher un message de succès
-            showDialog(
+            // Afficher un message de succès puis fermer l'écran de paiement
+            await showDialog(
               context: context,
               barrierDismissible: false,
               builder: (dialogContext) => AlertDialog(
@@ -591,18 +590,13 @@ class _PaymentScreenState extends State<PaymentScreen>
                 title: const Text('Paiement réussi !'),
                 content: const Text(
                   'Votre paiement a été confirmé avec succès.\n\n'
-                  'Vous pouvez suivre l\'évolution de votre commande dans vos commandes.',
+                  'Redirection vers le devis...',
                   textAlign: TextAlign.center,
                 ),
                 actions: [
                   ElevatedButton(
                     onPressed: () {
-                      // Fermer le dialog et retourner à l'écran précédent
                       Navigator.of(dialogContext).pop();
-                      if (Navigator.of(context).canPop()) {
-                        Navigator.of(context)
-                            .pop(true); // Retourner avec résultat
-                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0a543d),
@@ -612,6 +606,10 @@ class _PaymentScreenState extends State<PaymentScreen>
                 ],
               ),
             );
+
+            if (mounted) {
+              Navigator.of(context).pop(true);
+            }
           }
         } else if (paymentStatus == 'failed') {
           // Paiement échoué

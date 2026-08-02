@@ -4,7 +4,6 @@ import 'package:mct_maintenance_mobile/features/customer/domain/repositories/pay
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'payment_webview_screen.dart';
 
 class DiagnosticPaymentScreen extends StatefulWidget {
   final int interventionId;
@@ -643,13 +642,13 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
     }
   }
 
-  void _showPaymentSuccess() {
+  Future<void> _showPaymentSuccess() async {
     if (!mounted) return;
 
-    showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.check_circle, color: Colors.green, size: 64),
         title: const Text('Paiement confirmé !'),
         content: const Text(
@@ -660,8 +659,7 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         actions: [
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(this.context, true); // Retourner avec succès
+              Navigator.of(dialogContext).pop();
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text('OK'),
@@ -669,6 +667,10 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         ],
       ),
     );
+
+    if (mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   void _showTimeoutDialog() {
