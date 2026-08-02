@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 'dart:io';
 import 'package:share_plus/share_plus.dart';
 import 'package:mct_maintenance_mobile/config/environment.dart';
 import 'package:mct_maintenance_mobile/widgets/common/authenticated_network_image.dart';
@@ -513,13 +514,33 @@ class ViewReportScreen extends StatelessWidget {
         if (str.isNotEmpty) {
           if (str.startsWith('http://') || str.startsWith('https://')) {
             imageUrls.add(str);
+          } else if (str.startsWith('/uploads/')) {
+            imageUrls.add('${AppConfig.baseUrl}$str');
+          } else if (str.startsWith('/')) {
+            // path absolu - vérifier si c'est un upload ou un fichier local
+            if (File(str).existsSync()) {
+              imageUrls.add(str);
+            } else {
+              imageUrls.add('${AppConfig.baseUrl}$str');
+            }
           } else {
-            final clean = str.startsWith('/') ? str : '/$str';
-            imageUrls.add('${AppConfig.baseUrl}$clean');
+            imageUrls.add(str);
           }
         }
       } else if (data is Map) {
-        extractUrls(data['image_url'] ?? data['url'] ?? data['path']);
+        if (data.containsKey('image_url') || data.containsKey('url') || data.containsKey('path')) {
+          final singleUrl = data['image_url'] ?? data['url'] ?? data['path'];
+          if (singleUrl != null && singleUrl is String && singleUrl.isNotEmpty) {
+            extractUrls(singleUrl);
+          }
+        }
+        if (data['photos_before'] != null) extractUrls(data['photos_before']);
+        if (data['photos_after'] != null) extractUrls(data['photos_after']);
+        if (data['photos'] != null) extractUrls(data['photos']);
+        if (data['images'] != null) extractUrls(data['images']);
+        if (data['report_images'] != null) extractUrls(data['report_images']);
+        if (data['intervention_images'] != null) extractUrls(data['intervention_images']);
+        if (data['equipments'] != null) extractUrls(data['equipments']);
       } else if (data is List) {
         for (var item in data) {
           extractUrls(item);
@@ -563,6 +584,11 @@ class ViewReportScreen extends StatelessWidget {
             itemCount: uniqueUrls.length,
             itemBuilder: (context, index) {
               final url = uniqueUrls[index];
+              final isLocalFile = !url.startsWith('http://') &&
+                  !url.startsWith('https://') &&
+                  !url.startsWith('/uploads/') &&
+                  File(url).existsSync();
+
               return Padding(
                 padding: const EdgeInsets.only(right: 12),
                 child: GestureDetector(
@@ -573,35 +599,50 @@ class ViewReportScreen extends StatelessWidget {
                       width: 120,
                       height: 120,
                       color: Colors.grey[200],
-                      child: AuthenticatedNetworkImage(
-                        url,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                      child: isLocalFile
+                          ? Image.file(
+                              File(url),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Center(
+                                child: Icon(Icons.broken_image_rounded,
+                                    color: Colors.grey, size: 32),
+                              ),
+                            )
+                          : AuthenticatedNetworkImage(
+                              url,
+                              fit: BoxFit.cover,
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const Center(
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  ),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.broken_image_rounded,
+                                          color: Colors.grey, size: 32),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'Non disponible',
+                                        style: TextStyle(
+                                            fontSize: 10, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.broken_image_rounded, color: Colors.grey, size: 32),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Non disponible',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
                     ),
                   ),
                 ),
@@ -614,6 +655,11 @@ class ViewReportScreen extends StatelessWidget {
   }
 
   void _openImageDialog(BuildContext context, String imageUrl) {
+    final isLocalFile = !imageUrl.startsWith('http://') &&
+        !imageUrl.startsWith('https://') &&
+        !imageUrl.startsWith('/uploads/') &&
+        File(imageUrl).existsSync();
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -627,24 +673,44 @@ class ViewReportScreen extends StatelessWidget {
               maxScale: 4.0,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: AuthenticatedNetworkImage(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      padding: const EdgeInsets.all(24),
-                      color: Colors.white,
-                      child: const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.error_outline, size: 48, color: Colors.red),
-                          SizedBox(height: 12),
-                          Text('Erreur de chargement de l\'image'),
-                        ],
+                child: isLocalFile
+                    ? Image.file(
+                        File(imageUrl),
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            Container(
+                          padding: const EdgeInsets.all(24),
+                          color: Colors.white,
+                          child: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.error_outline,
+                                  size: 48, color: Colors.red),
+                              SizedBox(height: 12),
+                              Text('Erreur de chargement de l\'image'),
+                            ],
+                          ),
+                        ),
+                      )
+                    : AuthenticatedNetworkImage(
+                        imageUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            padding: const EdgeInsets.all(24),
+                            color: Colors.white,
+                            child: const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.error_outline,
+                                    size: 48, color: Colors.red),
+                                SizedBox(height: 12),
+                                Text('Erreur de chargement de l\'image'),
+                              ],
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
             ),
             Positioned(
