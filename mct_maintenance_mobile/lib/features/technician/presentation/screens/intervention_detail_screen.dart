@@ -886,28 +886,41 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
             Row(
               children: [
                 Expanded(
+                  flex: 4,
                   child: ElevatedButton.icon(
                     onPressed: _isLoading ? null : _showClientUnreachableBottomSheet,
-                    icon: const Icon(Icons.person_off),
-                    label: const Text('Injoignable', style: TextStyle(fontSize: 12)),
+                    icon: const Icon(Icons.person_off, size: 18),
+                    label: const Text(
+                      'Injoignable',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                      minimumSize: const Size(0, 50),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  flex: 2,
+                  flex: 5,
                   child: ElevatedButton.icon(
                     onPressed: _isLoading ? null : _onStartPressed,
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Démarrer', style: TextStyle(fontSize: 12)),
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: const Text(
+                      'Démarrer',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0a543d),
                       foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                      minimumSize: const Size(0, 50),
                     ),
                   ),
                 ),
