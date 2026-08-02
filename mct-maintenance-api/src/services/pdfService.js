@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
@@ -446,65 +446,139 @@ const generateInvoiceHTML = (order) => {
 /**
  * Générer un PDF à partir d'une commande
  */
-const generateInvoicePDF = async (order) => {
-  let browser;
-  
+const generateInvoicePDF = async (order) => new Promise((resolve, reject) => {
+  const doc = new PDFDocument({ size: 'A4', margin: 50 });
+  const chunks = [];
+  const green = '#0a543d';
+  const lightGreen = '#eaf5f0';
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const items = Array.isArray(order.items) ? order.items : [];
+  const customer = order.customer || {};
+
+  const money = (value) => `${new Intl.NumberFormat('fr-FR').format(Number(value) || 0)} FCFA`;
+  const date = order.createdAt || order.created_at
+    ? new Date(order.createdAt || order.created_at).toLocaleDateString('fr-FR')
+    : new Date().toLocaleDateString('fr-FR');
+  const customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'N/A';
+  const customerEmail = customer.user?.email || customer.email || order.customerEmail || 'N/A';
+  const customerPhone = customer.user?.phone || customer.phone || 'N/A';
+
+  const drawTableHeader = () => {
+    const y = doc.y;
+    doc.rect(50, y, pageWidth, 24).fill(green);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9);
+    doc.text('Article', 56, y + 7, { width: 235 });
+    doc.text('Qté', 300, y + 7, { width: 45, align: 'right' });
+    doc.text('Prix unitaire', 355, y + 7, { width: 85, align: 'right' });
+    doc.text('Total', 450, y + 7, { width: 90, align: 'right' });
+    doc.y = y + 28;
+  };
+
+  const ensureSpace = (height) => {
+    if (doc.y + height <= doc.page.height - 70) return;
+    doc.addPage();
+    drawTableHeader();
+  };
+
+  doc.on('data', (chunk) => chunks.push(chunk));
+  doc.on('end', () => resolve(Buffer.concat(chunks)));
+  doc.on('error', reject);
+
   try {
-    console.log('🚀 Démarrage génération PDF...');
-    
-    // Générer le HTML
-    const html = generateInvoiceHTML(order);
-    console.log('📝 HTML généré, longueur:', html.length, 'caractères');
-    
-    // Lancer Puppeteer
-    console.log('🌐 Lancement de Puppeteer...');
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    console.log('✅ Puppeteer lancé');
-    
-    const page = await browser.newPage();
-    console.log('📄 Nouvelle page créée');
-    
-    // Charger le HTML
-    console.log('⏳ Chargement du contenu HTML...');
-    await page.setContent(html, { waitUntil: 'networkidle0' }); // nosemgrep: puppeteer-setcontent-injection
-    console.log('✅ HTML chargé');
-    
-    // Générer le PDF
-    console.log('🖨️ Génération du PDF...');
-    const pdfData = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: {
-        top: '20px',
-        right: '20px',
-        bottom: '20px',
-        left: '20px'
-      }
-    });
-    console.log('✅ PDF généré, taille:', pdfData.length, 'bytes');
-    console.log('🔍 Type de données:', typeof pdfData, '- isBuffer:', Buffer.isBuffer(pdfData));
-    
-    await browser.close();
-    console.log('🔒 Navigateur fermé');
-    
-    // S'assurer que c'est un Buffer Node.js
-    const pdfBuffer = Buffer.isBuffer(pdfData) ? pdfData : Buffer.from(pdfData);
-    console.log('✅ Buffer final créé, taille:', pdfBuffer.length, 'bytes');
-    
-    return pdfBuffer;
-    
-  } catch (error) {
-    if (browser) {
-      await browser.close();
+    const logoPath = path.join(__dirname, '../../public/logo-maintenance.png');
+    if (fsSync.existsSync(logoPath)) {
+      doc.image(logoPath, 50, 45, { fit: [95, 55] });
     }
-    console.error('❌ Erreur lors de la génération du PDF:', error);
-    console.error('Stack:', error.stack);
-    throw new Error(`Erreur de génération PDF: ${error.message}`);
+
+    doc.fillColor(green).font('Helvetica-Bold').fontSize(28)
+      .text('FACTURE', 300, 48, { width: 245, align: 'right' });
+    doc.fillColor('#444444').fontSize(12)
+      .text('SMART MAINTENANCE', 300, 82, { width: 245, align: 'right' });
+    doc.font('Helvetica').fontSize(9)
+      .text("Service de maintenance professionnel - Côte d'Ivoire", 250, 101, {
+        width: 295,
+        align: 'right'
+      });
+    doc.moveTo(50, 125).lineTo(545, 125).lineWidth(2).strokeColor(green).stroke();
+
+    const reference = order.reference || `#${order.id}`;
+    doc.fillColor(green).font('Helvetica-Bold').fontSize(11)
+      .text('Informations de facturation', 50, 145);
+    doc.fillColor('#333333').font('Helvetica').fontSize(9)
+      .text(`Référence : ${reference}`, 50, 166)
+      .text(`Date : ${date}`, 50, 181)
+      .text(`Statut commande : ${translateStatus(order.status || 'pending')}`, 50, 196)
+      .text(`Statut paiement : ${translateStatus(order.paymentStatus || order.payment_status || 'pending')}`, 50, 211);
+
+    doc.fillColor(green).font('Helvetica-Bold').fontSize(11).text('Client', 310, 145);
+    doc.fillColor('#333333').font('Helvetica').fontSize(9)
+      .text(`Nom : ${customerName}`, 310, 166, { width: 235 })
+      .text(`Email : ${customerEmail}`, 310, 181, { width: 235 })
+      .text(`Téléphone : ${customerPhone}`, 310, 196, { width: 235 })
+      .text(`Adresse : ${order.shippingAddress || order.shipping_address || 'Non spécifiée'}`, 310, 211, {
+        width: 235
+      });
+
+    doc.y = 250;
+    drawTableHeader();
+
+    if (items.length === 0) {
+      doc.fillColor('#555555').font('Helvetica-Oblique').fontSize(9)
+        .text('Aucun article détaillé', 56, doc.y + 4, { width: 484 });
+      doc.moveDown(2);
+    } else {
+      items.forEach((item, index) => {
+        ensureSpace(34);
+        const y = doc.y;
+        const productName = item.product?.nom || item.productName || item.name || 'Article';
+        const quantity = Number(item.quantity) || 0;
+        const unitPrice = Number(item.unitPrice ?? item.unit_price ?? item.product?.prix) || 0;
+        const total = Number(item.total) || quantity * unitPrice;
+
+        if (index % 2 === 0) {
+          doc.rect(50, y - 2, pageWidth, 28).fill(lightGreen);
+        }
+        doc.fillColor('#222222').font('Helvetica').fontSize(9);
+        doc.text(String(productName), 56, y + 6, { width: 235, ellipsis: true });
+        doc.text(String(quantity), 300, y + 6, { width: 45, align: 'right' });
+        doc.text(money(unitPrice), 355, y + 6, { width: 85, align: 'right' });
+        doc.text(money(total), 450, y + 6, { width: 90, align: 'right' });
+        doc.y = y + 30;
+      });
+    }
+
+    ensureSpace(115);
+    doc.moveDown(1);
+    const totalAmount = order.totalAmount ?? order.total_amount ?? 0;
+    doc.font('Helvetica').fontSize(10).fillColor('#333333')
+      .text(`Sous-total : ${money(totalAmount)}`, 345, doc.y, { width: 200, align: 'right' });
+    doc.text('Livraison : Gratuite', 345, doc.y + 6, { width: 200, align: 'right' });
+    doc.moveDown(0.5);
+    doc.moveTo(390, doc.y).lineTo(545, doc.y).strokeColor(green).stroke();
+    doc.moveDown(0.5);
+    doc.fillColor(green).font('Helvetica-Bold').fontSize(14)
+      .text(`TOTAL : ${money(totalAmount)}`, 320, doc.y, { width: 225, align: 'right' });
+
+    if (order.notes) {
+      doc.moveDown(1.5);
+      doc.fillColor(green).font('Helvetica-Bold').fontSize(10).text('Notes');
+      doc.fillColor('#444444').font('Helvetica').fontSize(9).text(String(order.notes), { width: pageWidth });
+    }
+
+    doc.moveDown(2);
+    doc.fillColor('#666666').font('Helvetica').fontSize(8)
+      .text('Merci pour votre confiance !', 50, doc.y, { width: pageWidth, align: 'center' })
+      .text('SMART MAINTENANCE - contact@mct.ci', { width: pageWidth, align: 'center' })
+      .text('Ce document est une facture générée électroniquement et ne nécessite pas de signature.', {
+        width: pageWidth,
+        align: 'center'
+      });
+
+    doc.end();
+  } catch (error) {
+    reject(new Error(`Erreur de génération PDF: ${error.message}`));
   }
-};
+});
 
 /**
  * Sauvegarder le PDF sur le disque
