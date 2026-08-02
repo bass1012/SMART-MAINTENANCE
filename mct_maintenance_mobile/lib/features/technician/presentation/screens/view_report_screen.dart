@@ -669,7 +669,8 @@ class ViewReportScreen extends StatelessWidget {
     final dateFormat = DateFormat("dd/MM/yyyy HH'h'mm", 'fr_FR');
 
     final materials = report['materials_used'] as List? ?? [];
-    final duration = report['duration'] ?? 0;
+    final int rawDuration = int.tryParse(report['duration']?.toString() ?? '0') ?? 0;
+    final int duration = rawDuration < 0 ? 0 : rawDuration;
     final observations = report['observations'] ?? '';
     final workDescription = report['work_description'] ?? '';
 
@@ -719,7 +720,7 @@ Intervention #${intervention['id']}
 ${intervention['title'] ?? 'Sans titre'}
 
 📅 Date: ${intervention['report_submitted_at'] != null ? dateFormat.format(DateTime.parse(intervention['report_submitted_at'])) : dateFormat.format(DateTime.now())}
-⏱️ Durée: ${duration}h
+⏱️ Durée: ${duration} min
 
 📝 Description des travaux:
 $workDescription

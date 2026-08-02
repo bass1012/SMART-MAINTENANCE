@@ -169,6 +169,15 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                 'intervention_${id}_completed_at', now.toIso8601String());
           }
         }
+
+        // Empêcher l'heure de fin d'être antérieure à l'heure de début au chargement
+        if (_startTime != null && _endTime != null) {
+          final startMins = _startTime!.hour * 60 + _startTime!.minute;
+          final endMins = _endTime!.hour * 60 + _endTime!.minute;
+          if (endMins < startMins) {
+            _endTime = _startTime;
+          }
+        }
       });
     }
   }
@@ -422,22 +431,52 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       context: context,
       initialTime: _startTime ?? TimeOfDay.now(),
     );
-    if (picked != null) setState(() => _startTime = picked);
+    if (picked != null) {
+      setState(() {
+        _startTime = picked;
+        if (_endTime != null) {
+          final startMins = picked.hour * 60 + picked.minute;
+          final endMins = _endTime!.hour * 60 + _endTime!.minute;
+          if (endMins < startMins) {
+            _endTime = picked;
+          }
+        }
+      });
+    }
   }
 
   Future<void> _selectEndTime() async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
-      initialTime: _endTime ?? TimeOfDay.now(),
+      initialTime: _endTime ?? _startTime ?? TimeOfDay.now(),
     );
-    if (picked != null) setState(() => _endTime = picked);
+    if (picked != null) {
+      if (_startTime != null) {
+        final startMins = _startTime!.hour * 60 + _startTime!.minute;
+        final endMins = picked.hour * 60 + picked.minute;
+        if (endMins < startMins) {
+          if (mounted) {
+            SnackBarHelper.showWarning(
+              context,
+              'L\'heure de fin ne peut pas être antérieure à l\'heure de début.',
+            );
+          }
+          return;
+        }
+      }
+      setState(() => _endTime = picked);
+    }
   }
 
   int _calculateDuration() {
     if (_startTime == null || _endTime == null) return 0;
     final startMinutes = _startTime!.hour * 60 + _startTime!.minute;
     final endMinutes = _endTime!.hour * 60 + _endTime!.minute;
-    return endMinutes - startMinutes;
+    final diff = endMinutes - startMinutes;
+    if (diff < 0) {
+      return 0;
+    }
+    return diff;
   }
 
   Future<void> _takePhotoFor(List<XFile> list) async {
