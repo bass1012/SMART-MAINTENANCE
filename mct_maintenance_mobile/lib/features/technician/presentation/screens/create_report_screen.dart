@@ -129,53 +129,55 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   Future<void> _loadTimesFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final id = _intervention['id'];
+    final now = DateTime.now();
 
     if (mounted) {
       setState(() {
+        // 1. Charger l'heure de début
         if (_startTime == null) {
           String? startedAtStr = _intervention['started_at'] ??
-              prefs.getString('intervention_${id}_started_at');
+              prefs.getString('intervention_${id}_started_at') ??
+              _intervention['created_at'];
           if (startedAtStr != null) {
             try {
               final startedAt = DateTime.parse(startedAtStr).toLocal();
-              _startTime =
-                  TimeOfDay(hour: startedAt.hour, minute: startedAt.minute);
-            } catch (e) {
-              _startTime = TimeOfDay.now();
-            }
-          } else {
-            _startTime = TimeOfDay.now();
-            final now = DateTime.now();
-            prefs.setString(
-                'intervention_${id}_started_at', now.toIso8601String());
+              _startTime = TimeOfDay(hour: startedAt.hour, minute: startedAt.minute);
+            } catch (_) {}
           }
         }
 
+        // 2. Charger l'heure de fin (par défaut = l'heure actuelle MAINTENANT)
         if (_endTime == null) {
           String? completedAtStr = _intervention['completed_at'] ??
               prefs.getString('intervention_${id}_completed_at');
           if (completedAtStr != null) {
             try {
               final completedAt = DateTime.parse(completedAtStr).toLocal();
-              _endTime =
-                  TimeOfDay(hour: completedAt.hour, minute: completedAt.minute);
-            } catch (e) {
+              _endTime = TimeOfDay(hour: completedAt.hour, minute: completedAt.minute);
+            } catch (_) {
               _endTime = TimeOfDay.now();
             }
           } else {
             _endTime = TimeOfDay.now();
-            final now = DateTime.now();
-            prefs.setString(
-                'intervention_${id}_completed_at', now.toIso8601String());
           }
         }
 
-        // Empêcher l'heure de fin d'être antérieure à l'heure de début au chargement
+        // 3. Si _startTime est toujours nul, déduire 30 minutes par rapport à _endTime
+        if (_startTime == null) {
+          final endDt = DateTime(now.year, now.month, now.day, _endTime!.hour, _endTime!.minute);
+          final startDt = endDt.subtract(const Duration(minutes: 30));
+          _startTime = TimeOfDay(hour: startDt.hour, minute: startDt.minute);
+          prefs.setString('intervention_${id}_started_at', startDt.toIso8601String());
+        }
+
+        // 4. Si _startTime == _endTime ou si _endTime est inférieur à _startTime (ex: ouvert instantanément)
         if (_startTime != null && _endTime != null) {
           final startMins = _startTime!.hour * 60 + _startTime!.minute;
           final endMins = _endTime!.hour * 60 + _endTime!.minute;
-          if (endMins < startMins) {
-            _endTime = _startTime;
+          if (endMins <= startMins) {
+            final endDt = DateTime(now.year, now.month, now.day, _endTime!.hour, _endTime!.minute);
+            final startDt = endDt.subtract(const Duration(minutes: 30));
+            _startTime = TimeOfDay(hour: startDt.hour, minute: startDt.minute);
           }
         }
       });
