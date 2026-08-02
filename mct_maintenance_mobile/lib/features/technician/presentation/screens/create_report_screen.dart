@@ -772,12 +772,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     // ──────────────────────────────────────────────
     // ÉTAPE 2 : RAPPORT DE FIN D'INTERVENTION
     // ──────────────────────────────────────────────
-    if (_interventionNatureController.text.trim().isEmpty) {
-      SnackBarHelper.showWarning(
-          context, 'Veuillez décrire la nature de l\'intervention');
-      return;
-    }
-
     final duration = _calculateDuration();
 
     String? startTimeStr;
@@ -813,8 +807,12 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       'start_time': startTimeStr,
       'end_time': endTimeStr,
       'duration': duration,
-      'intervention_nature': _interventionNatureController.text.trim(),
-      'work_description': _interventionNatureController.text.trim(),
+      'intervention_nature': _interventionNatureController.text.trim().isNotEmpty
+          ? _interventionNatureController.text.trim()
+          : 'Entretien / Maintenance',
+      'work_description': _interventionNatureController.text.trim().isNotEmpty
+          ? _interventionNatureController.text.trim()
+          : 'Entretien / Maintenance',
       'observations': _observationsController.text.trim(),
       'spare_parts': _spareParts,
       'materials_used': _spareParts,
@@ -1734,12 +1732,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                     ),
                                   ),
                                 ],
-                                const SizedBox(height: 16),
-                                const Text('Nature de l\'intervention *',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 14)),
-                                const SizedBox(height: 8),
                                 TextFormField(
                                   controller: _interventionNatureController,
                                   maxLines: 5,
