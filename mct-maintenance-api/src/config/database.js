@@ -11,16 +11,18 @@ let sequelize;
 if (isProduction && databaseUrl) {
   // Production: PostgreSQL via DATABASE_URL
   console.log('🐘 Connecting to PostgreSQL...');
-  const dbSslRejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED?.toLowerCase() === 'false' ? false : true;
+  const enableSsl = process.env.DB_SSL !== 'false';
+  const dbSslRejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED?.toLowerCase() === 'true';
+
   sequelize = new Sequelize(databaseUrl, {
     dialect: 'postgres',
     logging: false,
-    dialectOptions: {
+    dialectOptions: enableSsl ? {
       ssl: {
         require: true,
-        rejectUnauthorized: dbSslRejectUnauthorized // Desactivable via DB_SSL_REJECT_UNAUTHORIZED=false pour certificats auto-signés
+        rejectUnauthorized: dbSslRejectUnauthorized
       }
-    },
+    } : {},
     pool: {
       max: 20,
       min: 5,
