@@ -177,6 +177,12 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
                     _buildInfoCard(),
                     const SizedBox(height: 20),
 
+                    // Section Devis Généré par la direction (si disponible)
+                    if (_intervention['quote'] != null && _intervention['quote'] is Map) ...[
+                      _buildQuoteSection(Map<String, dynamic>.from(_intervention['quote'])),
+                      const SizedBox(height: 20),
+                    ],
+
                     // Date de soumission
                     if (report['submitted_at'] != null)
                       _buildInfoRow(
@@ -869,6 +875,110 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
               fontSize: 14,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuoteSection(Map<String, dynamic> quote) {
+    final reference = quote['reference'] ?? 'Devis';
+    final status = (quote['status'] ?? 'draft').toString();
+    final total = (quote['total'] ?? quote['subtotal'] ?? 0).toDouble();
+    final items = quote['items'] is List ? (quote['items'] as List) : [];
+
+    String statusText = 'Brouillon';
+    Color statusColor = Colors.grey;
+    if (status == 'sent') {
+      statusText = 'Envoyé au client';
+      statusColor = Colors.blue;
+    } else if (status == 'accepted') {
+      statusText = 'Accepté par le client';
+      statusColor = Colors.green;
+    } else if (status == 'rejected') {
+      statusText = 'Refusé par le client';
+      statusColor = Colors.red;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.request_quote_rounded, color: Color(0xFF0a543d), size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Devis généré ($reference)',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0a543d),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: statusColor),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Montant Total : ${NumberFormat('#,##0', 'fr_FR').format(total)} FCFA',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          if (items.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text(
+              'Détail des prestations / articles :',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 6),
+            for (var item in items)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '• ${item['productName'] ?? item['product_name'] ?? item['description'] ?? 'Article'} (x${item['quantity'] ?? 1})',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    Text(
+                      '${NumberFormat('#,##0', 'fr_FR').format((item['unitPrice'] ?? item['unit_price'] ?? 0) * (item['quantity'] ?? 1))} FCFA',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ],
       ),
     );

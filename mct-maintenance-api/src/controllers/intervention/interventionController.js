@@ -311,6 +311,25 @@ const getInterventionById = async (req, res) => {
       interventionData.diagnostic_report = interventionData.diagnosticReports[0];
     }
     
+    // Récupérer le devis associé si présent
+    try {
+      const quote = await Quote.findOne({
+        where: {
+          [Op.or]: [
+            { intervention_id: id },
+            ...(interventionData.diagnostic_report ? [{ diagnostic_report_id: interventionData.diagnostic_report.id }] : [])
+          ]
+        },
+        include: [{ model: QuoteItem, as: 'items' }],
+        order: [['created_at', 'DESC']]
+      });
+      if (quote) {
+        interventionData.quote = quote.toJSON();
+      }
+    } catch (quoteErr) {
+      console.log('⚠️ Note: Impossible de charger le devis lié:', quoteErr.message);
+    }
+
     res.status(200).json({
       success: true,
       data: interventionData
