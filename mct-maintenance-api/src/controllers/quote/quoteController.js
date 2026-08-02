@@ -325,11 +325,22 @@ const getAllQuotes = async (req, res) => {
       });
       where.customerId = profile?.id ?? -1;
     } else if (req.user.role === 'technician') {
+      const { DiagnosticReport } = require('../../models');
       const interventions = await Intervention.findAll({
         where: { technician_id: req.user.id },
         attributes: ['id']
       });
-      where.intervention_id = { [Op.in]: interventions.map((item) => item.id) };
+      const reports = await DiagnosticReport.findAll({
+        where: { technician_id: req.user.id },
+        attributes: ['id']
+      });
+      const interventionIds = interventions.map((item) => item.id);
+      const reportIds = reports.map((item) => item.id);
+
+      where[Op.or] = [
+        { intervention_id: { [Op.in]: interventionIds.length > 0 ? interventionIds : [-1] } },
+        { diagnostic_report_id: { [Op.in]: reportIds.length > 0 ? reportIds : [-1] } }
+      ];
     } else if (!isInternalUser(req.user)) {
       where.id = -1;
     }

@@ -355,9 +355,10 @@ exports.rejectQuote = async (req, res) => {
     }
 
     // Notifier le technicien
-    if (quote.intervention.assigned_to) {
+    const techId = quote.intervention?.technician_id || quote.diagnosticReport?.technician_id;
+    if (techId) {
       await notificationService.create({
-        userId: quote.intervention.assigned_to,
+        userId: techId,
         type: 'quote_rejected',
         title: 'Devis rejeté',
         message: `Le client a rejeté le devis pour l'intervention #${quote.intervention_id}`,
@@ -406,13 +407,13 @@ exports.getQuoteDetails = async (req, res) => {
           as: 'intervention',
           include: [
             { model: CustomerProfile, as: 'customer' },
-            { model: User, as: 'assignedTo', attributes: ['id', 'firstName', 'lastName', 'email', 'phoneNumber'] }
+            { model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] }
           ]
         },
         { 
           model: DiagnosticReport, 
           as: 'diagnosticReport',
-          include: [{ model: User, as: 'technician', attributes: ['id', 'firstName', 'lastName', 'email'] }]
+          include: [{ model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name', 'email'] }]
         }
       ]
     });
@@ -423,9 +424,12 @@ exports.getQuoteDetails = async (req, res) => {
 
     // Vérifier les permissions
     const user = req.user;
-    const isAdmin = user.role === 'admin';
-    const isCustomer = quote.intervention?.customer?.user_id === user.id;
-    const isTechnician = quote.intervention?.assigned_to === user.id;
+    const isAdmin = isInternalUser(user);
+    const isCustomer = quote.intervention?.customer?.user_id === user.id || Number(quote.customerId) === Number(user.id);
+    const isTechnician = user.role === 'technician' && (
+      Number(quote.intervention?.technician_id) === Number(user.id) ||
+      Number(quote.diagnosticReport?.technician_id) === Number(user.id)
+    );
 
     if (!isAdmin && !isCustomer && !isTechnician) {
       return res.status(403).json({ message: 'Accès non autorisé' });

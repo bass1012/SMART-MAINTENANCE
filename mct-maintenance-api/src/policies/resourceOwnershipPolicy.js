@@ -16,12 +16,25 @@ const canReadQuote = async ({ quote, user, models = { CustomerProfile, Intervent
     return Boolean(profile && Number(quote.customerId) === Number(profile.id));
   }
 
-  if (user.role === 'technician' && quote.intervention_id) {
-    const intervention = await models.Intervention.findOne({
-      where: { id: quote.intervention_id, technician_id: user.id },
-      attributes: ['id']
-    });
-    return Boolean(intervention);
+  if (user.role === 'technician') {
+    if (quote.intervention_id) {
+      const intervention = await models.Intervention.findOne({
+        where: { id: quote.intervention_id, technician_id: user.id },
+        attributes: ['id']
+      });
+      if (intervention) return true;
+    }
+    if (quote.diagnostic_report_id) {
+      const DiagnosticReport = models.DiagnosticReport || require('../models').DiagnosticReport;
+      const report = await DiagnosticReport.findOne({
+        where: { id: quote.diagnostic_report_id, technician_id: user.id },
+        attributes: ['id']
+      });
+      if (report) return true;
+    }
+    if (quote.intervention && Number(quote.intervention.technician_id) === Number(user.id)) {
+      return true;
+    }
   }
 
   return false;
