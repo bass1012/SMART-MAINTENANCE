@@ -943,39 +943,8 @@ Rapport officiel soumis
 
           if (hasBeforeMeasures) ...[
             const Divider(),
-            const Text(
-              '🟢 Données Techniques — AVANT Intervention',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Color(0xFF0a543d),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 16,
-              runSpacing: 12,
-              children: [
-                if (bPression.isNotEmpty)
-                  _buildMeasureItem(
-                      Icons.compress, 'Pression', '$bPression bar'),
-                if (bPuissance.isNotEmpty)
-                  _buildMeasureItem(Icons.power, 'Puissance', '$bPuissance CV'),
-                if (bIntensite.isNotEmpty)
-                  _buildMeasureItem(
-                      Icons.electrical_services, 'Intensité', '$bIntensite A'),
-                if (bTension.isNotEmpty)
-                  _buildMeasureItem(Icons.bolt, 'Tension', '$bTension V'),
-                if (bFreon.isNotEmpty)
-                  _buildMeasureItem(Icons.cloud, 'Fréon', bFreon),
-              ],
-            ),
-          ],
-
-          if (hasAfterMeasures) ...[
-            const Divider(),
             Text(
-              '🟠 Données Techniques — APRÈS Intervention',
+              '🟠 Données Techniques — AVANT Intervention',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
@@ -984,21 +953,52 @@ Rapport officiel soumis
             ),
             const SizedBox(height: 8),
             Wrap(
-              spacing: 16,
-              runSpacing: 12,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (bPression.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.compress, 'Pression', '$bPression bar', Colors.orange.shade800),
+                if (bPuissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$bPuissance CV', Colors.orange.shade800),
+                if (bIntensite.isNotEmpty)
+                  _buildMeasureItem(
+                      Icons.electrical_services, 'Intensité', '$bIntensite A', Colors.orange.shade800),
+                if (bTension.isNotEmpty)
+                  _buildMeasureItem(Icons.bolt, 'Tension', '$bTension V', Colors.orange.shade800),
+                if (bFreon.isNotEmpty)
+                  _buildMeasureItem(Icons.cloud, 'Fréon', bFreon, Colors.orange.shade800),
+              ],
+            ),
+          ],
+
+          if (hasAfterMeasures) ...[
+            const Divider(),
+            const Text(
+              '🟢 Données Techniques — APRÈS Intervention',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: Color(0xFF0a543d),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 if (aPression.isNotEmpty)
                   _buildMeasureItem(
-                      Icons.compress, 'Pression', '$aPression bar'),
+                      Icons.compress, 'Pression', '$aPression bar', const Color(0xFF0a543d)),
                 if (aPuissance.isNotEmpty)
-                  _buildMeasureItem(Icons.power, 'Puissance', '$aPuissance CV'),
+                  _buildMeasureItem(Icons.power, 'Puissance', '$aPuissance CV', const Color(0xFF0a543d)),
                 if (aIntensite.isNotEmpty)
                   _buildMeasureItem(
-                      Icons.electrical_services, 'Intensité', '$aIntensite A'),
+                      Icons.electrical_services, 'Intensité', '$aIntensite A', const Color(0xFF0a543d)),
                 if (aTension.isNotEmpty)
-                  _buildMeasureItem(Icons.bolt, 'Tension', '$aTension V'),
+                  _buildMeasureItem(Icons.bolt, 'Tension', '$aTension V', const Color(0xFF0a543d)),
                 if (aFreon.isNotEmpty)
-                  _buildMeasureItem(Icons.cloud, 'Fréon', aFreon),
+                  _buildMeasureItem(Icons.cloud, 'Fréon', aFreon, const Color(0xFF0a543d)),
               ],
             ),
           ],
@@ -1108,32 +1108,44 @@ Rapport officiel soumis
     );
   }
 
-  Widget _buildMeasureItem(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.orange.shade700, size: 20),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
+  Widget _buildMeasureItem(IconData icon, String label, String value, [Color? color]) {
+    final itemColor = color ?? Colors.orange.shade800;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: itemColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: itemColor.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: itemColor, size: 18),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.orange.shade900,
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: itemColor,
+                ),
               ),
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -527,55 +527,6 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade300),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.play_circle_fill, color: Colors.green.shade700, size: 16),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Données Techniques — AVANT Intervention',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: Colors.green.shade900,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    children: [
-                      if (equipment.beforePression != null && equipment.beforePression!.isNotEmpty)
-                        _buildMeasureChip(Icons.compress, 'Pression', '${equipment.beforePression} bar', color: Colors.green.shade800),
-                      if (equipment.beforeFreon != null && equipment.beforeFreon!.isNotEmpty)
-                        _buildMeasureChip(Icons.ac_unit, 'Fréon', '${equipment.beforeFreon}', color: Colors.green.shade800),
-                      if (equipment.beforePuissance != null && equipment.beforePuissance!.isNotEmpty)
-                        _buildMeasureChip(Icons.power, 'Puissance', '${equipment.beforePuissance} CV', color: Colors.green.shade800),
-                      if (equipment.beforeIntensite != null && equipment.beforeIntensite!.isNotEmpty)
-                        _buildMeasureChip(Icons.electrical_services, 'Intensité', '${equipment.beforeIntensite} A', color: Colors.green.shade800),
-                      if (equipment.beforeTension != null && equipment.beforeTension!.isNotEmpty)
-                        _buildMeasureChip(Icons.bolt, 'Tension', '${equipment.beforeTension} V', color: Colors.green.shade800),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // Mesures techniques APRÈS intervention (Clôture finale)
-          if (equipment.hasAfterMeasures) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
                 color: Colors.orange.shade50,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.orange.shade300),
@@ -585,10 +536,10 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.check_circle, color: Colors.orange.shade700, size: 16),
+                      Icon(Icons.play_circle_fill, color: Colors.orange.shade700, size: 16),
                       const SizedBox(width: 6),
                       Text(
-                        'Données Techniques — APRÈS Intervention',
+                        'Données Techniques — AVANT Intervention',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
@@ -602,16 +553,65 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
                     spacing: 16,
                     runSpacing: 8,
                     children: [
+                      if (equipment.beforePression != null && equipment.beforePression!.isNotEmpty)
+                        _buildMeasureChip(Icons.compress, 'Pression', '${equipment.beforePression} bar', color: Colors.orange.shade900),
+                      if (equipment.beforeFreon != null && equipment.beforeFreon!.isNotEmpty)
+                        _buildMeasureChip(Icons.ac_unit, 'Fréon', '${equipment.beforeFreon}', color: Colors.orange.shade900),
+                      if (equipment.beforePuissance != null && equipment.beforePuissance!.isNotEmpty)
+                        _buildMeasureChip(Icons.power, 'Puissance', '${equipment.beforePuissance} CV', color: Colors.orange.shade900),
+                      if (equipment.beforeIntensite != null && equipment.beforeIntensite!.isNotEmpty)
+                        _buildMeasureChip(Icons.electrical_services, 'Intensité', '${equipment.beforeIntensite} A', color: Colors.orange.shade900),
+                      if (equipment.beforeTension != null && equipment.beforeTension!.isNotEmpty)
+                        _buildMeasureChip(Icons.bolt, 'Tension', '${equipment.beforeTension} V', color: Colors.orange.shade900),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Mesures techniques APRÈS intervention (Clôture finale)
+          if (equipment.hasAfterMeasures) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green.shade700, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Données Techniques — APRÈS Intervention',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.green.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
                       if (equipment.afterPression != null && equipment.afterPression!.isNotEmpty)
-                        _buildMeasureChip(Icons.compress, 'Pression', '${equipment.afterPression} bar', color: Colors.orange.shade900),
+                        _buildMeasureChip(Icons.compress, 'Pression', '${equipment.afterPression} bar', color: Colors.green.shade800),
                       if (equipment.afterFreon != null && equipment.afterFreon!.isNotEmpty)
-                        _buildMeasureChip(Icons.ac_unit, 'Fréon', '${equipment.afterFreon}', color: Colors.orange.shade900),
+                        _buildMeasureChip(Icons.ac_unit, 'Fréon', '${equipment.afterFreon}', color: Colors.green.shade800),
                       if (equipment.afterPuissance != null && equipment.afterPuissance!.isNotEmpty)
-                        _buildMeasureChip(Icons.power, 'Puissance', '${equipment.afterPuissance} CV', color: Colors.orange.shade900),
+                        _buildMeasureChip(Icons.power, 'Puissance', '${equipment.afterPuissance} CV', color: Colors.green.shade800),
                       if (equipment.afterIntensite != null && equipment.afterIntensite!.isNotEmpty)
-                        _buildMeasureChip(Icons.electrical_services, 'Intensité', '${equipment.afterIntensite} A', color: Colors.orange.shade900),
+                        _buildMeasureChip(Icons.electrical_services, 'Intensité', '${equipment.afterIntensite} A', color: Colors.green.shade800),
                       if (equipment.afterTension != null && equipment.afterTension!.isNotEmpty)
-                        _buildMeasureChip(Icons.bolt, 'Tension', '${equipment.afterTension} V', color: Colors.orange.shade900),
+                        _buildMeasureChip(Icons.bolt, 'Tension', '${equipment.afterTension} V', color: Colors.green.shade800),
                     ],
                   ),
                 ],
