@@ -152,6 +152,34 @@ describe('fineoPayFinancialTransactionService', () => {
       second_payment_status: 'paid',
       status: 'completed'
     }), { transaction: expect.any(Object) });
+    expect(models.OutboxEvent.create).not.toHaveBeenCalled();
+  });
+
+  test('inscrit les effets abonnement dans la même transaction', async () => {
+    const models = createModels();
+    models.Subscription.findByPk.mockResolvedValue({
+      id: 5,
+      first_payment_status: 'pending',
+      second_payment_amount: 5000,
+      first_payment_amount: 5000,
+      contract_type: 'scheduled',
+      update: jest.fn()
+    });
+    models.Payment.create.mockResolvedValue({ id: 3 });
+
+    await recordSubscriptionPayment({
+      subscriptionId: 5,
+      reference: 'TRX-SUB-1',
+      amount: 5000,
+      database: createDatabase(),
+      models
+    });
+
+    expect(models.OutboxEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+      topic: 'payment.subscription.confirmed',
+      idempotencyKey: 'fineopay:TRX-SUB-1:subscription-effects',
+      payload: expect.objectContaining({ subscriptionId: 5, paymentStep: 1 })
+    }), { transaction: expect.any(Object) });
   });
 
   test('reconnaît un paiement identique existant sans remuter la cible', async () => {
@@ -226,6 +254,11 @@ describe('fineoPayFinancialTransactionService', () => {
     expect(result).toEqual(expect.objectContaining({
       paymentStep: 1, executionActivated: true, duplicate: false
     }));
+    expect(models.OutboxEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+      topic: 'payment.quote.confirmed',
+      idempotencyKey: 'fineopay:TRX-QUOTE-1:quote-effects',
+      payload: expect.objectContaining({ orderId: 12, quoteId: 7, interventionId: 4 })
+    }), { transaction: expect.any(Object) });
   });
 
   test('le solde devis ne régresse pas le statut de l’intervention', async () => {

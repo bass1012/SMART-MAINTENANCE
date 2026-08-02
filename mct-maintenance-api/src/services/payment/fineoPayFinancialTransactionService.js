@@ -271,7 +271,8 @@ const recordSubscriptionPayment = async ({
   amount,
   sourceIp,
   database = sequelize,
-  models = { Subscription, User, Payment, PaymentLog },
+  models = { Subscription, User, Payment, PaymentLog, OutboxEvent },
+  enqueueEvent = enqueueOutboxEvent,
   now = new Date()
 }) => database.transaction(async (transaction) => {
   const subscription = await models.Subscription.findByPk(subscriptionId, {
@@ -343,6 +344,20 @@ const recordSubscriptionPayment = async ({
     success: true,
     metadata: { subscriptionId, type: 'subscription', payment_phase: paymentStep }
   }, { transaction });
+  await enqueueEvent({
+    topic: 'payment.subscription.confirmed',
+    aggregateType: 'subscription',
+    aggregateId: subscription.id,
+    idempotencyKey: `fineopay:${reference}:subscription-effects`,
+    payload: {
+      subscriptionId: subscription.id,
+      reference,
+      amount: Number(amount),
+      paymentStep
+    },
+    transaction,
+    model: models.OutboxEvent
+  });
 
   return { subscription, paymentStep, duplicate: false, payment };
 });
@@ -354,7 +369,8 @@ const recordQuoteOrderPayment = async ({
   sourceIp,
   clientAccountNumber,
   database = sequelize,
-  models = { Order, Quote, Intervention, Payment, PaymentLog },
+  models = { Order, Quote, Intervention, Payment, PaymentLog, OutboxEvent },
+  enqueueEvent = enqueueOutboxEvent,
   now = new Date()
 }) => database.transaction(async (transaction) => {
   const order = await models.Order.findByPk(orderId, {
@@ -507,6 +523,23 @@ const recordQuoteOrderPayment = async ({
     success: true,
     metadata: { source: 'webhook', clientAccountNumber, paymentStep }
   }, { transaction });
+  await enqueueEvent({
+    topic: 'payment.quote.confirmed',
+    aggregateType: 'order',
+    aggregateId: order.id,
+    idempotencyKey: `fineopay:${reference}:quote-effects`,
+    payload: {
+      orderId: order.id,
+      quoteId: quote.id,
+      interventionId: intervention?.id || null,
+      reference,
+      amount: Number(amount),
+      paymentStep,
+      executionActivated
+    },
+    transaction,
+    model: models.OutboxEvent
+  });
 
   return {
     order,

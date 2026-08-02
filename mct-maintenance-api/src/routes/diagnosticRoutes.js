@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const diagnosticReportController = require('../controllers/diagnosticReportController');
 const quoteWorkflowController = require('../controllers/quoteWorkflowController');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 
 // ========== DIAGNOSTIC REPORTS ==========
 
@@ -11,7 +11,12 @@ const { authenticate } = require('../middleware/auth');
  * POST /api/diagnostic-reports
  * Body: { intervention_id, problem_description, recommended_solution, parts_needed, labor_cost, estimated_total, urgency_level, estimated_duration, photos, notes }
  */
-router.post('/', authenticate, diagnosticReportController.submitReport);
+router.post(
+  '/',
+  authenticate,
+  authorize('technician'),
+  diagnosticReportController.submitReport
+);
 
 /**
  * Lister les rapports de diagnostic (avec filtres)
@@ -30,7 +35,12 @@ router.get('/:id', authenticate, diagnosticReportController.getReportById);
  * PATCH /api/diagnostic-reports/:id/status
  * Body: { status: 'reviewed' | 'quote_sent' | 'approved' | 'rejected', notes }
  */
-router.patch('/:id/status', authenticate, diagnosticReportController.updateReportStatus);
+router.patch(
+  '/:id/status',
+  authenticate,
+  authorize('admin', 'manager'),
+  diagnosticReportController.updateReportStatus
+);
 
 // ========== QUOTE WORKFLOW ==========
 

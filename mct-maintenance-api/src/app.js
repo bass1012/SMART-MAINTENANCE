@@ -10,6 +10,7 @@ dotenv.config(); // Charger les variables d'environnement depuis .env
 const path = require('path');
 const fs = require('fs');
 const { testConnection, syncDatabase } = require('./config/database');
+const { connectRedis, disconnectRedis } = require('./config/redis');
 const { setupSwagger } = require('./config/swagger');
 const notificationService = require('./services/notificationService');
 const fcmService = require('./services/fcmService');
@@ -39,6 +40,7 @@ const maintenanceScheduleRoutes = require('./routes/maintenanceScheduleRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes');
 const complaintRoutes = require('./routes/complaintRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const fileRoutes = require('./routes/fileRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const brandRoutes = require('./routes/brandRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
@@ -169,12 +171,17 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 Dossier uploads créé');
 }
-app.use('/uploads', express.static(uploadsDir, {
-  dotfiles: 'ignore',
-  index: false,
-  maxAge: '1d'
-}));
-console.log('📁 Dossier uploads disponible sur /uploads');
+// Les fichiers sensibles (interventions et documents) passent par fileRoutes
+// ci-dessous. Seuls les médias explicitement publics restent servis en statique.
+app.use('/uploads', fileRoutes);
+for (const publicDirectory of ['avatars', 'products', 'equipments', 'qrcodes']) {
+  app.use(`/uploads/${publicDirectory}`, express.static(path.join(uploadsDir, publicDirectory), {
+    dotfiles: 'ignore',
+    index: false,
+    maxAge: '1d'
+  }));
+}
+console.log('📁 Médias publics et fichiers protégés disponibles sur /uploads');
 
 // API routes
 app.use('/api/auth', authLimiter, authRoutes);
@@ -233,89 +240,11 @@ const startServer = async () => {
   try {
     // Test database connection
     await testConnection();
+    await connectRedis();
     
-    // Sync database models
+    // Vérifie uniquement la connexion. Toute évolution du schéma doit passer
+    // par `npm run migrate` avant le basculement du processus applicatif.
     await syncDatabase();
-
-    // Migration automatique des colonnes 50% solde sur interventions
-    try {
-      const { sequelize } = require('./config/database');
-      const { DataTypes } = require('sequelize');
-      const queryInterface = sequelize.getQueryInterface();
-      const tableDesc = await queryInterface.describeTable('interventions');
-
-      if (!tableDesc.payment_option) {
-        await queryInterface.addColumn('interventions', 'payment_option', { type: DataTypes.STRING, allowNull: true, defaultValue: 'full' });
-      }
-      if (!tableDesc.total_price) {
-        await queryInterface.addColumn('interventions', 'total_price', { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 });
-      }
-      if (!tableDesc.second_payment_amount) {
-        await queryInterface.addColumn('interventions', 'second_payment_amount', { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 });
-      }
-      if (!tableDesc.second_payment_status) {
-        await queryInterface.addColumn('interventions', 'second_payment_status', { type: DataTypes.STRING, allowNull: true, defaultValue: 'none' });
-      }
-      console.log('✅ Auto-migration colonnes 50% solde interventions effectuée');
-    } catch (migErr) {
-      console.log('ℹ️ Remarque migration colonnes interventions:', migErr.message);
-    }
-
-    // Migration automatique des colonnes diagnostic_reports
-    try {
-      const { sequelize } = require('./config/database');
-      const { DataTypes } = require('sequelize');
-      const queryInterface = sequelize.getQueryInterface();
-      const diagTableDesc = await queryInterface.describeTable('diagnostic_reports');
-      if (!diagTableDesc.equipments) {
-        await queryInterface.addColumn('diagnostic_reports', 'equipments', { type: DataTypes.TEXT, allowNull: true });
-      }
-      if (!diagTableDesc.materials_needed) {
-        await queryInterface.addColumn('diagnostic_reports', 'materials_needed', { type: DataTypes.TEXT, allowNull: true });
-      }
-      console.log('✅ Auto-migration colonnes diagnostic_reports effectuée');
-    } catch (diagMigErr) {
-      console.log('ℹ️ Remarque migration colonnes diagnostic_reports:', diagMigErr.message);
-    }
-    
-    // Auto-correction des souscriptions et interventions à 0 FCFA en attente
-    try {
-      const { Subscription, Intervention } = require('./models');
-      const [updatedSubCount] = await Subscription.update(
-        { payment_status: 'paid', first_payment_status: 'paid', second_payment_status: 'paid', status: 'active' },
-        { where: { price: 0, payment_status: 'pending' } }
-      );
-      if (updatedSubCount > 0) {
-        console.log(`✅ ${updatedSubCount} souscription(s) à 0 FCFA mise(s) à jour en "paid"`);
-      }
-
-      const [updatedIntervCount] = await Intervention.update(
-        { diagnostic_paid: true, is_free_diagnosis: true },
-        { where: { diagnostic_fee: 0, diagnostic_paid: false } }
-      );
-      if (updatedIntervCount > 0) {
-        console.log(`✅ ${updatedIntervCount} intervention(s) à 0 FCFA mise(s) à jour en "paid"`);
-      }
-
-      // 🔧 Auto-correction: Si une intervention en mode 'split' n'est pas encore terminée/confirmée, son 2ème paiement (solde 50%) doit rester 'pending'
-      const { Op } = require('sequelize');
-      const [resetSecondCount] = await Intervention.update(
-        { second_payment_status: 'pending' },
-        { 
-          where: { 
-            payment_option: 'split',
-            second_payment_status: 'paid',
-            status: { [Op.ne]: 'completed' },
-            customer_confirmed: { [Op.ne]: true }
-          } 
-        }
-      );
-      if (resetSecondCount > 0) {
-        console.log(`🔧 ${resetSecondCount} intervention(s) split non-terminée(s) réinitialisée(s) -> second_payment_status: "pending"`);
-      }
-    } catch (err) {
-      console.error('⚠️  Erreur auto-update 0 FCFA:', err.message);
-    }
     
     // Initialize Firebase Cloud Messaging
     try {
@@ -355,6 +284,7 @@ process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
   cronService.stopAllJobs();
   await outboxWorker.stop();
+  await disconnectRedis();
   process.exit(0);
 });
 
@@ -362,6 +292,7 @@ process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully');
   cronService.stopAllJobs();
   await outboxWorker.stop();
+  await disconnectRedis();
   process.exit(0);
 });
 

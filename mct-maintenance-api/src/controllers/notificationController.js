@@ -62,20 +62,8 @@ const markAsRead = async (req, res) => {
     const userId = req.user.id;
 
     // Vérifier que la notification appartient à l'utilisateur
-    const notification = await Notification.findByPk(id);
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification non trouvée'
-      });
-    }
-
-    if (notification.user_id !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Accès non autorisé'
-      });
-    }
+    const notification = await Notification.findOne({ where: { id, user_id: userId } });
+    if (!notification) return res.status(404).json({ success: false, message: 'Notification non trouvée' });
 
     await notificationService.markAsRead(id);
 
@@ -99,20 +87,8 @@ const markAsUnread = async (req, res) => {
     const userId = req.user.id;
 
     // Vérifier que la notification appartient à l'utilisateur
-    const notification = await Notification.findByPk(id);
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification non trouvée'
-      });
-    }
-
-    if (notification.user_id !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Accès non autorisé'
-      });
-    }
+    const notification = await Notification.findOne({ where: { id, user_id: userId } });
+    if (!notification) return res.status(404).json({ success: false, message: 'Notification non trouvée' });
 
     await notificationService.markAsUnread(id);
 
@@ -156,20 +132,8 @@ const deleteNotification = async (req, res) => {
     const userId = req.user.id;
 
     // Vérifier que la notification appartient à l'utilisateur
-    const notification = await Notification.findByPk(id);
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification non trouvée'
-      });
-    }
-
-    if (notification.user_id !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Accès non autorisé'
-      });
-    }
+    const notification = await Notification.findOne({ where: { id, user_id: userId } });
+    if (!notification) return res.status(404).json({ success: false, message: 'Notification non trouvée' });
 
     await notification.destroy();
 

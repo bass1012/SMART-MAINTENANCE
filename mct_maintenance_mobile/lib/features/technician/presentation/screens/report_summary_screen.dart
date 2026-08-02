@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
+import 'package:mct_maintenance_mobile/widgets/common/authenticated_network_image.dart';
 
 class ReportSummaryScreen extends StatefulWidget {
   final Map<String, dynamic> intervention;
@@ -177,7 +178,7 @@ Smart Maintenance - Service de qualité
           : rawPath;
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Image.network(
+        child: AuthenticatedNetworkImage(
           fullUrl,
           width: 84,
           height: 84,

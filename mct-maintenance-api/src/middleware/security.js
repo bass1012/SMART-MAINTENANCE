@@ -4,12 +4,16 @@ const cors = require('cors');
 const xss = require('xss-clean');
 const hpp = require('hpp');
 const mongoSanitize = require('express-mongo-sanitize');
+const { createRedisRateLimitStore } = require('../config/redis');
 
 // Configuration du rate limiting
-const createRateLimiter = (windowMs, max, message) => {
+const createRateLimiter = (prefix, windowMs, max, message) => {
   return rateLimit({
     windowMs,
     max,
+    ...(process.env.REDIS_URL ? {
+      store: createRedisRateLimitStore({ prefix, windowMs })
+    } : {}),
     message: {
       success: false,
       error: message || 'Trop de requêtes, veuillez réessayer plus tard'
@@ -21,6 +25,7 @@ const createRateLimiter = (windowMs, max, message) => {
 
 // Rate limiting général
 const generalLimiter = createRateLimiter(
+  'general',
   15 * 60 * 1000, // 15 minutes
   process.env.NODE_ENV === 'development' ? 1000 : 500, // limite chaque IP (1000 en dev, 500 en prod)
   'Trop de requêtes depuis cette IP, veuillez réessayer après 15 minutes'
@@ -28,6 +33,7 @@ const generalLimiter = createRateLimiter(
 
 // Rate limiting pour l'authentification
 const authLimiter = createRateLimiter(
+  'auth',
   15 * 60 * 1000, // 15 minutes
   process.env.NODE_ENV === 'development' ? 1000 : 200, // limite en dev : 1000, prod : 200
   'Trop de tentatives de connexion, veuillez réessayer après 15 minutes'
@@ -35,6 +41,7 @@ const authLimiter = createRateLimiter(
 
 // Rate limiting pour les routes sensibles
 const sensitiveLimiter = createRateLimiter(
+  'sensitive',
   60 * 60 * 1000, // 1 heure
   3, // limite chaque IP à 3 requêtes par heure
   'Trop de requêtes sur cette route sensible, veuillez réessayer plus tard'

@@ -1217,6 +1217,15 @@ flutter build ipa
 
 > Objectif : sécuriser et fiabiliser les parcours existants avant d'ajouter de nouvelles fonctions prédictives ou IA.
 
+## Exécution corrective — 2 août 2026
+
+- [x] Protéger les fichiers téléversés : les photos d'intervention suivent désormais la politique d'accès de l'intervention, les documents sont limités aux rôles internes et le mobile transmet le Bearer token.
+- [x] Finaliser les effets de paiement restants : devis et souscriptions inscrivent leurs effets dans l'outbox au sein de la transaction financière ; les vérifications actives utilisent aussi le ledger/outbox et n'acceptent plus de rapprochement par montant/date.
+- [x] Retirer les mutations de schéma au démarrage et fournir une procédure de migration contrôlée, sauvegardée et vérifiable.
+- [x] Vérifier les changements applicatifs : 34 suites backend et 159 tests réussis ; analyse Flutter ciblée sans erreur de compilation (22 remarques préexistantes).
+- [x] Mettre à jour cette checklist et les leçons après vérification.
+- [ ] Actions de déploiement nécessitant les accès externes : rotation/révocation des secrets, sauvegarde et migrations préproduction/production, Redis multi-worker et essais terrain offline.
+
 ## P0 — Sécurité et intégrité financière
 
 - [ ] **Faire tourner et retirer tous les secrets suivis par Git.**
@@ -1231,7 +1240,7 @@ flutter build ipa
   - [x] Ajouter des tests positifs et négatifs d'isolation multi-client/technicien.
   - [x] Critère vérifié : la ressource hors périmètre retourne 404 sans charger ses données sensibles.
   - Preuve : 12 tests ciblés réussis le 1 août 2026 et syntaxe Node validée.
-  - [ ] Étendre la même politique aux listes et aux autres ressources `/:id` (devis, paiements, rapports, contrats et notifications).
+  - [x] Étendre la même politique aux listes et aux autres ressources `/:id` : devis/PDF, paiements/factures, rapports, contrats/souscriptions et notifications sont filtrés par rôle et propriétaire, avec 404 hors périmètre.
 - [ ] **Sécuriser les créations et vérifications de paiement FineoPay.**
   - [x] Sécuriser `createPaymentLink` : charger la commande avant FineoPay, vérifier propriétaire/rôle et état payable, puis dériver montant, étape et libellé depuis `Order`/`Quote`.
   - [x] Couvrir les paiements intégral, acompte et solde 50/50, y compris les totaux impairs, sans faire confiance à `amount`, `title` ou `paymentStep` du client.
@@ -1255,14 +1264,14 @@ flutter build ipa
     - [x] Prouver par tests le rejeu séquentiel, la contrainte d'unicité en base, la reprise après échec et l'expiration du bail.
     - Preuve intermédiaire : 87 tests utiles réussis le 1 août 2026, dont transactions boutique/diagnostic/souscription/devis, ordre des verrous, total impair 50/50, solde sans régression d'état, montants falsifiés, propagation d'erreur, doublon exact, migrations isolées, réservation et rejeu webhook.
   - [x] Déplacer l'accusé HTTP 200 après la finalisation durable du registre de traitement ; une erreur métier marque l'événement `failed` et renvoie un 500 réessayable.
-  - [~] Déporter les notifications et automatisations post-paiement dans une outbox transactionnelle — chantier en cours.
+  - [~] Déporter les notifications et automatisations post-paiement dans une outbox transactionnelle — parcours callback et vérifications actives raccordés ; validation de concurrence réelle restante.
     - [x] Créer `outbox_events` avec clé d'idempotence unique, disponibilité, bail, tentatives, backoff et dead-letter.
     - [~] Implémenter la réservation concurrente `SKIP LOCKED` sous PostgreSQL et une exécution séquentielle compatible SQLite ; PostgreSQL et le fallback séquentiel sont en place, le verrou `IMMEDIATE`/retry `SQLITE_BUSY` reste à durcir pour les tests concurrents SQLite.
     - [x] Ajouter un registre de handlers et un worker limité au worker PM2 n°0, avec protection contre les exécutions superposées et arrêt propre.
     - [x] Ajouter une clé de déduplication nullable et unique par destinataire aux notifications ; un rejeu retourne la ligne existante sans renvoyer Socket.IO/FCM.
     - [x] Remplacer l'ENUM `notifications.type` par une chaîne validée de 64 caractères, avec migration PostgreSQL/SQLite testée, afin d'accepter les types déjà utilisés par le métier.
-    - [~] Extraire les effets post-commit boutique, diagnostic, souscription et devis dans des handlers idempotents ; les callbacks boutique et diagnostic sont terminés, souscription, devis et les anciens parcours de vérification active restent à migrer.
-    - [~] Inscrire les événements dans la même transaction que le paiement puis retirer les appels directs du contrôleur ; les callbacks boutique et diagnostic ne dépendent plus de leurs effets externes directs.
+    - [x] Extraire les effets post-commit boutique, diagnostic, souscription et devis dans des handlers idempotents ; les callbacks et vérifications actives passent par le ledger et l'outbox.
+    - [x] Inscrire les événements dans la même transaction que le paiement puis retirer les appels directs des parcours exécutés du contrôleur.
     - [x] Rendre l'assignation automatique pilotable sans notifications directes, puis envoyer les notifications d'assignation depuis l'outbox avec reprise après assignation et clés de déduplication.
     - [~] Tester succès, doublon, concurrence, retry/backoff, bail expiré et dead-letter ; succès, retry/backoff, bail, clé unique et dead-letter sont couverts, la concurrence réelle reste à prouver.
     - [ ] Appliquer sur une base de préproduction, dans l'ordre, les migrations du ledger, du registre webhook, de l'outbox, de la déduplication des notifications et des types de notification extensibles ; aucune de ces migrations n'a été exécutée sur une base réelle pendant cette session.
@@ -1282,8 +1291,8 @@ flutter build ipa
   - [ ] Appliquer la migration après sauvegarde sur la préproduction puis la production, et confirmer par audit qu'il reste 0 ligne ambiguë/orpheline et que la FK canonique est présente.
   - [~] Critère de clôture : le code ne combine plus `User.id` et `CustomerProfile.id` dans `Intervention.customer_id` et la base locale est canonique ; clôture finale après migration et audit des bases déployées.
 - [ ] **Protéger photos, rapports et documents.**
-  - [ ] Remplacer le service statique public par une route autorisée ou des URLs signées à durée limitée.
-  - [ ] Vérifier rôle, propriété, taille, MIME et magic bytes lors de l'upload et du téléchargement.
+  - [x] Remplacer le service statique public par une route autorisée pour les photos d'intervention et documents ; avatars, catalogue, équipements et QR restent explicitement publics.
+  - [x] Vérifier rôle, propriété, taille, MIME et magic bytes lors de l'upload et du téléchargement ; un fichier falsifié est supprimé et retourne HTTP 415.
   - [ ] Définir rétention, suppression et consentement pour photos, signatures et localisation.
 
 ## P1 — Fiabilité terrain, données et exploitation
@@ -1301,14 +1310,14 @@ flutter build ipa
   - [x] Aligner mobile client, mobile technicien, dashboard, notifications et deep links.
 - [x] **Industrialiser les migrations, les tests et le pipeline CI.**
   - [x] Fichier de workflow GitHub Actions `.github/workflows/ci.yml` configuré pour valider `npm test` et `flutter analyze`.
-  - [ ] Utiliser un seul moteur de migrations versionnées pour `.js` et/ou `.sql`.
-  - [ ] Retirer les changements de schéma et corrections métier exécutés au démarrage.
+  - [x] Utiliser un seul moteur de migrations versionnées : `npm run migrate` exécute uniquement les migrations JS au contrat `up/down`, `migrate:status` est non destructif et les anciens SQL sont archivés comme non exécutables.
+  - [x] Retirer les changements de schéma et corrections métier exécutés au démarrage ; migration versionnée `20260802_move_startup_repairs_to_versioned_migration.js` ajoutée.
   - [ ] Exécuter sauvegarde, migration, smoke test et readiness avant bascule PM2.
   - [ ] Ajouter rollback documenté et déploiement sans connexion directe permanente en `root`.
   - [ ] Remplacer `npm install` par `npm ci` avec lockfiles versionnés.
-- [ ] **Partager les contrôles distribués entre workers.**
-  - [ ] Stocker blacklist JWT et rate limits dans Redis partagé.
-  - [ ] Définir explicitement le comportement si Redis est indisponible.
+- [~] **Partager les contrôles distribués entre workers — implémenté, validation cluster restante.**
+  - [x] Stocker blacklist JWT et rate limits dans Redis partagé lorsque `REDIS_URL` est configuré.
+  - [x] Définir explicitement le comportement si Redis est indisponible : démarrage refusé en production, mémoire autorisée uniquement en développement/test.
   - [ ] Vérifier révocation et limitation avec plusieurs workers PM2.
 - [x] **Améliorer l'observabilité.**
   - [x] Séparer `/live` (Liveness) et `/ready` (Readiness DB) sans fuite d'informations système.

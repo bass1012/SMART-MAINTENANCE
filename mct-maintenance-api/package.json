@@ -10,6 +10,7 @@
         "test:watch": "jest --watch",
         "test:coverage": "jest --coverage",
         "migrate": "node scripts/migrate.js",
+        "migrate:status": "node scripts/migrate.js --status",
         "migrate:postgres": "node scripts/migrate-to-postgres.js",
         "sync:postgres": "node scripts/sync-postgres.js",
         "seed": "node scripts/seed.js",

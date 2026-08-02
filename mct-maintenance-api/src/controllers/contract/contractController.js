@@ -7,6 +7,7 @@ const {
   sendContractExpiringEmail
 } = require('../../services/emailHelper');
 const contractSchedulingService = require('../../services/contractSchedulingService');
+const { canReadUserOwnedResource, isInternalUser } = require('../../policies/resourceOwnershipPolicy');
 
 // Contract Controller - Implementation complète
 const getAllContracts = async (req, res) => {
@@ -16,7 +17,13 @@ const getAllContracts = async (req, res) => {
     const where = {};
     if (status) where.status = status;
     if (type) where.type = type;
-    if (customer_id) where.customer_id = customer_id;
+    if (req.user.role === 'customer') {
+      where.customer_id = req.user.id;
+    } else if (isInternalUser(req.user)) {
+      if (customer_id) where.customer_id = customer_id;
+    } else {
+      where.id = -1;
+    }
 
     const offset = (page - 1) * limit;
 
@@ -60,7 +67,7 @@ const getContractById = async (req, res) => {
       ]
     });
 
-    if (!contract) {
+    if (!contract || !canReadUserOwnedResource({ resource: contract, user: req.user })) {
       return res.status(404).json({
         success: false,
         message: 'Contrat non trouvé'
@@ -396,7 +403,7 @@ const getScheduledVisits = async (req, res) => {
     // Récupérer le contrat
     const subscription = await Subscription.findByPk(id);
     
-    if (!subscription) {
+    if (!subscription || !canReadUserOwnedResource({ resource: subscription, user: req.user })) {
       return res.status(404).json({
         success: false,
         message: 'Contrat non trouvé'
@@ -477,4 +484,3 @@ module.exports = {
   getScheduledVisits,
   getUpcomingVisits
 };
-

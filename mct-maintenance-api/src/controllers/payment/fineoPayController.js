@@ -548,6 +548,12 @@ const handleCallback = async (req, res) => {
       return completeAndAcknowledge();
     }
 
+    // Les notifications, l'assignation et les actions post-paiement sont
+    // inscrites atomiquement dans l'outbox par recordQuoteOrderPayment.
+    // Le callback ne doit pas produire d'effet externe directement.
+    console.log(`📤 Effets du devis ${orderId} confiés à l’outbox pour ${reference}`);
+    return completeAndAcknowledge();
+
     // Récupérer la commande avec le devis et l'intervention
     const order = await Order.findByPk(orderId, {
       include: [
@@ -1070,6 +1076,10 @@ const handleSubscriptionPayment = async (subscriptionId, reference, amount, sour
       console.log(`ℹ️ Paiement souscription ${reference} déjà enregistré`);
       return;
     }
+    // L'activation éventuelle du contrat et les notifications sont confiées à
+    // l'outbox, créée dans la même transaction que l'écriture de paiement.
+    console.log(`📤 Effets de la souscription ${subscriptionId} confiés à l’outbox pour ${reference}`);
+    return;
     if (paymentStep === 2) {
       console.log(`💳 Second paiement détecté pour souscription #${subscriptionId}`);
       return await handleSecondSubscriptionPayment(subscription, reference, amount, sourceIp);
@@ -1405,64 +1415,48 @@ const verifyPaymentStatus = async (req, res) => {
         metadata: { transactionsChecked: transactions.length }
       });
 
-      // Récupérer tous les paymentIds déjà enregistrés pour ne pas réutiliser une transaction
-      const usedPayments = await Payment.findAll({
-        where: { provider: 'fineopay' },
-        attributes: ['paymentId']
-      });
-      const usedRefs = new Set(usedPayments.map(p => p.paymentId).filter(Boolean));
-
-      // Chercher une transaction correspondante par plusieurs critères (ordre de priorité)
-      // 1. Par checkoutLinkId (le plus sécurisé - si disponible dans la transaction)
-      // 2. Par syncRef (si présent dans la transaction)
-      // 3. Par description contenant la référence de commande
-      // 4. Par montant et date (créée après la commande) - fallback
+      // La vérification active accepte uniquement l'identifiant de synchronisation
+      // et le montant exacts. L'idempotence est assurée par le ledger transactionnel.
       const orderCreatedAt = new Date(order.createdAt);
       const orderAmount = parseFloat(order.totalAmount);
-      
-      const isSandbox = process.env.FINEOPAY_ENV === 'sandbox' || process.env.NODE_ENV === 'development';
-      // 🔒 Fenêtre de temps: max 2 heures en production, 90 jours en sandbox/dev
-      const maxPaymentWindow = new Date(orderCreatedAt.getTime() + (isSandbox ? 90 * 24 * 60 * 60 * 1000 : 2 * 60 * 60 * 1000));
 
-      const matchingTransaction = transactions.find(t => {
-        // Ignorer si déjà enregistrée
-        if (usedRefs.has(t.reference)) return false;
-
-        // 1. Vérifier par checkoutLinkId (le plus sécurisé)
-        if (checkoutLinkId && t.checkoutLinkId === checkoutLinkId) {
-          console.log(`✅ Match par checkoutLinkId: ${t.reference}`);
-          return true;
-        }
-        
-        // 2. Vérifier par syncRef si disponible
-        if (t.syncRef === syncRef) {
-          console.log(`✅ Match par syncRef: ${t.reference}`);
-          return true;
-        }
-        
-        // 3. Vérifier par description contenant la référence
-        if (t.description && (t.description.includes(orderRef) || t.description.includes(`ORDER_${orderId}`))) {
-          console.log(`✅ Match par description: ${t.reference}`);
-          return true;
-        }
-        
-        // 4. Vérifier par montant exact + fenêtre de temps + status success
-        const txDate = new Date(t.date);
-        if (parseFloat(t.amount) === orderAmount && 
-            txDate > orderCreatedAt && 
-            txDate < maxPaymentWindow && 
-            t.status === 'success') {
-          console.log(`🔍 Match par montant/date (fenêtre ${isSandbox ? '90j' : '2h'}): ${t.reference}`);
-          return true;
-        }
-        
-        return false;
-      });
+      const matchingTransaction = transactions.find((transaction) => (
+        transaction.syncRef === syncRef
+        && transaction.status === 'success'
+        && Math.round(Number(transaction.amount) * 100) === Math.round(orderAmount * 100)
+        && (!checkoutLinkId || !transaction.checkoutLinkId || transaction.checkoutLinkId === checkoutLinkId)
+      ));
 
       if (matchingTransaction) {
         console.log(`✅ Transaction trouvée:`, JSON.stringify(matchingTransaction, null, 2));
 
         if (matchingTransaction.status === 'success') {
+          const financialResult = orderQuoteId
+            ? await recordQuoteOrderPayment({
+              orderId,
+              reference: matchingTransaction.reference,
+              amount: matchingTransaction.amount,
+              sourceIp: req.ip,
+              clientAccountNumber: matchingTransaction.clientAccountNumber
+            })
+            : await recordShopPayment({
+              orderId,
+              reference: matchingTransaction.reference,
+              amount: matchingTransaction.amount
+            });
+          console.log(`📤 Vérification active ${matchingTransaction.reference} finalisée via transaction/outbox`);
+          return res.status(200).json({
+            success: true,
+            data: {
+              orderId: order.id,
+              reference: order.reference,
+              paymentStatus: 'paid',
+              paymentMethod: 'fineopay',
+              amount: order.totalAmount,
+              duplicate: financialResult.duplicate
+            }
+          });
+
           // 🔒 Protection anti-doublon: vérifier si déjà en cours de traitement
           if (order.paymentProcessing) {
             console.log(`⚠️ Paiement déjà en cours de traitement pour commande #${orderId}`);
@@ -1860,51 +1854,40 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
       const transactions = transactionsResponse.data.data?.transactions || [];
       console.log(`📊 ${transactions.length} transactions récupérées`);
 
-      // Récupérer tous les paymentIds déjà enregistrés pour ne pas réutiliser une transaction
-      const usedPayments = await Payment.findAll({
-        where: { provider: 'fineopay' },
-        attributes: ['paymentId']
-      });
-      const usedRefs = new Set(usedPayments.map(p => p.paymentId).filter(Boolean));
-
-      // Chercher une transaction correspondante
-      const subscriptionCreatedAt = new Date(subscription.created_at);
-      const isSandbox = process.env.FINEOPAY_ENV === 'sandbox' || process.env.NODE_ENV === 'development';
-      // 🔒 Fenêtre de temps: max 24h en prod, 90 jours en sandbox/dev
-      const maxPaymentWindow = new Date(subscriptionCreatedAt.getTime() + (isSandbox ? 90 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000));
-
-      const matchingTransaction = transactions.find(t => {
-        // Ignorer si déjà enregistrée
-        if (usedRefs.has(t.reference)) return false;
-
-        // Par syncRef
-        if (t.syncRef === syncRef) {
-          console.log(`✅ Match par syncRef: ${t.reference}`);
-          return true;
-        }
-        
-        // Par description
-        if (t.description && t.description.includes(`SUBSCRIPTION_${subscriptionId}`)) {
-          console.log(`✅ Match par description: ${t.reference}`);
-          return true;
-        }
-        
-        // Par montant 50% + fenêtre de temps (pour le premier paiement)
-        const txDate = new Date(t.date);
-        const txAmount = parseFloat(t.amount);
-        if ((txAmount === firstPaymentAmount || txAmount === price) && 
-            txDate > subscriptionCreatedAt && 
-            txDate < maxPaymentWindow && 
-            t.status === 'success') {
-          console.log(`🔍 Match potentiel par montant/date (fenêtre ${isSandbox ? '90j' : '24h'}): ${t.reference} (${txAmount} FCFA)`);
-          return true;
-        }
-        
-        return false;
-      });
+      // Pas de rapprochement par montant/date : le syncRef doit être exact.
+      const expectedAmount = subscription.first_payment_status === 'paid'
+        ? secondPaymentAmount
+        : firstPaymentAmount;
+      const matchingTransaction = transactions.find((transaction) => (
+        transaction.syncRef === syncRef
+        && transaction.status === 'success'
+        && Math.round(Number(transaction.amount) * 100) === Math.round(Number(expectedAmount) * 100)
+      ));
 
       if (matchingTransaction && matchingTransaction.status === 'success') {
         console.log(`✅ Transaction trouvée: ${matchingTransaction.reference} (${matchingTransaction.amount} FCFA)`);
+
+        const financialResult = await recordSubscriptionPayment({
+          subscriptionId,
+          reference: matchingTransaction.reference,
+          amount: matchingTransaction.amount,
+          sourceIp: req.ip
+        });
+        await subscription.reload();
+        return res.status(200).json({
+          success: true,
+          data: {
+            subscriptionId: subscription.id,
+            payment_status: subscription.payment_status,
+            status: subscription.status,
+            reference: matchingTransaction.reference,
+            first_payment_status: subscription.first_payment_status,
+            first_payment_amount: firstPaymentAmount,
+            second_payment_status: subscription.second_payment_status || 'pending',
+            second_payment_amount: secondPaymentAmount,
+            duplicate: financialResult.duplicate
+          }
+        });
 
         // Mettre à jour les champs de paiement split
         await subscription.update({
@@ -2093,62 +2076,39 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
       const transactions = transactionsResponse.data.data?.transactions || [];
       console.log(`📊 ${transactions.length} transactions récupérées`);
 
-      // Récupérer tous les paymentIds déjà enregistrés pour ne pas réutiliser une transaction
-      const usedPayments = await Payment.findAll({
-        where: { provider: 'fineopay' },
-        attributes: ['paymentId']
-      });
-      const usedRefs = new Set(usedPayments.map(p => p.paymentId).filter(Boolean));
-
       // Chercher une transaction correspondante (solde 50% vs acompte initial)
       const isSecondStep = (intervention.diagnostic_paid === true && intervention.second_payment_status === 'pending' && parseFloat(intervention.second_payment_amount || 0) > 0);
       const expectedAmount = isSecondStep
         ? parseFloat(intervention.second_payment_amount)
         : parseFloat(intervention.diagnostic_fee || 0);
 
-      const interventionCreatedAt = new Date(intervention.created_at);
-      const isSandbox = process.env.FINEOPAY_ENV === 'sandbox' || process.env.NODE_ENV === 'development';
-      // 🔒 Fenêtre de temps: max 24h en prod, 90 jours en sandbox/dev
-      const maxPaymentWindow = new Date(interventionCreatedAt.getTime() + (isSandbox ? 90 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000));
-
-      const matchingTransaction = transactions.find(t => {
-        // Ignorer si déjà enregistrée
-        if (usedRefs.has(t.reference)) return false;
-
-        // Par syncRef
-        if (t.syncRef === syncRef) {
-          console.log(`✅ Match par syncRef: ${t.reference}`);
-          return true;
-        }
-        
-        // Par description
-        if (t.description && t.description.includes(`DIAGNOSTIC_${interventionId}`)) {
-          console.log(`✅ Match par description: ${t.reference}`);
-          return true;
-        }
-        
-        // Par montant + fenêtre de temps
-        const txDate = new Date(t.date);
-        const txAmount = parseFloat(t.amount);
-        const isAmountMatching = (
-          txAmount === expectedAmount ||
-          (intervention.second_payment_amount && txAmount === parseFloat(intervention.second_payment_amount)) ||
-          (intervention.diagnostic_fee && txAmount === parseFloat(intervention.diagnostic_fee))
-        );
-
-        if (isAmountMatching && 
-            txDate > interventionCreatedAt && 
-            txDate < maxPaymentWindow && 
-            t.status === 'success') {
-          console.log(`🔍 Match potentiel par montant/date (${txAmount} FCFA): ${t.reference}`);
-          return true;
-        }
-        
-        return false;
-      });
+      const matchingTransaction = transactions.find((transaction) => (
+        transaction.syncRef === syncRef
+        && transaction.status === 'success'
+        && Math.round(Number(transaction.amount) * 100) === Math.round(expectedAmount * 100)
+      ));
 
       if (matchingTransaction && matchingTransaction.status === 'success') {
         console.log(`✅ Transaction trouvée: ${matchingTransaction.reference}`);
+
+        const financialResult = await recordDiagnosticPayment({
+          interventionId,
+          reference: matchingTransaction.reference,
+          amount: matchingTransaction.amount,
+          sourceIp: req.ip
+        });
+        await intervention.reload();
+        return res.status(200).json({
+          success: true,
+          data: {
+            interventionId: intervention.id,
+            diagnostic_paid: intervention.diagnostic_paid,
+            second_payment_status: intervention.second_payment_status,
+            status: intervention.status,
+            reference: matchingTransaction.reference,
+            duplicate: financialResult.duplicate
+          }
+        });
 
         // Mettre à jour l'intervention (1er acompte vs 2ème solde 50%)
         if (intervention.diagnostic_paid !== true) {
