@@ -58,6 +58,7 @@ PaymentWebhookEvent.init({
   tableName: 'payment_webhook_events',
   underscored: true,
   timestamps: true,
+  paranoid: false,
   indexes: [
     {
       name: 'payment_webhook_events_provider_reference_unique',
