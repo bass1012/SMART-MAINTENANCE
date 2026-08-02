@@ -723,24 +723,68 @@ class _TechnicianInterventionsScreenState
                           key: const ValueKey(
                               TestKeys.completeInterventionButton),
                           onPressed: () async {
-                            try {
-                              final interventionRepository =
-                                  context.read<InterventionRepository>();
-                              await interventionRepository
-                                  .completeIntervention(intervention['id']);
-                              if (context.mounted) {
-                                SnackBarHelper.showSuccess(
-                                    context, 'Intervention terminée',
-                                    emoji: '🎉');
+                            final rawType = (intervention['type'] ??
+                                    intervention['intervention_type'] ?? '')
+                                .toString()
+                                .toLowerCase();
+
+                            final isPostQuoteExecution =
+                                rawType == 'execution' || rawType == 'exécution';
+
+                            if (isPostQuoteExecution) {
+                              try {
+                                final interventionRepository =
+                                    context.read<InterventionRepository>();
+                                await interventionRepository
+                                    .completeIntervention(intervention['id']);
+                                if (mounted) {
+                                  SnackBarHelper.showSuccess(
+                                      context, 'Intervention terminée',
+                                      emoji: '🎉');
+                                }
+                                _loadInterventions();
+                              } catch (e) {
+                                if (mounted) {
+                                  SnackBarHelper.showError(
+                                      context, e.toString());
+                                }
                               }
-                              _loadInterventions();
-                            } catch (e) {
-                              if (context.mounted) {
-                                SnackBarHelper.showError(context, e.toString());
+                            } else {
+                              final isDiagnostic =
+                                  rawType.contains('diagnostic') ||
+                                      rawType.contains('depannage') ||
+                                      rawType.contains('dépannage') ||
+                                      rawType.contains('reparation') ||
+                                      rawType.contains('réparation') ||
+                                      rawType.contains('installation') ||
+                                      rawType.contains('repair') ||
+                                      rawType.contains('urgence');
+
+                              Widget reportScreen;
+                              if (isDiagnostic) {
+                                reportScreen = DiagnosticReportScreen(
+                                  interventionId: intervention['id'],
+                                  intervention: intervention,
+                                );
+                              } else {
+                                reportScreen = CreateReportScreen(
+                                  intervention: intervention,
+                                );
+                              }
+
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => reportScreen,
+                                ),
+                              );
+
+                              if (result == true) {
+                                _loadInterventions();
                               }
                             }
                           },
-                          icon: const Icon(Icons.done_all, size: 18),
+                          icon: const Icon(Icons.edit_note, size: 18),
                           label: Text('Terminer',
                               style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.w600)),
