@@ -25,13 +25,13 @@ const generateQuotePdf = async (req, res) => {
     let logoPath = path.join(__dirname, '../../../public/logo-maintenance.png');
     let hasLogo = fs.existsSync(logoPath);
 
-    // 1. Header Logo (Centered)
+    // 1. Header Logo (Shifted to Left)
     if (hasLogo) {
-      doc.image(logoPath, (595.28 - 100) / 2, 30, { width: 100 });
+      doc.image(logoPath, 40, 30, { fit: [120, 55] });
     } else {
       // Fallback logo if missing
-      doc.fillColor('#0b2d69').rect((595.28 - 100) / 2, 30, 100, 40).fill();
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(12).text('M.C.T.', (595.28 - 100) / 2, 45, { width: 100, align: 'center' });
+      doc.fillColor('#0b2d69').rect(40, 30, 100, 40).fill();
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(12).text('M.C.T.', 40, 45, { width: 100, align: 'center' });
     }
 
     // 2. Client Box (FRANCETRUCK-CI) on the right

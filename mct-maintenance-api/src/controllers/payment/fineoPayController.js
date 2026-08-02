@@ -1420,12 +1420,15 @@ const verifyPaymentStatus = async (req, res) => {
       const orderCreatedAt = new Date(order.createdAt);
       const orderAmount = parseFloat(order.totalAmount);
 
-      const matchingTransaction = transactions.find((transaction) => (
-        transaction.syncRef === syncRef
-        && transaction.status === 'success'
-        && Math.round(Number(transaction.amount) * 100) === Math.round(orderAmount * 100)
-        && (!checkoutLinkId || !transaction.checkoutLinkId || transaction.checkoutLinkId === checkoutLinkId)
-      ));
+      const matchingTransaction = transactions.find((transaction) => {
+        const statusOk = transaction.status === 'success';
+        const amountOk = Math.round(Number(transaction.amount) * 100) === Math.round(orderAmount * 100);
+        const titleOk = (orderRef && transaction.payLink?.title?.includes(orderRef))
+          || transaction.payLink?.title?.includes(`#${orderId}`);
+        const syncRefOk = transaction.syncRef === syncRef;
+        const checkoutIdOk = !checkoutLinkId || !transaction.checkoutLinkId || transaction.checkoutLinkId === checkoutLinkId;
+        return statusOk && amountOk && checkoutIdOk && (titleOk || syncRefOk);
+      });
 
       if (matchingTransaction) {
         console.log(`✅ Transaction trouvée:`, JSON.stringify(matchingTransaction, null, 2));
@@ -1858,11 +1861,15 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
       const expectedAmount = subscription.first_payment_status === 'paid'
         ? secondPaymentAmount
         : firstPaymentAmount;
-      const matchingTransaction = transactions.find((transaction) => (
-        transaction.syncRef === syncRef
-        && transaction.status === 'success'
-        && Math.round(Number(transaction.amount) * 100) === Math.round(Number(expectedAmount) * 100)
-      ));
+      const matchingTransaction = transactions.find((transaction) => {
+        const statusOk = transaction.status === 'success';
+        const amountOk = Math.round(Number(transaction.amount) * 100) === Math.round(Number(expectedAmount) * 100);
+        const titleOk = transaction.payLink?.title?.includes(`SUBSCRIPTION_${subscriptionId}`)
+          || transaction.payLink?.title?.includes(`#${subscriptionId}`)
+          || (transaction.payLink?.title && transaction.payLink.title.toLowerCase().includes('abonnement'));
+        const syncRefOk = transaction.syncRef === syncRef;
+        return statusOk && amountOk && (titleOk || syncRefOk);
+      });
 
       if (matchingTransaction && matchingTransaction.status === 'success') {
         console.log(`✅ Transaction trouvée: ${matchingTransaction.reference} (${matchingTransaction.amount} FCFA)`);
@@ -2082,11 +2089,25 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
         ? parseFloat(intervention.second_payment_amount)
         : parseFloat(intervention.diagnostic_fee || 0);
 
-      const matchingTransaction = transactions.find((transaction) => (
-        transaction.syncRef === syncRef
-        && transaction.status === 'success'
-        && Math.round(Number(transaction.amount) * 100) === Math.round(expectedAmount * 100)
-      ));
+      // FineoPay ne retourne pas de champ syncRef dans /transactions.
+      // On identifie la transaction par le titre du payLink (contient l'interventionId)
+      // et le montant exact. On accepte aussi une correspondance par syncRef si présent.
+      const expectedTitle = isSecondStep
+        ? `Solde (50%) Intervention #${interventionId}`
+        : `Diagnostic Intervention #${interventionId}`;
+
+      const matchingTransaction = transactions.find((transaction) => {
+        const statusOk = transaction.status === 'success';
+        const amountOk = expectedAmount > 0
+          ? Math.round(Number(transaction.amount) * 100) === Math.round(expectedAmount * 100)
+          : true; // si diagnostic_fee=0, pas de vérification de montant
+        const titleOk = transaction.payLink?.title === expectedTitle
+          || transaction.payLink?.title?.includes(`#${interventionId}`);
+        const syncRefOk = transaction.syncRef === syncRef;
+        return statusOk && amountOk && (titleOk || syncRefOk);
+      });
+
+      console.log(`🔍 Matching: expectedTitle="${expectedTitle}", expectedAmount=${expectedAmount}, found=${!!matchingTransaction}`);
 
       if (matchingTransaction && matchingTransaction.status === 'success') {
         console.log(`✅ Transaction trouvée: ${matchingTransaction.reference}`);

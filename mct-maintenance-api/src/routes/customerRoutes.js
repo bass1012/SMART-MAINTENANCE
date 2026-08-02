@@ -1,4 +1,5 @@
 const express = require('express');
+const { Op } = require('sequelize');
 const { authenticate, authorize, adminOnly } = require('../middleware/auth');
 const customerController = require('../controllers/customerController');
 const { Contract, User, InstallationService, RepairService, Subscription, MaintenanceOffer, Intervention } = require('../models');
