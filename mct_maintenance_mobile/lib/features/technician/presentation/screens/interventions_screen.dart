@@ -722,7 +722,7 @@ class _TechnicianInterventionsScreenState
                             }
                           },
                           icon: const Icon(Icons.play_arrow, size: 18),
-                          label: Text('Démarrer (1-6)',
+                          label: Text('Démarrer',
                               style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.w600)),
                           style: ElevatedButton.styleFrom(
