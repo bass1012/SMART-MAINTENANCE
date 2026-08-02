@@ -1732,34 +1732,6 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                                     ),
                                   ),
                                 ],
-                                TextFormField(
-                                  controller: _interventionNatureController,
-                                  maxLines: 5,
-                                  decoration: const InputDecoration(
-                                    hintText:
-                                        'Décrivez en détail le travail effectué...',
-                                  ),
-                                  validator: (value) {
-                                    if (value == null || value.trim().isEmpty) {
-                                      return 'Ce champ me obligatoire';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                const SizedBox(height: 16),
-                                const Text('Observations',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 14)),
-                                const SizedBox(height: 8),
-                                TextFormField(
-                                  controller: _observationsController,
-                                  maxLines: 4,
-                                  decoration: const InputDecoration(
-                                    hintText:
-                                        'Observations, recommandations pour le client...',
-                                  ),
-                                ),
                               ],
                             ),
                           ),
