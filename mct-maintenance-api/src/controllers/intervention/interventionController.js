@@ -2529,7 +2529,9 @@ const getPendingConfirmationReports = async (req, res) => {
       attributes: [
         'id', 'title', 'description', 'intervention_type', 'status', 
         'report_submitted_at', 'report_data', 'customer_confirmed',
-        'created_at', 'completed_at', 'address'
+        'created_at', 'completed_at', 'address',
+        'payment_option', 'second_payment_status', 'second_payment_amount',
+        'subscription_id', 'contract_id', 'diagnostic_paid'
       ]
     });
 

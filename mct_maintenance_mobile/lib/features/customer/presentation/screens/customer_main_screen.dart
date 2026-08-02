@@ -112,6 +112,23 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
         ? '${intervention['technician']['first_name']} ${intervention['technician']['last_name']}'
         : 'Technicien';
 
+    final paymentOption = intervention['payment_option']?.toString() ?? '';
+    final secondPaymentStatus = intervention['second_payment_status']?.toString() ?? '';
+    final isSubscriptionOrContract = intervention['subscription_id'] != null || intervention['contract_id'] != null;
+
+    // Déterminer s'il y a un solde en attente à payer (acompte 50% déjà fait, 50% solde restant)
+    final bool hasPendingBalance = (paymentOption == 'split' || secondPaymentStatus == 'pending') && secondPaymentStatus != 'paid';
+
+    final String redWarningMessage = isSubscriptionOrContract
+        ? 'Important : Le solde doit être réglé avant la dernière intervention de maintenance.'
+        : 'Important : Le solde restant (50%) doit être réglé pour finaliser l\'intervention.';
+
+    final String orangeInstructionText = hasPendingBalance
+        ? 'Veuillez confirmer que les travaux ont bien été réalisés et procéder au solde de l\'intervention.'
+        : 'Veuillez vérifier et confirmer que les travaux ont bien été réalisés.';
+
+    final String actionButtonLabel = hasPendingBalance ? 'Voir et solder' : 'Voir le rapport';
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -175,10 +192,10 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                       size: 32,
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Veuillez confirmer que les travaux ont bien été réalisés et procéder au solde de l\'intervention.',
+                    Text(
+                      orangeInstructionText,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 13,
                         color: Colors.black87,
                       ),
@@ -186,35 +203,37 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.red.shade700,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Important : Le solde doit être réglé avant la dernière intervention de maintenance.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w500,
+              if (hasPendingBalance) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.red.shade700,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          redWarningMessage,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -237,7 +256,7 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
               );
             },
             icon: const Icon(Icons.visibility, size: 18),
-            label: const Text('Voir et solder'),
+            label: Text(actionButtonLabel),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0a543d),
               foregroundColor: Colors.white,
