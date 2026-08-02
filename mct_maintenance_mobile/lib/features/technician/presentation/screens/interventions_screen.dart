@@ -673,25 +673,56 @@ class _TechnicianInterventionsScreenState
                         ),
                         child: ElevatedButton.icon(
                           onPressed: () async {
-                            try {
-                              final interventionRepository =
-                                  context.read<InterventionRepository>();
-                              await interventionRepository
-                                  .startIntervention(intervention['id']);
-                              if (context.mounted) {
-                                SnackBarHelper.showSuccess(
-                                    context, 'Intervention démarrée',
-                                    emoji: '🔧');
+                            final rawType = (intervention['type'] ??
+                                    intervention['intervention_type'] ?? '')
+                                .toString()
+                                .toLowerCase();
+
+                            final isDiagnostic = rawType.contains('diagnostic') ||
+                                rawType.contains('depannage') ||
+                                rawType.contains('dépannage') ||
+                                rawType.contains('reparation') ||
+                                rawType.contains('réparation') ||
+                                rawType.contains('installation') ||
+                                rawType.contains('repair') ||
+                                rawType.contains('urgence');
+
+                            if (!isDiagnostic) {
+                              // Maintenance: Ouvrir le constat avant intervention (1-6)
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => CreateReportScreen(
+                                    intervention: intervention,
+                                    isInitialStep: true,
+                                  ),
+                                ),
+                              );
+                              if (result == true) {
+                                _loadInterventions();
                               }
-                              _loadInterventions();
-                            } catch (e) {
-                              if (context.mounted) {
-                                SnackBarHelper.showError(context, e.toString());
+                            } else {
+                              // Diagnostic: démarrer directement
+                              try {
+                                final interventionRepository =
+                                    context.read<InterventionRepository>();
+                                await interventionRepository
+                                    .startIntervention(intervention['id']);
+                                if (context.mounted) {
+                                  SnackBarHelper.showSuccess(
+                                      context, 'Intervention démarrée',
+                                      emoji: '🔧');
+                                }
+                                _loadInterventions();
+                              } catch (e) {
+                                if (context.mounted) {
+                                  SnackBarHelper.showError(context, e.toString());
+                                }
                               }
                             }
                           },
                           icon: const Icon(Icons.play_arrow, size: 18),
-                          label: Text('Démarrer',
+                          label: Text('Démarrer (1-6)',
                               style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.w600)),
                           style: ElevatedButton.styleFrom(
@@ -760,6 +791,11 @@ class _TechnicianInterventionsScreenState
                                       rawType.contains('repair') ||
                                       rawType.contains('urgence');
 
+                              final reportData = intervention['report_data'];
+                              final bool isInitialCompleted = intervention['initial_completed'] == true ||
+                                  (reportData is Map && reportData['initial_completed'] == true) ||
+                                  (intervention['initial_report'] != null);
+
                               Widget reportScreen;
                               if (isDiagnostic) {
                                 reportScreen = DiagnosticReportScreen(
@@ -769,6 +805,7 @@ class _TechnicianInterventionsScreenState
                               } else {
                                 reportScreen = CreateReportScreen(
                                   intervention: intervention,
+                                  isInitialStep: !isInitialCompleted,
                                 );
                               }
 
