@@ -7,6 +7,7 @@ import 'package:mct_maintenance_mobile/features/interventions/domain/repositorie
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/features/technician/presentation/screens/intervention_detail_screen.dart';
 import 'package:mct_maintenance_mobile/features/technician/presentation/screens/view_report_screen.dart';
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/view_diagnostic_report_screen.dart';
 import 'package:mct_maintenance_mobile/features/technician/presentation/screens/create_report_screen.dart';
 import 'package:mct_maintenance_mobile/features/technician/presentation/screens/diagnostic_report_screen.dart';
 import 'package:mct_maintenance_mobile/utils/test_keys.dart';
@@ -778,15 +779,42 @@ class _TechnicianInterventionsScreenState
                                 intervention['report_submitted_at'] != null;
 
                             if (hasReport) {
-                              // Naviguer vers l'écran de visualisation du rapport
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ViewReportScreen(
-                                    intervention: intervention,
+                              final type = (intervention['type'] ??
+                                      intervention['intervention_type'] ?? '')
+                                  .toString()
+                                  .toLowerCase();
+                              final isDiag = type.contains('diagnostic') ||
+                                  type.contains('depannage') ||
+                                  type.contains('dépannage') ||
+                                  type.contains('reparation') ||
+                                  type.contains('réparation') ||
+                                  type.contains('execution') ||
+                                  type.contains('exécution') ||
+                                  intervention['diagnostic_report_id'] != null ||
+                                  (intervention['diagnosticReports'] is List &&
+                                      (intervention['diagnosticReports'] as List)
+                                          .isNotEmpty);
+
+                              if (isDiag) {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        ViewDiagnosticReportScreen(
+                                      intervention: intervention,
+                                    ),
                                   ),
-                                ),
-                              );
+                                );
+                              } else {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ViewReportScreen(
+                                      intervention: intervention,
+                                    ),
+                                  ),
+                                );
+                              }
                             } else {
                               // Déterminer le type d'intervention pour choisir l'écran approprié
                               final interventionType = intervention['type']

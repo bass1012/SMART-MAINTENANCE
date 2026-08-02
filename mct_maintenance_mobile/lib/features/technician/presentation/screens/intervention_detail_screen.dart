@@ -608,6 +608,11 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     final interventionType =
         (_intervention['intervention_type'] ?? '').toString().toLowerCase();
 
+    final hasDiagnosticReport = _intervention['diagnostic_report_id'] != null ||
+        _intervention['diagnostic_report'] != null ||
+        (_intervention['diagnosticReports'] is List &&
+            (_intervention['diagnosticReports'] as List).isNotEmpty);
+
     // Les types qui utilisent l'écran de rapport de diagnostic
     final usesDiagnosticReport = interventionType == 'diagnostic' ||
         interventionType == 'repair' ||
@@ -615,10 +620,13 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         interventionType == 'réparation' ||
         interventionType == 'installation' ||
         interventionType == 'depannage' ||
-        interventionType == 'dépannage';
+        interventionType == 'dépannage' ||
+        interventionType == 'execution' ||
+        interventionType == 'exécution' ||
+        hasDiagnosticReport;
 
     if (usesDiagnosticReport) {
-      // Pour les diagnostics, réparations, installations, utiliser ViewDiagnosticReportScreen
+      // Pour les diagnostics, réparations, installations, exécutions, utiliser ViewDiagnosticReportScreen
       await Navigator.push(
         context,
         MaterialPageRoute(

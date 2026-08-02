@@ -19,18 +19,36 @@ class ViewReportScreen extends StatelessWidget {
     // Parser le JSON stocké dans report_data
     if (intervention['report_data'] != null) {
       if (intervention['report_data'] is String) {
-        // Si c'est une string JSON, la parser
         try {
           return json.decode(intervention['report_data'])
               as Map<String, dynamic>;
         } catch (e) {
           if (kDebugMode) debugPrint('❌ Erreur parsing JSON report_data: $e');
-          return {};
         }
       } else if (intervention['report_data'] is Map) {
         return intervention['report_data'] as Map<String, dynamic>;
       }
     }
+
+    if (intervention['diagnostic_report'] != null) {
+      if (intervention['diagnostic_report'] is String) {
+        try {
+          return json.decode(intervention['diagnostic_report'])
+              as Map<String, dynamic>;
+        } catch (_) {}
+      } else if (intervention['diagnostic_report'] is Map) {
+        return Map<String, dynamic>.from(intervention['diagnostic_report']);
+      }
+    }
+
+    if (intervention['diagnosticReports'] is List &&
+        (intervention['diagnosticReports'] as List).isNotEmpty) {
+      final first = (intervention['diagnosticReports'] as List)[0];
+      if (first is Map) {
+        return Map<String, dynamic>.from(first);
+      }
+    }
+
     return {};
   }
 
