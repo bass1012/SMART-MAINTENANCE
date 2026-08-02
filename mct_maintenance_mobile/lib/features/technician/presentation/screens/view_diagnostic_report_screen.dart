@@ -197,12 +197,14 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
                         children: [
                           const Icon(Icons.build, color: Color(0xFF0a543d), size: 20),
                           const SizedBox(width: 8),
-                          Text(
-                            'Équipements (${equipments.length}) & Constantes',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0a543d),
+                          Expanded(
+                            child: Text(
+                              'Équipements (${equipments.length}) & Constantes',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0a543d),
+                              ),
                             ),
                           ),
                         ],
@@ -233,12 +235,14 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
                             children: const [
                               Icon(Icons.build_circle, size: 20, color: Color(0xFF0a543d)),
                               SizedBox(width: 8),
-                              Text(
-                                '7/ Matériels nécessaires (Dépannage / Installation)',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0a543d),
+                              Expanded(
+                                child: Text(
+                                  '7/ Matériels nécessaires (Dépannage / Installation)',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0a543d),
+                                  ),
                                 ),
                               ),
                             ],
@@ -750,12 +754,14 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
           children: [
             Icon(icon, size: 20, color: const Color(0xFF0a543d)),
             const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0a543d),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0a543d),
+                ),
               ),
             ),
           ],
