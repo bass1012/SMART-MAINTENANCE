@@ -1,3 +1,264 @@
+# Correction de l'animation du Splash Screen (`splash_screen.dart`) — 2 août 2026
+
+- [x] Séparer l'animation d'entrée du logo/titre/footer (`_entryController.forward()`) de l'animation des bulles de chargement (`_loadingDotsController.repeat()`).
+- [x] S'assurer que le logo et le titre restent figés à 100% d'opacité et de taille après l'animation initiale tandis que les 3 bulles continuent de tourner en boucle.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git (Commit `4bbdf8c2`).
+
+---
+
+# Suppression de la section 'À faire maintenant' et de la carte 'Solde total dépensé' (`customer_main_screen.dart`) — 2 août 2026
+
+- [x] Supprimer le badge/bannière rouge « À faire maintenant » et la carte d'information « Solde total dépensé » de l'accueil du tableau de bord client.
+- [x] Nettoyer le helper `_buildTodoNowSection()` et les imports inutilisés, valider avec `flutter analyze`, commiter et pusher sur git (Commit `7ae1a8a5`).
+
+---
+
+# Simplification du libellé du bouton 'Démarrer' (`interventions_screen.dart`) — 2 août 2026
+
+- [x] Remplacer le libellé « Démarrer (1-6) » par un simple « Démarrer ».
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git (Commit `c25585a4`).
+
+---
+
+# Ajustement de la taille du bouton 'Injoignable' (`intervention_detail_screen.dart`) — 2 août 2026
+
+- [x] Réajuster la largeur relative des boutons « Injoignable » et « Démarrer » (`flex: 4` et `flex: 5`).
+- [x] Réduire le padding interne à `EdgeInsets.symmetric(horizontal: 8)` et fixer `maxLines: 1` avec `TextOverflow.ellipsis`.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git (Commit `0315b9ff`).
+
+---
+
+# Suppression effective des champs 'Nature de l'intervention' et 'Observations' (`create_report_screen.dart`) — 2 août 2026
+
+- [x] Supprimer définitivement les 2 TextFormField de l'UI (`create_report_screen.dart`).
+- [x] Vérifier la suppression complète dans l'interface Flutter, valider avec `flutter analyze`, commiter et pusher sur git (Commit `c3009da1`).
+
+---
+
+# Suppression des champs 'Nature de l'intervention' et 'Observations' (`create_report_screen.dart`) — 2 août 2026
+
+- [x] Supprimer les deux zones de texte "Nature de l'intervention" et "Observations" de l'UI du rapport de fin d'intervention.
+- [x] Retirer la règle de validation obligatoire sur "Nature de l'intervention" et ajouter un fallback ('Entretien / Maintenance') pour la soumission à l'API.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Correction de l'accès au rapport d'intervention en cours (`intervention_detail_screen.dart`) — 2 août 2026
+
+- [x] Fixer le bouton de rédaction de rapport pour ouvrir `CreateReportScreen(isInitialStep = false)` lorsque l'intervention est au statut "En cours".
+- [x] Rétablir le bouton vert « Rédiger le rapport » et le libellé « Soumettre le rapport » lors du remplissage des données après intervention (7 à 9).
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Workflow de maintenance : Constat avant intervention (1-6) & Rapport après (7-9) — 2 août 2026
+
+- [x] Vérifier l'état de validation du constat initial (`initial_completed`) lors de l'ouverture du rapport dans `intervention_detail_screen.dart` et `interventions_screen.dart`.
+- [x] Connecter le bouton « Démarrer » des interventions arrivées sur `CreateReportScreen(isInitialStep: true)` pour forcer la saisie des points 1 à 6 avant le passage à l'état "En cours".
+- [x] Basculer automatiquement sur l'Étape 2 (points 7 à 9 après intervention) dès que le constat initial est validé.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Réduction de la taille des blocs de synthèse de factures (`invoices_screen.dart`) — 2 août 2026
+
+- [x] Réduire le padding et la taille des 3 cartes KPI (Total, Payées, En retard) de l'en-tête vert.
+- [x] Ajuster les marges et paddings des puces de filtres horizontales.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Fermeture de l'écran de paiement et redirection vers le devis — 2 août 2026
+
+- [x] Corriger le blocage de `PaymentScreen` & `DiagnosticPaymentScreen` après validation de paiement (remplacement des microtasks par `await showDialog` + `Navigator.of(context).pop(true)`).
+- [x] Activer la redirection automatique depuis la liste de devis (`quotes_contracts_screen.dart`) vers la vue détaillée du devis (`QuoteDetailScreen`) lors du retour d'un paiement réussi.
+- [x] Vérifier la syntaxe avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Alignement des montants de paiement 50% split (FineoPay vs Application Mobile) — 2 août 2026
+
+- [x] Identifier la cause racine : pour un montant de devis impair (ex: 5 FCFA), l'écran Mobile arrondissait l'acompte à l'entier supérieur ($\lceil 5/2 \rceil = 3$ FCFA), alors que la préparation du paiement FineoPay côté API appliquait un `Math.floor(total / 2)` (2 FCFA).
+- [x] Corriger `orderPaymentInitiationService.js` et `customerRoutes.js` (ligne 399) pour prioriser `Math.ceil(total / 2)` pour le 1er acompte.
+- [x] Sécuriser le fallback dans `quote_detail_screen.dart` pour utiliser systématiquement `(_quote.amount / 2).ceilToDouble()`.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Ouverture de l'écran de rapport au clic sur « Terminer » (interventions_screen.dart) — 2 août 2026
+
+- [x] Corriger le comportement du bouton **« Terminer »** sur les cartes d'intervention en cours dans la liste (`interventions_screen.dart`) :
+  - **Dépannage / Installation / Diagnostic / Réparation** : Ouvre `DiagnosticReportScreen` pour remplir le constat et générer éventuellement le devis.
+  - **Entretien / Maintenance** : Ouvre `CreateReportScreen` pour saisir les données d'intervention.
+  - **Exécution post-devis (`execution`)** : Valide directement la clôture sans réclamer un nouveau rapport.
+- [x] Recharger automatiquement la liste des interventions dès la soumission réussie du rapport.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Inversion des couleurs du formulaire de rédaction de rapport (create_report_screen.dart) — 2 août 2026
+
+- [x] Modifier les blocs d'en-tête de phase et badges de sous-section dans `create_report_screen.dart` :
+  - **🟠 AVANT INTERVENTION / Constat initial** : couleur **ORANGE** (`Colors.orange.shade800` / `Colors.orange.shade50`).
+  - **🟢 APRÈS INTERVENTION / Travaux** : couleur **VERTE** (`Color(0xFF0a543d)` / fond vert pastel).
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Consultation du rapport initial pour les interventions d'exécution — 2 août 2026
+
+- [x] Identifier la cause racine : pour les interventions de type `execution` (exécution des travaux d'un devis), `_viewReport()` redirigeait vers `ViewReportScreen` qui s'attendait à un `report_data` spécifique de maintenance, affichant un écran vide (« Aucun rapport disponible »).
+- [x] Rediriger les interventions de type `execution` / `exécution` ou possédant un `diagnostic_report_id`/`diagnosticReports` vers `ViewDiagnosticReportScreen`.
+- [x] Ajouter dans `ViewReportScreen` les fallbacks `diagnostic_report` et `diagnosticReports` si ouvert séparément.
+- [x] Activer le rechargement automatique depuis l'API si le rapport de diagnostic initial n'était pas présent dans l'objet local.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Correction du RenderFlex overflow sur view_diagnostic_report_screen.dart — 2 août 2026
+
+- [x] Identifier la cause racine : `Row` contenant le titre long `'7/ Matériels nécessaires (Dépannage / Installation)'` sans `Expanded`, causant un débordement de 32 pixels sur la droite du composant.
+- [x] Envelopper les titres `Text` dans un `Expanded` dans toutes les en-têtes de section de `view_diagnostic_report_screen.dart`.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Correction de l'affichage des photos uploadées dans les rapports — 2 août 2026
+
+- [x] Identifier la cause racine : `_buildPhotosGallerySection` dans `view_report_screen.dart` cherchait uniquement une clé simple `image_url`/`url`/`path` à la racine de la Map du rapport, ignorant les tableaux `photos_before`, `photos_after`, `photos`, `images` et `equipments`.
+- [x] Étendre `extractUrls` pour inspecter toutes les listes de photos de l'intervention et du rapport.
+- [x] Prendre en charge le chargement hybride : URLs d'uploads réseau (`/uploads/...`) et fichiers enregistrés localement sur l'appareil.
+- [x] Prise en charge du zoom plein écran dans `_openImageDialog` pour tous les types d'images.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Disposition horizontale et inversion de couleurs des données techniques — 2 août 2026
+
+- [x] Refondre `_buildMeasureItem` / `_buildMeasureChip` pour créer un composant badge/chip compact horizontal (icône, intitulé et valeur côte à côte).
+- [x] Disposer les puces techniques sous forme de grille horizontale avec `Wrap(spacing: 8, runSpacing: 8)`.
+- [x] Inverser les couleurs pour respecter la logique Métier :
+  - **🟠 AVANT Intervention** : couleur **ORANGE** (`Colors.orange.shade900` / `Colors.orange.shade800`).
+  - **🟢 APRÈS Intervention** : couleur **VERTE** (`Color(0xFF0a543d)` / `Colors.green.shade900`).
+- [x] Appliquer la mise en forme sur `view_report_screen.dart`, `report_summary_screen.dart` et `maintenance_reports_screen.dart`.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Correction de l'heure de début/fin et des durées identiques (0 min) — 2 août 2026
+
+- [x] Identifier la cause racine : lorsque l'heure de démarrage n'était pas encore renseignée, `_startTime` et `_endTime` prenaient l'heure instantanée courante (`TimeOfDay.now()`), affichant la même heure (ex: `16:58` et `16:58`) et une durée de `0 min`.
+- [x] Si `started_at` n'est pas encore enregistré ou si `_startTime == _endTime`, calculer automatiquement une heure de début par défaut (30 minutes avant l'heure de fin actuelle).
+- [x] Conserver la récupération exacte de `started_at` lorsque le technicien a cliqué au préalable sur « Démarrer ».
+- [x] Conserver les sélecteurs d'heure éditables pour ajustement manuel.
+- [x] Valider avec `flutter analyze`, commiter et pusher sur git.
+
+---
+
+# Accès et affichage des devis pour le technicien — 2 août 2026
+
+- [x] Identifier la cause racine backend : `quoteWorkflowController.js` et `resourceOwnershipPolicy.js` utilisaient `assigned_to` au lieu de `technician_id`, provoquant des erreurs 403 Forbidden pour le technicien.
+- [x] Mettre à jour `canReadQuote` (`resourceOwnershipPolicy.js`), `quoteWorkflowController.js` et `quoteController.js` (`getAllQuotes`) pour autoriser le technicien via `technician_id` (sur l'intervention ou le rapport de diagnostic).
+- [x] Rattacher automatiquement l'objet `quote` avec ses items dans l'API `getInterventionById` (`interventionController.js`).
+- [x] Ajouter l'affichage de la section Devis (`_buildQuoteSection`) dans `ViewDiagnosticReportScreen` sur l'application mobile technicien (Référence, Statut, Montant total, Liste des articles/prestations).
+- [x] Déployer le backend sur le serveur de production PM2, valider avec `flutter analyze`, puis commiter et pusher sur git.
+
+---
+
+# Correction encadré d'avertissement de solde sur la modale "Travaux terminés" — 2 août 2026
+
+- [x] Identifier la cause racine : l'encadré rouge ("Important : Le solde doit être réglé avant la dernière intervention de maintenance") était affiché en dur pour toutes les confirmations de fin de travaux.
+- [x] Renvoyer les attributs de paiement et de contrat dans `/api/interventions/pending-confirmation` (`interventionController.js`).
+- [x] Conditionner l'affichage du bloc d'avertissement rouge à la présence effective d'un solde de 50% en attente (`payment_option == 'split'` et `second_payment_status != 'paid'`).
+- [x] Masquer totalement l'encadré rouge si l'intervention a été payée à 100% (ou sans solde restant) et renommer le bouton en "Voir le rapport".
+- [x] Adapter le message d'avertissement rouge spécifiquement selon qu'il s'agit d'un devis standard (solde de 50% après travaux) ou d'un contrat de maintenance.
+- [x] Valider avec `flutter analyze`, déployer et redémarrer le backend PM2.
+- [x] Documenter l'apprentissage dans `tasks/lessons.md`.
+
+---
+
+# Correction fermeture de l'écran de paiement après succès — 2 août 2026
+
+- [x] Identifier la cause racine : l'enchaînement synchrone de `Navigator.pop(dialogContext)` et `Navigator.pop(context)` dans le même tour de boucle ignorait le second pop pendant la transition d'animation du dialog.
+- [x] Capturer le `Navigator` parent et dépiler la page de paiement (`PaymentScreen`, `DiagnosticPaymentScreen`) de façon asynchrone via `Future.microtask(() { if (localNav.canPop()) localNav.pop(true); })`.
+- [x] Valider l'analyse statique Flutter avec `flutter analyze`.
+- [x] Documenter l'apprentissage dans `tasks/lessons.md`.
+
+---
+
+# Correction blocage vérification paiement diagnostic FineoPay — 2 août 2026
+
+- [x] Identifier la cause racine 1 : l'API FineoPay `/transactions` ne retourne pas le champ `syncRef` dans le JSON de réponse.
+- [x] Mettre à jour le rapprochement de transactions dans `fineoPayController.js` (`verifyDiagnosticPaymentStatus`, `verifyPaymentStatus`, `verifySubscriptionPaymentStatus`) pour matcher `payLink.title` (contenant l'ID/référence) et le montant exact.
+- [x] Identifier la cause racine 2 : sous PostgreSQL en production (`NODE_ENV=production`), Sequelize bloquait sur `FOR UPDATE cannot be applied to the nullable side of an outer join` dans `fineoPayFinancialTransactionService.js` lors du `findByPk` avec `include`.
+- [x] Corriger `fineoPayFinancialTransactionService.js` en retirant les `include` incompatibles avec `LOCK.UPDATE`.
+- [x] Ajouter les colonnes manquantes à la table `payments` PostgreSQL (`intervention_id`, `payment_step`, `purpose`, `sync_ref`, `gateway_checkout_id`, `verified_at`).
+- [x] Déployer le code mis à jour sur Sandbox (`api.sandbox.mct.ci`), redémarrer PM2 et valider que l'intervention #251 passe à `diagnostic_paid: true` avec succès.
+- [x] Documenter l'apprentissage dans `tasks/lessons.md`.
+
+---
+
+# Correction erreur 500 "Op is not defined" sur GET /api/customer/quotes — 2 août 2026
+
+- [x] Importer `const { Op } = require('sequelize');` en haut de `src/routes/customerRoutes.js`.
+- [x] Vérifier la syntaxe avec `node -c src/routes/customerRoutes.js`.
+- [x] Déployer le correctif sur le serveur Sandbox avec `./deploy/deploy.sh api` et valider l'état du serveur.
+
+---
+
+# Alignement logo devis à gauche — 2 août 2026
+
+- [x] Mettre à jour `generateQuotePdf` dans `quoteController.js` pour aligner le logo `logo_principal.png` à gauche (marge `x = 40`, `y = 30`).
+- [x] Valider la génération PDF des devis avec `node scripts/test-quote-pdf.js`.
+- [x] Déployer l'API sur le serveur Sandbox avec `./deploy/deploy.sh api` et valider le status `/live`.
+
+---
+
+# Remplacement logo facture — 2 août 2026
+
+- [x] Remplacer les assets image `logo_smart.png` et `logo.png` dans `assets/images/` de l'application mobile Flutter par le binaire de `logo_principal.png`.
+- [x] Mettre à jour le fichier `public/logo-maintenance.png` de l'API backend (`mct-maintenance-api`) avec `logo_principal.png` pour la génération des factures PDF.
+- [x] Valider la génération PDF avec `node Scripts-api/test-pdf.js`.
+
+---
+
+# Correction incompatibilité architecture dylib iOS Simulator — 2 août 2026
+
+- [x] Identifier l'erreur de plateforme dylib (`have 'iOS', need 'iOS-simulator'`) sur `objective_c.framework`.
+- [x] Purger les artefacts de build et caches FFI avec `flutter clean`.
+- [x] Supprimer la dépendance redondante `webview_flutter_wkwebview: any` dans `pubspec.yaml`.
+- [x] Re-synchroniser les paquets avec `flutter pub get` et réintégrer les Pods natifs iOS avec `pod install`.
+
+---
+
+# Correction crash Navigator lors du téléchargement de facture — 2 août 2026
+
+- [x] Identifier la cause racine de l'assertion `_history.isNotEmpty` : fermeture du loader `showDialog` via `Navigator.pop(context)` local au lieu du `rootNavigator`.
+- [x] Utiliser `Navigator.of(context, rootNavigator: true)` dans `_downloadInvoicePDF` (`invoices_screen.dart`).
+- [x] Sécuriser les `Navigator` locaux imbriqués dans `_TabShell` (`documents_hub_screen.dart`) avec `PopScope`.
+- [x] Valider avec `flutter analyze`.
+
+---
+
+# Correction génération PDF sur VPS — 2 août 2026
+
+- [x] Remplacer la génération de facture Puppeteer par PDFKit sans navigateur système.
+- [x] Conserver les informations client, commande, articles, montants et statuts dans le PDF.
+- [x] Ajouter un test garantissant la production d'un fichier PDF valide.
+- [x] Retirer Puppeteer des dépendances de production et valider les tests backend.
+- [x] Vérifier les prérequis du serveur sandbox, déployer le générateur PDF de façon ciblée et valider la génération distante ainsi que la santé de l'API.
+
+---
+
+# Correction téléchargement facture mobile — 2 août 2026
+
+- [x] Conserver l'identifiant numérique `orderId` séparément de l'identifiant d'affichage des paiements.
+- [x] Appeler la route authentifiée actuelle `/api/payments/invoice/:orderId/download`.
+- [x] Empêcher le téléchargement ou le paiement lorsqu'aucune commande numérique n'est associée.
+- [x] Valider le correctif avec l'analyse statique et les tests Flutter ciblés.
+
+---
+
 # Revue d'architecture et recommandations — 1 août 2026
 
 - [x] Cartographier les applications, services et flux métier principaux.
