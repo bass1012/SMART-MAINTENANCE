@@ -77,6 +77,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
       return data.map((item) {
         final itemId = item['id']?.toString() ?? '';
+        final String type = item['type']?.toString() ?? 'order';
+        final int? orderId = int.tryParse(item['orderId']?.toString() ?? '') ??
+            (type == 'order'
+                ? int.tryParse(itemId.replaceFirst(RegExp(r'^order-'), ''))
+                : null);
         final date = DateTime.tryParse(item['date']?.toString() ??
                 item['createdAt']?.toString() ??
                 '') ??
@@ -87,7 +92,6 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           amount = double.tryParse(item['amount'].toString()) ?? 0.0;
         }
 
-        final String type = item['type']?.toString() ?? 'order';
         final String rawStatus = item['status']?.toString() ?? 'pending';
         final String status = _mapInvoiceStatus(rawStatus, date);
 
@@ -103,6 +107,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
         return Invoice(
           id: itemId,
+          orderId: orderId,
           number: invoiceNumber,
           date: date,
           dueDate: date.add(const Duration(days: 30)),
@@ -195,7 +200,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             children: [
               // Statistiques modernes
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -206,37 +211,33 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ],
                   ),
                 ),
-                child: Column(
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildStatCard(
-                            'Total',
-                            _invoices.length.toString(),
-                            Icons.receipt_long_outlined,
-                            const Color(0xFF2196F3),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatCard(
-                            'Payées',
-                            _paidCount.toString(),
-                            Icons.check_circle_outline,
-                            const Color(0xFF4CAF50),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatCard(
-                            'En retard',
-                            _overdueCount.toString(),
-                            Icons.warning_amber_outlined,
-                            const Color(0xFFFF5252),
-                          ),
-                        ),
-                      ],
+                    Expanded(
+                      child: _buildStatCard(
+                        'Total',
+                        _invoices.length.toString(),
+                        Icons.receipt_long_outlined,
+                        const Color(0xFF2196F3),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Payées',
+                        _paidCount.toString(),
+                        Icons.check_circle_outline,
+                        const Color(0xFF4CAF50),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildStatCard(
+                        'En retard',
+                        _overdueCount.toString(),
+                        Icons.warning_amber_outlined,
+                        const Color(0xFFFF5252),
+                      ),
                     ),
                   ],
                 ),
@@ -245,7 +246,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               // Filtres modernes
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -391,27 +392,28 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   Widget _buildStatCard(
       String label, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: color.withValues(alpha: 0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [color, color.withValues(alpha: 0.8)],
@@ -419,28 +421,28 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: color.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+                  color: color.withValues(alpha: 0.25),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: Icon(icon, color: Colors.white, size: 24),
+            child: Icon(icon, color: Colors.white, size: 16),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
           Text(
             value,
             style: GoogleFonts.poppins(
-              fontSize: 24,
+              fontSize: 17,
               fontWeight: FontWeight.bold,
               color: color,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             style: GoogleFonts.poppins(
-              fontSize: 11,
+              fontSize: 10.5,
               color: Colors.black54,
               fontWeight: FontWeight.w500,
             ),
@@ -762,18 +764,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             const SizedBox(height: 24),
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _downloadInvoicePDF(invoice);
-                    },
-                    icon: const Icon(Icons.download),
-                    label: const Text('Télécharger'),
+                if (invoice.orderId != null && invoice.status == 'paid')
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _downloadInvoicePDF(invoice);
+                      },
+                      icon: const Icon(Icons.download),
+                      label: const Text('Télécharger'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                if (invoice.status != 'paid')
+                if (invoice.orderId != null && invoice.status != 'paid') ...[
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () async {
@@ -782,7 +784,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => PaymentScreen(
-                              invoiceId: invoice.id,
+                              invoiceId: invoice.orderId.toString(),
                               invoiceNumber: invoice.number,
                               amount: invoice.amount,
                             ),
@@ -798,6 +800,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       label: const Text('Payer'),
                     ),
                   ),
+                ],
               ],
             ),
           ],
@@ -835,9 +838,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 
   Future<void> _downloadInvoicePDF(Invoice invoice) async {
-    // Afficher un loader
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+
+    // Afficher un loader sur le Navigator racine
     showDialog(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: false,
       builder: (context) => const Center(
         child: CircularProgressIndicator(),
@@ -846,7 +852,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
     try {
       // Télécharger le PDF
-      final orderId = invoice.id;
+      final orderId = invoice.orderId;
+      if (orderId == null) {
+        throw StateError('Aucune commande associée à cette facture');
+      }
       final pdfBytes = await _paymentRepository.downloadInvoicePDF(orderId);
 
       // Obtenir le répertoire de téléchargement
@@ -875,7 +884,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       await file.writeAsBytes(pdfBytes);
 
       if (mounted) {
-        Navigator.pop(context); // Fermer le loader
+        rootNavigator.pop(); // Fermer le loader sur le Navigator racine
 
         SnackBarHelper.showSuccess(
           context,
@@ -893,7 +902,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Fermer le loader
+        rootNavigator.pop(); // Fermer le loader sur le Navigator racine
 
         SnackBarHelper.showError(context, 'Erreur: $e');
       }
@@ -904,6 +913,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 // Modèle de facture
 class Invoice {
   final String id;
+  final int? orderId;
   final String number;
   final DateTime date;
   final DateTime dueDate;
@@ -913,6 +923,7 @@ class Invoice {
 
   Invoice({
     required this.id,
+    required this.orderId,
     required this.number,
     required this.date,
     required this.dueDate,
