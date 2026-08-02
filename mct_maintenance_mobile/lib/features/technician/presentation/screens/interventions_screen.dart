@@ -791,11 +791,6 @@ class _TechnicianInterventionsScreenState
                                       rawType.contains('repair') ||
                                       rawType.contains('urgence');
 
-                              final reportData = intervention['report_data'];
-                              final bool isInitialCompleted = intervention['initial_completed'] == true ||
-                                  (reportData is Map && reportData['initial_completed'] == true) ||
-                                  (intervention['initial_report'] != null);
-
                               Widget reportScreen;
                               if (isDiagnostic) {
                                 reportScreen = DiagnosticReportScreen(
@@ -805,7 +800,7 @@ class _TechnicianInterventionsScreenState
                               } else {
                                 reportScreen = CreateReportScreen(
                                   intervention: intervention,
-                                  isInitialStep: !isInitialCompleted,
+                                  isInitialStep: false,
                                 );
                               }
 
