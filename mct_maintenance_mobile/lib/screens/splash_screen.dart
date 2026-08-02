@@ -15,8 +15,9 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
+    with TickerProviderStateMixin {
+  late AnimationController _entryController;
+  late AnimationController _loadingDotsController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<Offset> _slideAnimation;
@@ -29,22 +30,29 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   void _setupAnimations() {
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+    // Animation d'entrée unique (logo, nom, titre, footer)
+    _entryController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
       vsync: this,
-    )..repeat(); // Animation en boucle pour les points de chargement
+    );
+
+    // Animation continue en boucle pour les points de chargement
+    _loadingDotsController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
+        parent: _entryController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeIn),
       ),
     );
 
     _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
+        parent: _entryController,
+        curve: const Interval(0.0, 0.7, curve: Curves.elasticOut),
       ),
     );
 
@@ -53,10 +61,13 @@ class _SplashScreenState extends State<SplashScreen>
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.3, 0.8, curve: Curves.easeOutCubic),
+        parent: _entryController,
+        curve: const Interval(0.2, 0.8, curve: Curves.easeOutCubic),
       ),
     );
+
+    _entryController.forward();
+    _loadingDotsController.repeat();
   }
 
   Future<void> _checkAuthentication() async {
@@ -211,7 +222,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _entryController.dispose();
+    _loadingDotsController.dispose();
     super.dispose();
   }
 
@@ -248,7 +260,7 @@ class _SplashScreenState extends State<SplashScreen>
           ),
           child: SafeArea(
             child: AnimatedBuilder(
-              animation: _animationController,
+              animation: _entryController,
               builder: (context, child) {
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -337,11 +349,11 @@ class _SplashScreenState extends State<SplashScreen>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: List.generate(3, (index) {
                               return AnimatedBuilder(
-                                animation: _animationController,
+                                animation: _loadingDotsController,
                                 builder: (context, child) {
                                   final delay = index * 0.2;
                                   final progress =
-                                      (_animationController.value + delay) %
+                                      (_loadingDotsController.value + delay) %
                                           1.0;
                                   final scale = 0.5 +
                                       (0.5 * (1 - (progress - 0.5).abs() * 2));
