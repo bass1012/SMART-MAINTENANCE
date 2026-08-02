@@ -184,11 +184,6 @@ const recordDiagnosticPayment = async ({
   now = new Date()
 }) => database.transaction(async (transaction) => {
   const intervention = await models.Intervention.findByPk(interventionId, {
-    include: [{
-      model: models.CustomerProfile,
-      as: 'customer',
-      include: [{ model: models.User, as: 'user' }]
-    }],
     transaction,
     lock: transaction.LOCK.UPDATE
   });
@@ -276,7 +271,6 @@ const recordSubscriptionPayment = async ({
   now = new Date()
 }) => database.transaction(async (transaction) => {
   const subscription = await models.Subscription.findByPk(subscriptionId, {
-    include: [{ model: models.User, as: 'customer' }],
     transaction,
     lock: transaction.LOCK.UPDATE
   });
