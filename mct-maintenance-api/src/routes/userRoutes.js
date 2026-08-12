@@ -1,5 +1,5 @@
 const express = require('express');
-const { authenticate, adminOnly } = require('../middleware/auth');
+const { authenticate, authorize, authorizeOrSelf, adminOnly } = require('../middleware/auth');
 const userController = require('../controllers/user/userController');
 const nodemailer = require('nodemailer');
 
@@ -82,26 +82,47 @@ router.post('/request-deletion', async (req, res) => {
       `
     };
 
-    await transporter.sendMail(mailOptions);
-    
-    console.log(`📧 Demande de suppression envoyée pour: ${email}`);
-    
-    res.json({ success: true, message: 'Demande de suppression envoyée' });
+    // Enregistrer systématiquement la demande en BDD (ContactRequest)
+    try {
+      const { ContactRequest } = require('../models');
+      await ContactRequest.create({
+        name: email.split('@')[0] || 'Client',
+        email: email,
+        phone: phone || 'Non renseigné',
+        motive: 'Suppression de compte',
+        message: `Demande de suppression de compte pour ${email}.${reason ? ' Raison: ' + reason : ''}`,
+        preferredChannel: 'email',
+        preferredTime: 'dès que possible',
+        urgencyLevel: 'high',
+        status: 'pending'
+      });
+    } catch (dbErr) {
+      console.error('⚠️  Impossible d\'enregistrer la demande de suppression en BDD:', dbErr.message);
+    }
+
+    // Tenter l'envoi d'email
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`📧 Demande de suppression envoyée par email pour: ${email}`);
+    } catch (emailErr) {
+      console.error('⚠️  Échec envoi email suppression (conservé en BDD):', emailErr.message);
+    }
+
+    res.json({ success: true, message: 'Demande de suppression enregistrée avec succès' });
   } catch (error) {
-    console.error('Erreur envoi demande suppression:', error);
-    // Retourner succès même en cas d'erreur pour ne pas bloquer l'utilisateur
-    res.json({ success: true, message: 'Demande de suppression enregistrée' });
+    console.error('Erreur traitement demande suppression:', error);
+    res.status(500).json({ success: false, message: 'Erreur lors du traitement de la demande de suppression' });
   }
 });
 
 // List & filter users
-router.get('/', authenticate, userController.listUsers);
+router.get('/', authenticate, authorize('admin', 'manager'), userController.listUsers);
 // Get one
-router.get('/:id', authenticate, userController.getUser);
+router.get('/:id', authenticate, authorizeOrSelf('admin', 'manager'), userController.getUser);
 // Update full (limited fields)
-router.put('/:id', authenticate, userController.updateUser);
+router.put('/:id', authenticate, authorizeOrSelf('admin', 'manager'), userController.updateUser);
 // Update status only
-router.patch('/:id/status', authenticate, userController.updateStatus);
+router.patch('/:id/status', authenticate, authorize('admin', 'manager'), userController.updateStatus);
 // Delete (admin only)
 router.delete('/:id', authenticate, adminOnly, userController.deleteUser);
 

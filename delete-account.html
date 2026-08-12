@@ -151,31 +151,45 @@
         document.getElementById('deleteForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const email = document.getElementById('email').value;
-            const phone = document.getElementById('phone').value;
-            const reason = document.getElementById('reason').value;
+            const email = document.getElementById('email').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            const reason = document.getElementById('reason').value.trim();
             const confirm = document.getElementById('confirm').checked;
+            const submitBtn = document.getElementById('submitBtn');
             
             if (!confirm) {
                 alert('Veuillez confirmer que vous comprenez que cette action est irreversible.');
                 return;
             }
             
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Envoi de la demande en cours...';
+
             // Envoyer la demande au backend
             fetch('https://api.sandbox.mct.ci/api/users/request-deletion', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, phone, reason })
             })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('form-section').style.display = 'none';
-                document.getElementById('success-section').style.display = 'block';
+            .then(function(response) {
+                return response.json().then(function(data) {
+                    return { ok: response.ok, data: data };
+                });
             })
-            .catch(error => {
-                // Meme en cas d'erreur, afficher le succes (la demande sera traitee manuellement)
-                document.getElementById('form-section').style.display = 'none';
-                document.getElementById('success-section').style.display = 'block';
+            .then(function(result) {
+                if (result.ok && result.data && result.data.success) {
+                    document.getElementById('form-section').style.display = 'none';
+                    document.getElementById('success-section').style.display = 'block';
+                } else {
+                    alert('Erreur: ' + ((result.data && result.data.message) || 'Impossible d\'enregistrer votre demande.'));
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Demander la suppression de mon compte';
+                }
+            })
+            .catch(function(error) {
+                alert('Erreur réseau : impossible de contacter le serveur. Veuillez réessayer plus tard ou écrire directement à supportuser@mct.ci.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Demander la suppression de mon compte';
             });
         });
     </script>
