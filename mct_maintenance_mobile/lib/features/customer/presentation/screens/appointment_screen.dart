@@ -1,5 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
 
 class AppointmentScreen extends StatefulWidget {
@@ -72,22 +76,74 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
       return;
     }
 
+    // Capturer les repositories AVANT les appels asynchrones (bonne pratique BuildContext)
+    final authRepository = context.read<AuthRepository>();
+    final interventionRepository = context.read<InterventionRepository>();
+
     setState(() => _isLoading = true);
 
     try {
-      // TODO: Implémenter l'appel API
-      // await _apiService.createAppointment({...});
+      final userData = await authRepository.getUserData();
+      if (!mounted) return;
+      final customerId = userData?['id'] ??
+          userData?['user']?['id'] ??
+          userData?['data']?['user']?['id'];
 
-      await Future.delayed(const Duration(seconds: 1));
-
-      if (mounted) {
-        SnackBarHelper.showSuccess(context, 'Rendez-vous créé avec succès',
-            emoji: '✓');
-        Navigator.pop(context);
+      if (customerId == null) {
+        throw Exception('Impossible de récupérer votre identifiant client');
       }
+
+      int startHour = 9;
+      int startMinute = 0;
+      if (_selectedTimeSlot!.contains(':')) {
+        final timePart = _selectedTimeSlot!.split('-')[0].trim();
+        final parts = timePart.split(':');
+        if (parts.length >= 2) {
+          startHour = int.tryParse(parts[0]) ?? 9;
+          startMinute = int.tryParse(parts[1]) ?? 0;
+        }
+      }
+
+      final scheduledDateTime = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        startHour,
+        startMinute,
+      );
+
+      final reason = _reasonController.text.trim();
+      final notes = _notesController.text.trim();
+      final title = 'Rendez-vous ${_getServiceLabel(_selectedService)}: $reason';
+      final description = notes.isNotEmpty ? '$reason\n\nNotes: $notes' : reason;
+
+      final interventionData = {
+        'title': title,
+        'description': description,
+        'customer_id': customerId,
+        'scheduled_date': scheduledDateTime.toIso8601String(),
+        'priority': 'normal',
+        'status': 'pending',
+        'intervention_type': _selectedService,
+      };
+
+      final response = await interventionRepository.createIntervention(interventionData);
+      if (!mounted) return;
+
+      if (kDebugMode) debugPrint('✅ Rendez-vous créé en BDD: $response');
+
+      SnackBarHelper.showSuccess(
+        context,
+        'Rendez-vous créé avec succès',
+        emoji: '✓',
+      );
+      Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        SnackBarHelper.showError(context, 'Erreur: $e');
+        SnackBarHelper.showError(
+          context,
+          'Erreur lors de la création du rendez-vous: $e',
+        );
       }
     } finally {
       if (mounted) {
