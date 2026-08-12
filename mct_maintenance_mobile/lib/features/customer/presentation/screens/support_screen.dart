@@ -8,11 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:mct_maintenance_mobile/config/environment.dart';
+import 'package:provider/provider.dart';
+import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
+import 'package:mct_maintenance_mobile/models/user_model.dart';
 
 // Constantes
-const String supportPhone = '+225 07 09 09 09 42';
-const String supportEmail = 'contact@mct.ci';
-const String supportWhatsApp = '2250709090942';
+const String supportPhone = '+225 07 59 50 50 50';
+const String supportEmail = 'smartmaintenance@mct.ci';
+const String supportWhatsApp = '2250503222293';
 const String facebookMessengerUrl =
     'https://m.me/Smartmaintenancebymct'; // Lien Messenger direct
 const String instagramDmUrl =
@@ -38,6 +41,7 @@ class _SupportScreenState extends State<SupportScreen>
   bool _isConnected = false;
   bool _isLoading = true;
   String? _typingUser;
+  UserModel? _user;
 
   @override
   bool get wantKeepAlive => true; // Garder le widget en vie
@@ -47,6 +51,45 @@ class _SupportScreenState extends State<SupportScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadCachedMessages();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final authRepository = context.read<AuthRepository>();
+      final profileResponse = await authRepository.getProfile();
+      if (mounted) {
+        setState(() {
+          _user = UserModel.fromJson(profileResponse['data']);
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Erreur chargement profil support: $e');
+    }
+  }
+
+  bool get _isOutsideBusinessHours {
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    final currentMinute = now.minute;
+    final dayOfWeek = now.weekday; // 1 = Lundi, 7 = Dimanche
+
+    if (dayOfWeek == 7) {
+      return true; // Dimanche
+    } else if (dayOfWeek == 6) {
+      // Samedi : 9h à 12h
+      if (currentHour < 9 || currentHour >= 12) {
+        return true;
+      }
+    } else {
+      // Lundi à Vendredi : 8h à 17h30
+      if (currentHour < 8 ||
+          currentHour > 17 ||
+          (currentHour == 17 && currentMinute > 30)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Charger les messages depuis le cache persistant
@@ -368,34 +411,8 @@ class _SupportScreenState extends State<SupportScreen>
     _messageController.clear();
     _chatService.stopTyping();
 
-    // Vérifier si c'est hors des heures de service
-    final now = DateTime.now();
-    final currentHour = now.hour;
-    final currentMinute = now.minute;
-    final dayOfWeek = now.weekday; // 1 = lundi, 7 = dimanche
-
-    // Définir les heures de service : Lundi-Vendredi 8h-17h30, Samedi 9h-12h
-    bool isOutsideBusinessHours = false;
-
-    if (dayOfWeek == 7) {
-      // Dimanche - fermé toute la journée
-      isOutsideBusinessHours = true;
-    } else if (dayOfWeek == 6) {
-      // Samedi - 9h à 12h
-      if (currentHour < 9 || (currentHour >= 12)) {
-        isOutsideBusinessHours = true;
-      }
-    } else {
-      // Lundi à Vendredi - 8h à 17h30
-      if (currentHour < 8 ||
-          currentHour > 17 ||
-          (currentHour == 17 && currentMinute > 30)) {
-        isOutsideBusinessHours = true;
-      }
-    }
-
     // Envoyer un message automatique si hors des heures de service
-    if (isOutsideBusinessHours) {
+    if (_isOutsideBusinessHours) {
       await Future.delayed(const Duration(seconds: 2));
 
       // Créer un message automatique
@@ -674,6 +691,8 @@ class _SupportScreenState extends State<SupportScreen>
       ),
     );
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -1228,14 +1247,25 @@ class ChatMessage {
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    String? name = json['sender_name'];
+    if (name == null && json['sender'] != null) {
+      final s = json['sender'];
+      if (s is Map) {
+        if (s['customerProfile'] != null && s['customerProfile']['first_name'] != null) {
+          name = '${s['customerProfile']['first_name']} ${s['customerProfile']['last_name'] ?? ''}'.trim();
+        } else if (s['first_name'] != null) {
+          name = '${s['first_name']} ${s['last_name'] ?? ''}'.trim();
+        }
+      }
+    }
     return ChatMessage(
-      id: json['id'],
-      senderId: json['sender_id'],
-      senderRole: json['sender_role'],
-      message: json['message'],
-      isRead: json['is_read'] ?? false,
-      createdAt: DateTime.parse(json['created_at']),
-      senderName: json['sender_name'],
+      id: json['id'] is int ? json['id'] : (int.tryParse(json['id']?.toString() ?? '') ?? 0),
+      senderId: json['sender_id'] is int ? json['sender_id'] : (int.tryParse(json['sender_id']?.toString() ?? '') ?? 0),
+      senderRole: json['sender_role']?.toString() ?? 'admin',
+      message: json['message']?.toString() ?? '',
+      isRead: json['is_read'] == true || json['is_read'] == 1,
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at'].toString()) : DateTime.now(),
+      senderName: name,
     );
   }
 
@@ -1251,3 +1281,4 @@ class ChatMessage {
     };
   }
 }
+

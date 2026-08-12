@@ -16,8 +16,8 @@ class PaymentRepositoryImpl implements PaymentRepository {
     String? redirectUrl,
     bool? autoRedirect,
   }) async {
-    final response = await _apiService
-        .post('/api/payments/fineopay/initialize', body: {
+    final response =
+        await _apiService.post('/api/payments/fineopay/initialize', body: {
       'orderId': orderId,
       'amount': amount,
       'reference': reference,
@@ -71,6 +71,19 @@ class PaymentRepositoryImpl implements PaymentRepository {
     String? redirectUrl,
     bool? autoRedirect,
   }) async {
+    if (amount <= 0) {
+      final confirmation = await verifySubscriptionPayment(subscriptionId);
+      final data = confirmation['data'];
+      final isConfirmed = confirmation['success'] == true &&
+          data is Map &&
+          (data['payment_status'] == 'paid' ||
+              data['first_payment_status'] == 'paid') &&
+          (data['status'] == 'active' || data['status'] == 'completed');
+      if (isConfirmed) {
+        return Map<String, dynamic>.from(data);
+      }
+      throw Exception('Le serveur n\'a pas confirmé la souscription gratuite');
+    }
     final response = await _apiService
         .post('/api/payments/fineopay/initialize-subscription', body: {
       'subscriptionId': subscriptionId,
@@ -103,7 +116,8 @@ class PaymentRepositoryImpl implements PaymentRepository {
       'reference': reference,
       'paymentPhase': phase,
       'title': 'Contrat $reference - Phase $phase',
-      'description': 'Paiement du contrat de maintenance $reference (Phase $phase)',
+      'description':
+          'Paiement du contrat de maintenance $reference (Phase $phase)',
       if (redirectUrl != null) 'redirectUrl': redirectUrl,
       if (autoRedirect != null) 'autoRedirect': autoRedirect,
     });
@@ -129,8 +143,9 @@ class PaymentRepositoryImpl implements PaymentRepository {
   }
 
   @override
-  Future<List<int>> downloadInvoicePDF(String orderId) async {
-    final bytes = await _apiService.getBytes('/api/customer/orders/$orderId/download-invoice');
+  Future<List<int>> downloadInvoicePDF(int orderId) async {
+    final bytes =
+        await _apiService.getBytes('/api/payments/invoice/$orderId/download');
     return bytes;
   }
 
@@ -142,16 +157,20 @@ class PaymentRepositoryImpl implements PaymentRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> verifyDiagnosticPayment(int interventionId) async {
+  Future<Map<String, dynamic>> verifyDiagnosticPayment(
+      int interventionId) async {
     final response = await _apiService
         .get('/api/fineopay/verify-diagnostic-payment/$interventionId');
     return jsonDecode(response.body);
   }
 
   @override
-  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId) async {
-    final response = await _apiService
-        .get('/api/fineopay/verify-subscription-payment/$subscriptionId');
+  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId,
+      {String? reference}) async {
+    final path = reference != null && reference.isNotEmpty
+        ? '/api/fineopay/verify-subscription-payment/$subscriptionId?reference=$reference'
+        : '/api/fineopay/verify-subscription-payment/$subscriptionId';
+    final response = await _apiService.get(path);
     return jsonDecode(response.body);
   }
 }

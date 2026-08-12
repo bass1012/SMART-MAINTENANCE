@@ -63,6 +63,8 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
         title: const Text('Détails de la réclamation'),
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage('assets/images/background_tech_2.png'),

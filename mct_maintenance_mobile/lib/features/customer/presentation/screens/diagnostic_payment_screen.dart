@@ -8,7 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 class DiagnosticPaymentScreen extends StatefulWidget {
   final int interventionId;
   final double diagnosticFee;
-  final bool isMaintenanceDeposit; // true = paiement entretien (acompte 50% ou total 100%)
+  final bool
+      isMaintenanceDeposit; // true = paiement entretien (acompte 50% ou total 100%)
   final String? paymentOption; // 'split' (50%) ou 'full' (100%)
 
   const DiagnosticPaymentScreen({
@@ -239,7 +240,8 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: isFull ? Colors.green.shade900 : Colors.blue.shade900,
+                      color:
+                          isFull ? Colors.green.shade900 : Colors.blue.shade900,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -249,7 +251,8 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
                         : 'Un acompte de 50% est requis avant l\'intervention. Le solde restant (50%) sera payé après l\'intervention.',
                     style: TextStyle(
                       fontSize: 14,
-                      color: isFull ? Colors.green.shade800 : Colors.blue.shade800,
+                      color:
+                          isFull ? Colors.green.shade800 : Colors.blue.shade800,
                     ),
                   ),
                 ],
@@ -259,7 +262,7 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         ),
       );
     }
-    
+
     // On ne retourne plus la boîte 'Frais de diagnostic obligatoires'
     return const SizedBox.shrink();
   }
@@ -394,6 +397,26 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
     setState(() => _isProcessing = true);
 
     try {
+      // 🎁 Gestion du diagnostic à 0 FCFA (Offert / Gratuit)
+      if (widget.diagnosticFee <= 0) {
+        if (kDebugMode) {
+          debugPrint(
+              '🎁 Frais diagnostic = 0 FCFA pour intervention #${widget.interventionId} : Validation directe.');
+        }
+        final confirmation = await _paymentRepository
+            .verifyDiagnosticPayment(widget.interventionId);
+        final data = confirmation['data'];
+        final isConfirmed = confirmation['success'] == true &&
+            data is Map &&
+            data['diagnostic_paid'] == true;
+        if (!isConfirmed) {
+          throw Exception(
+              'Le serveur n\'a pas confirmé la prise en charge du diagnostic.');
+        }
+        if (mounted) _showPaymentSuccess();
+        return;
+      }
+
       if (kDebugMode) {
         debugPrint(
             '💳 Initialisation paiement diagnostic pour intervention #${widget.interventionId}');
@@ -469,10 +492,42 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
           }
 
           return AlertDialog(
-            icon: const Icon(
-              Icons.hourglass_top,
-              color: Colors.orange,
-              size: 64,
+            icon: Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFFF97316).withValues(alpha: 0.3),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF97316).withValues(alpha: 0.15),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFEA580C),
+                      strokeWidth: 3,
+                    ),
+                  ),
+                  Icon(
+                    Icons.account_balance_wallet_rounded,
+                    color: Color(0xFFEA580C),
+                    size: 24,
+                  ),
+                ],
+              ),
             ),
             title: const Text('Vérification en cours...'),
             content: Column(
@@ -550,7 +605,8 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         final diagnosticPaid = response['data']?['diagnostic_paid'] == true;
         final firstPaymentStatus = response['data']?['first_payment_status'];
         final secondPaymentStatus = response['data']?['second_payment_status'];
-        final paymentStatus = response['data']?['payment_status'] ?? response['data']?['status'];
+        final paymentStatus =
+            response['data']?['payment_status'] ?? response['data']?['status'];
 
         bool isPaid = false;
         if (firstPaymentStatus == 'paid' && secondPaymentStatus != 'paid') {
@@ -566,12 +622,13 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         }
 
         if (kDebugMode) {
-          debugPrint('📊 Statut diagnostic_paid: $diagnosticPaid, 1er: $firstPaymentStatus, 2ème: $secondPaymentStatus, status: $paymentStatus, isPaid: $isPaid');
+          debugPrint(
+              '📊 Statut diagnostic_paid: $diagnosticPaid, 1er: $firstPaymentStatus, 2ème: $secondPaymentStatus, status: $paymentStatus, isPaid: $isPaid');
         }
 
         if (isPaid) {
           _isPolling = false;
-          if (mounted && Navigator.of(dialogContext).canPop()) {
+          if (context.mounted && Navigator.of(dialogContext).canPop()) {
             Navigator.pop(dialogContext);
           }
           _showPaymentSuccess();
@@ -601,7 +658,8 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
       final diagnosticPaid = response['data']?['diagnostic_paid'] == true;
       final firstPaymentStatus = response['data']?['first_payment_status'];
       final secondPaymentStatus = response['data']?['second_payment_status'];
-      final paymentStatus = response['data']?['payment_status'] ?? response['data']?['status'];
+      final paymentStatus =
+          response['data']?['payment_status'] ?? response['data']?['status'];
 
       bool isPaid = false;
       if (firstPaymentStatus == 'paid' && secondPaymentStatus != 'paid') {
@@ -618,12 +676,12 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
 
       if (isPaid) {
         _isPolling = false;
-        if (mounted && Navigator.of(dialogContext).canPop()) {
+        if (context.mounted && Navigator.of(dialogContext).canPop()) {
           Navigator.pop(dialogContext);
         }
         _showPaymentSuccess();
       } else {
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(

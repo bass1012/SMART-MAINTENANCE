@@ -5,9 +5,9 @@ import 'package:mct_maintenance_mobile/features/customer/domain/repositories/con
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/services/payment_service.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
-import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
+
 import 'package:url_launcher/url_launcher.dart';
-import 'payment_webview_screen.dart';
+import 'package:mct_maintenance_mobile/services/deep_link_service.dart';
 
 class ContractPaymentScreen extends StatefulWidget {
   final int subscriptionId;
@@ -19,6 +19,10 @@ class ContractPaymentScreen extends StatefulWidget {
   final String? firstPaymentStatus;
   final String? secondPaymentStatus;
   final int? paymentPhase; // 1 = premier paiement, 2 = deuxième paiement
+  final double? firstPaymentAmount;
+  final double? secondPaymentAmount;
+  final int? visitsTotal;
+  final int? visitIntervalMonths;
 
   const ContractPaymentScreen({
     super.key,
@@ -31,6 +35,10 @@ class ContractPaymentScreen extends StatefulWidget {
     this.firstPaymentStatus,
     this.secondPaymentStatus,
     this.paymentPhase,
+    this.firstPaymentAmount,
+    this.secondPaymentAmount,
+    this.visitsTotal,
+    this.visitIntervalMonths,
   });
 
   @override
@@ -42,29 +50,28 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
   late final ContractRepository _contractRepository;
   late final PaymentService _paymentService;
   bool _isProcessing = false;
-  bool _isWaitingForPayment = false;
+
+  // 'half' = payer 50%, 'full' = payer 100%
+  String _selectedPaymentOption = 'half';
+
   Timer? _pollingTimer;
   int _pollCount = 0;
   static const int _maxPolls = 60; // 5 minutes max (60 × 5s)
+  String? _lastPaymentReference; // référence reçue via deep link
 
-  // Calcul du montant pour 50% (premier ou deuxième paiement)
-  double get _firstPaymentAmount => (widget.amount / 2).ceilToDouble();
-  double get _secondPaymentAmount => (widget.amount / 2).floorToDouble();
-
-  // Détermine la phase de paiement actuelle
+  // Phase effective de paiement (déduite du statut)
   int get _currentPaymentPhase {
-    if (widget.paymentPhase != null) return widget.paymentPhase!;
-    // Si les deux paiements sont effectués, phase 0 = tout payé
+    if (widget.paymentPhase != null) {
+      return widget.paymentPhase!;
+    }
     if (widget.firstPaymentStatus == 'paid' &&
         widget.secondPaymentStatus == 'paid') {
       return 0;
     }
-    // Par défaut, si premier paiement pas fait, c'est phase 1
     if (widget.firstPaymentStatus == null ||
         widget.firstPaymentStatus == 'pending') {
       return 1;
     }
-    // Si premier paiement fait mais pas le deuxième, c'est phase 2
     if (widget.firstPaymentStatus == 'paid' &&
         (widget.secondPaymentStatus == null ||
             widget.secondPaymentStatus == 'pending')) {
@@ -73,25 +80,23 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
     return 1;
   }
 
-  // Montant à payer pour la phase actuelle
+  double get _firstPaymentAmount =>
+      widget.firstPaymentAmount ?? (widget.amount / 2).ceilToDouble();
+  double get _secondPaymentAmount =>
+      widget.secondPaymentAmount ?? (widget.amount / 2).floorToDouble();
+
+  /// Montant à payer selon l'option sélectionnée
   double get _amountToPay {
-    return _currentPaymentPhase == 1
-        ? _firstPaymentAmount
-        : _secondPaymentAmount;
+    if (_currentPaymentPhase == 2) return _secondPaymentAmount;
+    return _selectedPaymentOption == 'full'
+        ? widget.amount
+        : _firstPaymentAmount;
   }
 
-  // Titre du paiement actuel
-  String get _paymentTitle {
-    return _currentPaymentPhase == 1
-        ? '1er paiement (50%)'
-        : '2ème paiement (50%)';
-  }
-
-  // Description du paiement
-  String get _paymentDescription {
-    return _currentPaymentPhase == 1
-        ? 'À la validation du contrat'
-        : 'Après la 3ème visite';
+  /// Phase effective à envoyer à l'API
+  int get _effectivePhase {
+    if (_currentPaymentPhase == 2) return 2;
+    return _selectedPaymentOption == 'full' ? 0 : 1; // 0 = paiement complet
   }
 
   @override
@@ -100,6 +105,7 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
     _contractRepository = context.read<ContractRepository>();
     _paymentService = context.read<PaymentService>();
     WidgetsBinding.instance.addObserver(this);
+    DeepLinkService().paymentStream.listen(_onPaymentCallback);
   }
 
   @override
@@ -112,195 +118,536 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-
-    if (state == AppLifecycleState.resumed && _isWaitingForPayment) {
-      if (kDebugMode) {
-        debugPrint(
-            '📱 Application revenue au premier plan - Vérification du paiement...');
-      }
+    if (state == AppLifecycleState.resumed) {
       _checkPaymentStatus();
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Paiement du contrat'),
-        backgroundColor: const Color(0xFF0a543d),
-        foregroundColor: Colors.white,
-      ),
-      body: Stack(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/images/background_tech_2.png'),
-                fit: BoxFit.cover,
-                opacity: 0.2,
-              ),
+  void _onPaymentCallback(Map<String, String> data) {
+    if (!mounted) {
+      return;
+    }
+    final reference = data['reference'] ?? '';
+    final syncRef = data['syncRef'] ?? '';
+    final expectedSyncRef = 'SUBSCRIPTION_${widget.subscriptionId}';
+    if (reference.isEmpty && syncRef.isEmpty) {
+      return;
+    }
+    if (syncRef != expectedSyncRef &&
+        !reference.contains('${widget.subscriptionId}')) {
+      return;
+    }
+
+    if (kDebugMode) {
+      debugPrint(
+          '💳 Deep link paiement reçu pour contrat #${widget.subscriptionId}: $data');
+    }
+    // Stocker la référence et vérifier immédiatement
+    if (reference.isNotEmpty) {
+      _lastPaymentReference = reference;
+    }
+    _checkPaymentStatus();
+  }
+
+  // ===================== PAIEMENT =====================
+
+  Future<void> _processPayment() async {
+    setState(() => _isProcessing = true);
+
+    try {
+      // 🎁 Gestion des paiements de contrat à 0 FCFA
+      if (_amountToPay <= 0) {
+        if (kDebugMode) {
+          debugPrint(
+              '🎁 Montant contrat = 0 FCFA pour souscription #${widget.subscriptionId} : Validation directe.');
+        }
+        final confirmation = await _contractRepository
+            .verifySubscriptionPayment(widget.subscriptionId);
+        final data = confirmation['data'];
+        final isConfirmed = confirmation['success'] == true &&
+            data is Map &&
+            _isPaymentSuccess(data);
+        if (!isConfirmed) {
+          throw Exception(
+              'Le serveur n\'a pas confirmé l\'activation gratuite du contrat.');
+        }
+        if (mounted) _showPaymentSuccess();
+        return;
+      }
+
+      if (kDebugMode) {
+        debugPrint(
+            '💳 Initialisation paiement FineoPay pour contrat #${widget.subscriptionId} '
+            '- ${_selectedPaymentOption == "full" ? "100%" : "50%"} '
+            '- Montant: $_amountToPay FCFA');
+      }
+
+      final paymentData = await _paymentService.initializeSubscriptionPayment(
+        widget.subscriptionId,
+        _amountToPay,
+        widget.reference,
+        paymentPhase: _effectivePhase,
+        redirectUrl: 'smartmaintenance://payment-callback',
+        autoRedirect: false,
+      );
+
+      final paymentUrl =
+          (paymentData['paymentUrl'] ?? paymentData['checkoutUrl']) as String?;
+      if (paymentUrl == null || paymentUrl.isEmpty) {
+        throw Exception('Aucun lien de paiement reçu du serveur.');
+      }
+
+      if (kDebugMode) debugPrint('🔗 URL paiement: $paymentUrl');
+
+      final Uri uri = Uri.parse(paymentUrl);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+      if (mounted) _startPaymentPolling();
+    } catch (e) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            icon: const Icon(Icons.error_outline, color: Colors.red, size: 64),
+            title: const Text('Erreur de paiement'),
+            content: Text(
+              'Une erreur est survenue lors de l\'initialisation du paiement.\n\n$e',
+              textAlign: TextAlign.center,
             ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Résumé du contrat
-                  _buildContractSummary(),
-                  const SizedBox(height: 24),
-
-                  // Information sur les modes de paiement
-                  _buildPaymentInfo(),
-                  const SizedBox(height: 32),
-
-                  // Message si tous les paiements sont effectués
-                  if (_currentPaymentPhase == 0) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.check_circle,
-                              color: Colors.green.shade600),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Tous les paiements ont été effectués pour ce contrat.',
-                              style: TextStyle(
-                                color: Colors.green.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Bouton paiement FineoPay
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: (_isProcessing || _currentPaymentPhase == 0)
-                          ? null
-                          : _processPayment,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: _isProcessing
-                          ? const SizedBox.shrink()
-                          : const Icon(Icons.credit_card),
-                      label: _isProcessing
-                          ? SizedBox(
-                              height: 20,
-                              child: ButtonLoadingIndicator(
-                                color: Colors.white,
-                                size: 6.0,
-                              ),
-                            )
-                          : Text(
-                              'Payer ${_formatCurrency(_amountToPay)}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Bouton paiement en espèces
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isProcessing ? null : _showCashPaymentInfo,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF0a543d),
-                        side: const BorderSide(
-                            color: Color(0xFF0a543d), width: 2),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(Icons.money),
-                      label: const Text(
-                        'Payer en espèces',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Note de sécurité
-                  _buildSecurityNote(),
-                ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
               ),
-            ),
+            ],
           ),
-          // Loading overlay
-          if (_isWaitingForPayment)
-            Container(
-              color: Colors.black54,
-              child: Center(
-                child: Card(
-                  margin: const EdgeInsets.all(32),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(
-                          color: Color(0xFF0a543d),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Vérification du paiement en cours...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Veuillez patienter',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  // ===================== POLLING =====================
+
+  void _startPaymentPolling() {
+    if (_pollingTimer != null) return;
+    _pollCount = 0;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: Container(
+          width: 76,
+          height: 76,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF7ED),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: const Color(0xFFF97316).withValues(alpha: 0.3),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFF97316).withValues(alpha: 0.15),
+                blurRadius: 16,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: const Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: CircularProgressIndicator(
+                  color: Color(0xFFEA580C),
+                  strokeWidth: 3,
                 ),
               ),
+              Icon(
+                Icons.account_balance_wallet_rounded,
+                color: Color(0xFFEA580C),
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+        title: const Text('Vérification en cours...'),
+        content: const Text(
+          'Complétez le paiement sur FineoPay.\n\n'
+          'L\'application vérifie automatiquement votre paiement.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _stopPolling();
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => _checkPaymentManually(dialogContext),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Vérifier maintenant'),
+          ),
+        ],
+      ),
+    );
+
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      _pollCount++;
+      if (kDebugMode) {
+        debugPrint(
+            '🔍 Polling contrat #${widget.subscriptionId} ($_pollCount/$_maxPolls)');
+      }
+
+      if (_pollCount >= _maxPolls) {
+        _stopPolling();
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        _showTimeoutDialog();
+        return;
+      }
+
+      await _checkPaymentStatus();
+    });
+  }
+
+  void _stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+  }
+
+  Future<void> _checkPaymentManually(BuildContext dialogContext) async {
+    try {
+      final response = await _contractRepository.verifySubscriptionPayment(
+          widget.subscriptionId,
+          reference: _lastPaymentReference);
+      final data = response['data'] ?? {};
+      final isPaid = _isPaymentSuccess(data);
+
+      if (isPaid) {
+        _stopPolling();
+        // Fermer le dialog de polling de façon sécurisée
+        if (dialogContext.mounted) {
+          Navigator.pop(dialogContext);
+        }
+        _showPaymentSuccess();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Paiement pas encore reçu. Réessayez dans quelques instants.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _checkPaymentStatus() async {
+    try {
+      if (kDebugMode) {
+        debugPrint(
+            '🔍 Vérification statut paiement pour contrat #${widget.subscriptionId}');
+      }
+
+      final response = await _contractRepository.verifySubscriptionPayment(
+          widget.subscriptionId,
+          reference: _lastPaymentReference);
+
+      if (response['success'] == true) {
+        final data = response['data'] ?? {};
+        final isPaid = _isPaymentSuccess(data);
+
+        if (kDebugMode) {
+          debugPrint('📊 payment_status: ${data["payment_status"]}, '
+              'first_payment_status: ${data["first_payment_status"]}, '
+              'second_payment_status: ${data["second_payment_status"]}, '
+              'isPaid: $isPaid');
+        }
+
+        if (isPaid) {
+          _stopPolling();
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop(); // fermer le dialog de polling
+          }
+          _showPaymentSuccess();
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Erreur vérification statut: $e');
+    }
+  }
+
+  /// Détermine si le paiement est un succès selon la phase en cours.
+  bool _isPaymentSuccess(Map<dynamic, dynamic> data) {
+    final paymentStatus =
+        (data['payment_status'] ?? data['paymentStatus'])?.toString();
+    final subscriptionStatus = data['status']?.toString();
+    final firstPaymentStatus =
+        (data['first_payment_status'] ?? data['firstPaymentStatus'])
+            ?.toString();
+    final secondPaymentStatus =
+        (data['second_payment_status'] ?? data['secondPaymentStatus'])
+            ?.toString();
+
+    if (_currentPaymentPhase == 2) {
+      // Solde (2ème paiement)
+      return secondPaymentStatus == 'paid' || subscriptionStatus == 'completed';
+    }
+
+    // Premier paiement OU paiement 100% :
+    //   - 'paid'    → paiement 100% ou contrat entièrement soldé
+    //   - 'partial' → premier versement 50% confirmé
+    //   - firstPaymentStatus == 'paid' → idem
+    //   - status 'active' ou 'completed' → contrat activé
+    return paymentStatus == 'paid' ||
+        paymentStatus == 'partial' || // ← FIX: premier versement 50% validé
+        firstPaymentStatus == 'paid' ||
+        subscriptionStatus == 'active' ||
+        subscriptionStatus == 'completed';
+  }
+
+  // ===================== DIALOGS =====================
+
+  void _showPaymentSuccess() {
+    if (!mounted) return;
+
+    final isFullPayment = _selectedPaymentOption == 'full';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.check_circle, color: Colors.green, size: 64),
+        title: Text(isFullPayment
+            ? '🎉 Contrat activé !'
+            : 'Premier paiement réussi !'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isFullPayment
+                  ? 'Votre paiement intégral a été confirmé. Votre contrat de maintenance est maintenant actif.'
+                  : 'Votre premier versement (50%) a été confirmé. Votre contrat est actif.',
+              textAlign: TextAlign.center,
             ),
+            if (!isFullPayment) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: Colors.blue.shade600, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Le deuxième versement (50%) sera demandé après la ${widget.visitsTotal != null ? "${widget.visitsTotal! ~/ 2 + 1}ème" : "3ème"} visite.',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.blue.shade900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _closeScreenAfterDialog();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text('OK'),
+          ),
         ],
       ),
     );
   }
 
+  void _showTimeoutDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.timer_off, color: Colors.orange, size: 64),
+        title: const Text('Vérification terminée'),
+        content: const Text(
+          'Le paiement n\'a pas été détecté.\n\n'
+          'Si vous avez payé, il sera traité automatiquement sous peu.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(this.context, false);
+            },
+            child: const Text('Fermer'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _checkPaymentManually(this.context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Vérifier encore'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _closeScreenAfterDialog() async {
+    await Future.microtask(() {});
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  // ===================== BUILD =====================
+
+  @override
+  Widget build(BuildContext context) {
+    final allPaid = _currentPaymentPhase == 0;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Paiement Souscription'),
+        backgroundColor: const Color(0xFFEEBD1B),
+        foregroundColor: Colors.white,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/background_tech_2.png'),
+            fit: BoxFit.cover,
+            opacity: 0.4,
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Résumé du contrat
+              _buildContractSummary(),
+              const SizedBox(height: 24),
+
+              // Sélecteur d'option de paiement (uniquement pour phase 1)
+              if (_currentPaymentPhase == 1) ...[
+                _buildPaymentOptionSelector(),
+                const SizedBox(height: 16),
+              ],
+
+              // Information FineoPay
+              _buildFineoPayInfo(),
+              const SizedBox(height: 32),
+
+              // Message si tout est payé
+              if (allPaid) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green.shade600),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Tous les paiements ont été effectués pour ce contrat.',
+                          style: TextStyle(
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                // Bouton de paiement principal
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isProcessing ? null : _processPayment,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: _isProcessing
+                        ? const SizedBox.shrink()
+                        : const Icon(Icons.credit_card),
+                    label: _isProcessing
+                        ? SizedBox(
+                            height: 20,
+                            child: ButtonLoadingIndicator(
+                              color: Colors.white,
+                              size: 6.0,
+                            ),
+                          )
+                        : Text(
+                            'Payer ${_formatCurrency(_amountToPay)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 16),
+              _buildSecurityNote(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===================== WIDGETS =====================
+
   Widget _buildContractSummary() {
     return Card(
-      color: const Color(0xFF0a543d).withValues(alpha: 0.1),
+      elevation: 4,
+      shadowColor: Colors.black.withValues(alpha: 0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: Colors.white,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -308,178 +655,117 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Contrat',
+                  'Souscription',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Color.fromARGB(255, 0, 0, 0),
+                    color: Color(0xFF475569),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(
-                  widget.reference,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                const Icon(Icons.calendar_month,
-                    size: 20, color: Color(0xFF0a543d)),
-                const SizedBox(width: 8),
-                Text(
-                  _formatContractType(widget.contractType),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.ac_unit, size: 20, color: Color(0xFF0a543d)),
-                const SizedBox(width: 8),
-                Expanded(
+                Flexible(
                   child: Text(
-                    widget.equipment.isNotEmpty
-                        ? '${widget.equipment}${widget.model != null && widget.model!.isNotEmpty ? ' - ${widget.model}' : ''}'
-                        : 'Climatiseur${widget.model != null && widget.model!.isNotEmpty ? ' - ${widget.model}' : ''}',
+                    '${widget.equipment}${widget.model != null && widget.model!.isNotEmpty ? ' - ${widget.model}' : ''}',
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ],
+            ),
+            if (widget.visitsTotal != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.event_repeat,
+                      size: 16, color: Color(0xFF047857)),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${widget.visitsTotal} visites'
+                    '${widget.visitIntervalMonths != null ? ' · tous les ${widget.visitIntervalMonths} mois' : ''}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF047857),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.event_repeat,
-                    size: 20, color: Color(0xFF0a543d)),
-                const SizedBox(width: 8),
-                const Text(
-                  '4 visites par an (1 tous les 3 mois)',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            // Montant total
+                ],
+              ),
+            ],
+            const Divider(height: 24, color: Color(0xFFE2E8F0)),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Montant Total',
+                  'Montant total',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
                   ),
                 ),
                 Text(
                   _formatCurrency(widget.amount),
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black54,
+                    color: Color(0xFF0F172A),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            // Split payment breakdown
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0a543d).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  // 1er paiement
-                  _buildPaymentRow(
-                    '1er paiement (50%)',
-                    _firstPaymentAmount,
-                    'À la validation',
-                    widget.firstPaymentStatus == 'paid'
-                        ? Icons.check_circle
-                        : (_currentPaymentPhase == 1
-                            ? Icons.arrow_forward_ios
-                            : Icons.schedule),
-                    widget.firstPaymentStatus == 'paid'
-                        ? Colors.green
-                        : (_currentPaymentPhase == 1
-                            ? Colors.orange
-                            : Colors.grey),
-                    isSelected: _currentPaymentPhase == 1,
-                  ),
-                  const SizedBox(height: 8),
-                  // 2ème paiement
-                  _buildPaymentRow(
-                    '2ème paiement (50%)',
-                    _secondPaymentAmount,
-                    'Après 3ème visite',
-                    widget.secondPaymentStatus == 'paid'
-                        ? Icons.check_circle
-                        : (_currentPaymentPhase == 2
-                            ? Icons.arrow_forward_ios
-                            : Icons.schedule),
-                    widget.secondPaymentStatus == 'paid'
-                        ? Colors.green
-                        : (_currentPaymentPhase == 2
-                            ? Colors.orange
-                            : Colors.grey),
-                    isSelected: _currentPaymentPhase == 2,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             // Montant à payer maintenant
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange),
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFF97316), width: 1.5),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _paymentTitle,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Color.fromARGB(255, 7, 5, 1),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _currentPaymentPhase == 2
+                              ? '2ème paiement (50%)'
+                              : (_selectedPaymentOption == 'full'
+                                  ? 'Paiement intégral (100%)'
+                                  : '1er paiement (50%)'),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF9A3412),
+                          ),
                         ),
-                      ),
-                      Text(
-                        _paymentDescription,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: const Color.fromARGB(255, 15, 14, 14),
+                        const SizedBox(height: 2),
+                        Text(
+                          _currentPaymentPhase == 2
+                              ? 'Solde restant'
+                              : (_selectedPaymentOption == 'full'
+                                  ? 'À la validation du contrat'
+                                  : 'À la validation, solde après visites'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF475569),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   Text(
                     _formatCurrency(_amountToPay),
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.orange,
+                      color: Color(0xFFEA580C),
                     ),
                   ),
                 ],
@@ -491,7 +777,96 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
     );
   }
 
-  Widget _buildPaymentInfo() {
+  Widget _buildPaymentOptionSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Choisissez votre option de paiement :',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        // Option 50%
+        _buildOptionTile(
+          value: 'half',
+          title: '50% maintenant',
+          subtitle:
+              '${_formatCurrency(_firstPaymentAmount)} à la validation — solde ${_formatCurrency(_secondPaymentAmount)} après les visites',
+          icon: Icons.payment,
+        ),
+        const SizedBox(height: 10),
+        // Option 100%
+        _buildOptionTile(
+          value: 'full',
+          title: 'Paiement intégral (100%)',
+          subtitle: '${_formatCurrency(widget.amount)} en une seule fois',
+          icon: Icons.check_circle_outline,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOptionTile({
+    required String value,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedPaymentOption == value;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedPaymentOption = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.orange.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.orange : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon,
+                color: isSelected ? Colors.orange : Colors.grey, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color:
+                          isSelected ? Colors.orange.shade800 : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: isSelected ? Colors.orange : Colors.grey,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFineoPayInfo() {
     return Card(
       elevation: 2,
       child: Padding(
@@ -499,21 +874,14 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
-                Icon(
-                  Icons.payment,
-                  color: const Color(0xFF0a543d),
-                  size: 28,
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
+                Icon(Icons.payment, color: Colors.orange, size: 28),
+                SizedBox(width: 12),
+                Expanded(
                   child: Text(
                     'Paiement sécurisé avec FineoPay',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -521,13 +889,10 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
             const SizedBox(height: 16),
             const Text(
               'Modes de paiement disponibles :',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 12),
-            // Logos Mobile Money et Portefeuilles
+            // Logos Mobile Money
             Row(
               children: [
                 const SizedBox(width: 4),
@@ -576,97 +941,29 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
                     errorBuilder: (c, e, s) => const SizedBox()),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPaymentRow(
-    String title,
-    double amount,
-    String description,
-    IconData icon,
-    Color color, {
-    bool isSelected = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.white : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        border: isSelected ? Border.all(color: color, width: 2) : null,
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 8),
+            Row(
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSelected ? color : Colors.black87,
-                  ),
-                ),
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[600],
+                Icon(Icons.credit_card, size: 20, color: Colors.grey.shade700),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Carte bancaire',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w500)),
+                      Text('Visa, Mastercard',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600)),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-          Text(
-            _formatCurrency(amount),
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: isSelected ? color : Colors.black54,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildPaymentOption(IconData icon, String title, String subtitle) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 20,
-          color: Colors.grey.shade700,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -680,586 +977,12 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.info_outline,
-            color: Colors.blue.shade700,
-            size: 20,
-          ),
+          Icon(Icons.security, color: Colors.blue.shade700, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Votre contrat sera activé dès réception du paiement. La première intervention sera planifiée automatiquement.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.blue.shade900,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCashPaymentInfo() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.money, color: Color(0xFF0a543d), size: 28),
-            const SizedBox(width: 12),
-            Expanded(child: Text(_paymentTitle)),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0a543d).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: [
-                    _buildCashInfoRow('📋 Référence', widget.reference),
-                    const Divider(),
-                    _buildCashInfoRow(
-                        '💰 Total contrat', _formatCurrency(widget.amount)),
-                    const Divider(),
-                    _buildCashInfoRow(
-                        '💳 $_paymentTitle', _formatCurrency(_amountToPay)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '📍 Nos adresses',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _buildAddressCard('Siège', 'Marcory Zone 4\nRue du canal'),
-              const SizedBox(height: 8),
-              _buildAddressCard('Showroom', 'Vallon'),
-              const SizedBox(height: 8),
-              _buildAddressCard('Showroom', 'Faya'),
-              const SizedBox(height: 16),
-              _buildCashInfoRow(
-                  '🕐 Horaires', 'Lun-Ven: 8h-17h30\nSam: 9h-13h'),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        color: Colors.orange.shade700, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Veuillez mentionner la référence ${widget.reference} lors du paiement.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange.shade900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Fermer'),
-          ),
-          ElevatedButton.icon(
-            onPressed: _isProcessing
-                ? null
-                : () {
-                    Navigator.pop(context);
-                    _confirmPayment();
-                  },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0a543d),
-            ),
-            icon: _isProcessing
-                ? const SizedBox.shrink()
-                : const Icon(Icons.check_circle),
-            label: _isProcessing
-                ? const SizedBox(
-                    height: 20,
-                    child:
-                        ButtonLoadingIndicator(color: Colors.white, size: 6.0),
-                  )
-                : const Text('J\'ai payé'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _processPayment() async {
-    setState(() => _isProcessing = true);
-
-    try {
-      if (kDebugMode) {
-        debugPrint(
-            '💳 Initialisation paiement FineoPay pour contrat #${widget.subscriptionId} - Phase $_currentPaymentPhase');
-      }
-
-      // Initialiser le paiement FineoPay avec le montant 50%
-      final paymentData = await _paymentService.initializeSubscriptionPayment(
-        widget.subscriptionId,
-        _amountToPay, // Utiliser le montant 50% au lieu du montant total
-        widget.reference,
-        paymentPhase: _currentPaymentPhase, // Indiquer la phase de paiement
-        redirectUrl: 'smartmaintenance://payment-callback',
-        autoRedirect: false,
-      );
-      final paymentUrl = paymentData['paymentUrl'] as String;
-
-      if (kDebugMode) {
-        debugPrint(
-            '✅ URL de paiement reçue: $paymentUrl (Montant: $_amountToPay FCFA)');
-      }
-
-      setState(() {
-        _isWaitingForPayment = true;
-        _isProcessing = false;
-      });
-
-      // Ouvrir le paiement dans le navigateur externe
-      if (mounted) {
-        final Uri uri = Uri.parse(paymentUrl);
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-
-        // Lancer directement la vérification par polling
-        _startPolling();
-        await _checkPaymentStatus();
-      }
-    } catch (e) {
-      setState(() {
-        _isProcessing = false;
-        _isWaitingForPayment = false;
-      });
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            icon: const Icon(
-              Icons.error_outline,
-              color: Colors.red,
-              size: 64,
-            ),
-            title: const Text('Erreur de paiement'),
-            content: Text(
-              'Une erreur est survenue lors de l\'initialisation du paiement.\n\n$e',
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
-    }
-  }
-
-  void _startPolling() {
-    if (kDebugMode) {
-      debugPrint('🔄 Démarrage du polling pour vérifier le paiement...');
-    }
-    _pollCount = 0;
-
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (!_isWaitingForPayment) {
-        timer.cancel();
-        return;
-      }
-      _pollCount++;
-      if (_pollCount >= _maxPolls) {
-        _stopPolling();
-        // Fermer le dialog de vérification s'il est ouvert
-        if (mounted && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-        _showPollingTimeoutDialog();
-        return;
-      }
-      _checkPaymentStatus();
-    });
-  }
-
-  void _stopPolling() {
-    if (kDebugMode) debugPrint('⏹️ Arrêt du polling');
-    _pollingTimer?.cancel();
-    _pollingTimer = null;
-    setState(() {
-      _isWaitingForPayment = false;
-    });
-  }
-
-  void _showPollingTimeoutDialog() {
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.timer_off, color: Colors.orange, size: 64),
-        title: const Text('Vérification expirée'),
-        content: const Text(
-          'La confirmation de paiement n\'a pas été reçue dans les 5 minutes.\n\n'
-          'Si vous avez bien effectué le paiement, appuyez sur "Vérifier maintenant" '
-          'pour relancer la vérification. Sinon, fermez cette fenêtre et réessayez.',
-          textAlign: TextAlign.center,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-            },
-            child: const Text('Fermer'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _isWaitingForPayment = true);
-              _startPolling();
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Vérifier maintenant'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _checkPaymentStatus() async {
-    try {
-      if (kDebugMode) {
-        debugPrint(
-            '🔍 Vérification statut paiement pour contrat #${widget.subscriptionId} (Phase: $_currentPaymentPhase)');
-      }
-
-      // Vérifier le statut via le backend
-      // Vérifier le statut via le repository
-      final response = await _contractRepository.verifySubscriptionPayment(widget.subscriptionId);
-
-      if (response['success'] == true) {
-        // Le backend retourne payment_status (underscore) ou first_payment_status pour 50/50
-        final paymentStatus = response['data']?['payment_status'] ??
-            response['data']?['paymentStatus'];
-        final subscriptionStatus = response['data']?['status'];
-        final firstPaymentStatus = response['data']?['first_payment_status'];
-        final secondPaymentStatus = response['data']?['second_payment_status'];
-
-        if (kDebugMode) {
-          debugPrint(
-              '📊 Statut: $subscriptionStatus, 1er paiement: $firstPaymentStatus, 2ème paiement: $secondPaymentStatus');
-        }
-
-        // Vérifier selon la phase de paiement
-        if (_currentPaymentPhase == 2) {
-          // SECOND PAIEMENT (50%) - Dernière visite
-          if (secondPaymentStatus == 'paid' ||
-              subscriptionStatus == 'completed') {
-            // Second paiement réussi !
-            _stopPolling();
-
-            if (mounted) {
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => AlertDialog(
-                  title: const Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 28),
-                      SizedBox(width: 12),
-                      Expanded(child: Text('🎉 Contrat complété !')),
-                    ],
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Votre paiement final (50%) a été confirmé !',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Toutes les visites de maintenance ont été effectuées et le contrat est maintenant complété.',
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.celebration,
-                                color: Colors.green, size: 24),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Merci pour votre confiance ! À bientôt pour un nouveau contrat.',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.green),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context); // Fermer le dialogue
-                        Navigator.pop(context); // Quitter l'écran de paiement
-                      },
-                      child: const Text('OK'),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return;
-          }
-        } else {
-          // PREMIER PAIEMENT (50%) - À la validation
-          if (paymentStatus == 'paid' || firstPaymentStatus == 'paid') {
-            // Paiement réussi !
-            _stopPolling();
-
-            // Afficher le message de succès
-            if (mounted) {
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => AlertDialog(
-                  title: const Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 28),
-                      SizedBox(width: 12),
-                      Expanded(child: Text('Premier paiement réussi !')),
-                    ],
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Votre premier paiement (50%) a été confirmé.',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Votre contrat est maintenant actif et la première intervention a été planifiée.',
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.info_outline,
-                                color: Colors.blue, size: 20),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Le deuxième paiement (50%) sera demandé après la 3ème visite.',
-                                style:
-                                    TextStyle(fontSize: 12, color: Colors.blue),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context); // Fermer le dialogue
-                        Navigator.pop(context); // Quitter l'écran de paiement
-                      },
-                      child: const Text('OK'),
-                    ),
-                  ],
-                ),
-              );
-            }
-          }
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('❌ Erreur vérification statut: $e');
-    }
-  }
-
-  Future<void> _confirmPayment() async {
-    // Afficher un dialogue de chargement
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Row(
-          children: [
-            const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0a543d)),
-            ),
-            const SizedBox(width: 20),
-            const Expanded(
-              child: Text('Vérification du paiement en cours...'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final response =
-          await _contractRepository.confirmContractPayment(widget.subscriptionId);
-
-      if (mounted) {
-        // Fermer le dialogue de chargement
-        Navigator.pop(context);
-
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 28),
-                SizedBox(width: 12),
-                Expanded(child: Text('Paiement confirmé !')),
-              ],
-            ),
-            content: Text(response['message'] ??
-                'Votre contrat est maintenant actif. La première intervention a été planifiée.'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // Fermer le dialogue
-                  Navigator.pop(context); // Retourner à l'écran précédent
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        // Fermer le dialogue de chargement
-        Navigator.pop(context);
-        SnackBarHelper.showError(context, 'Erreur: ${e.toString()}');
-      }
-    }
-  }
-
-  Widget _buildAddressCard(String label, String address) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0a543d).withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF0a543d).withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0a543d),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Icon(
-              Icons.location_on,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  address,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCashInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
+              'Paiement 100% sécurisé. Vous serez redirigé vers la page FineoPay pour choisir votre mode de paiement.',
+              style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
             ),
           ),
         ],
@@ -1272,17 +995,5 @@ class _ContractPaymentScreenState extends State<ContractPaymentScreen>
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (Match m) => '${m[1]} ',
         )} FCFA';
-  }
-
-  String _formatContractType(String type) {
-    switch (type) {
-      case 'scheduled':
-      case 'scheduled_maintenance':
-        return 'Maintenance programmée';
-      case 'on_demand':
-        return 'Maintenance à la demande';
-      default:
-        return 'Contrat de maintenance';
-    }
   }
 }

@@ -75,14 +75,19 @@ class BaseApiService {
       }
 
       final streamedResponse = await _client.send(request).timeout(ApiConfig.timeout);
-      final responseBody = await streamedResponse.stream.bytesToString();
+      final responseBytes = await streamedResponse.stream.toBytes();
 
       if (kDebugMode && ApiConfig.debugLogs) {
-        debugPrint('🟢 API Response (${streamedResponse.statusCode}): $responseBody');
+        try {
+          final text = utf8.decode(responseBytes);
+          debugPrint('🟢 API Response (${streamedResponse.statusCode}): $text');
+        } catch (_) {
+          debugPrint('🟢 API Response (${streamedResponse.statusCode}): [Binary data: ${responseBytes.length} bytes]');
+        }
       }
 
-      return http.Response(
-        responseBody,
+      return http.Response.bytes(
+        responseBytes,
         streamedResponse.statusCode,
         headers: streamedResponse.headers,
         request: streamedResponse.request,

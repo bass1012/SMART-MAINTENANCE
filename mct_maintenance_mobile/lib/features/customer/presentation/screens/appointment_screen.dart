@@ -104,6 +104,8 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
         elevation: 0,
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage('assets/images/background_tech_2.png'),

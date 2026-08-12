@@ -12,7 +12,6 @@ import 'package:mct_maintenance_mobile/core/network/base_api_service.dart';
 import 'package:mct_maintenance_mobile/services/payment_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'payment_status_screen.dart';
-import 'payment_webview_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
@@ -69,6 +68,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
       final responseData = jsonDecode(response.body);
 
+      if (!mounted) return;
       if (responseData['success']) {
         final promo = responseData['data'];
         double discountAmount = 0;
@@ -249,8 +249,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final apiService = context.read<BaseApiService>();
       final response = await apiService.post('/api/orders', body: orderData);
       final responseData = jsonDecode(response.body);
+      if (responseData['success'] != true || responseData['data'] == null) {
+        throw Exception(
+            responseData['message'] ?? 'La commande n\'a pas été confirmée');
+      }
       final orderId = responseData['data']['id'];
-      final totalAmount = responseData['data']['totalAmount'];
+      final totalAmount =
+          double.tryParse(responseData['data']['totalAmount'].toString()) ??
+              double.nan;
       final reference = responseData['data']['reference'];
 
       if (mounted) {
@@ -260,6 +266,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           SnackBarHelper.showSuccess(
             context,
             'Commande passée avec succès !',
+            emoji: '🎉',
+          );
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        } else if (totalAmount <= 0) {
+          final paymentStatus = responseData['data']['paymentStatus'] ??
+              responseData['data']['payment_status'];
+          if (paymentStatus != 'paid') {
+            throw Exception(
+                'Le serveur n\'a pas confirmé la commande gratuite.');
+          }
+          cart.clear();
+          SnackBarHelper.showSuccess(
+            context,
+            'Commande validée avec succès !',
             emoji: '🎉',
           );
           Navigator.of(context).popUntil((route) => route.isFirst);
@@ -283,7 +303,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (paymentUrl != null && paymentUrl.toString().isNotEmpty) {
             try {
               if (kDebugMode) {
-                debugPrint('📱 Ouverture du navigateur système pour le paiement...');
+                debugPrint(
+                    '📱 Ouverture du navigateur système pour le paiement...');
               }
 
               if (!mounted) return;
@@ -316,6 +337,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         '⚠️ Impossible de supprimer la commande orpheline: $deleteErr');
                   }
                 }
+                if (!mounted) return;
                 SnackBarHelper.showInfo(
                   context,
                   'Paiement annulé. Votre panier est conservé.',

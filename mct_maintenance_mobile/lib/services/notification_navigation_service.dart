@@ -131,14 +131,23 @@ class NotificationNavigationService {
         _navigateToSubscriptionPaymentWithReplace(navigator, notificationData);
         break;
 
+      // Offres d'entretien et souscriptions
+      case 'maintenance_offer_created':
+      case 'maintenance_offer_activated':
+      case 'subscription_activated':
+      case 'subscription_payment_confirmed':
+        _navigateToMaintenanceOffersWithReplace(navigator);
+        break;
+
       // Contrats de maintenance
       case 'contract_created':
         _navigateToContractWithReplace(navigator, notificationData);
         break;
 
-      // Second paiement requis (50% à la dernière visite)
+      // Second paiement / solde requis (50%) -> Redirection vers l'accueil de l'application
       case 'second_payment_required':
-        _navigateToSecondPaymentWithReplace(navigator, notificationData);
+      case 'payment_required':
+        _navigateToHomeWithReplace(navigator);
         break;
 
       case 'contract_expiring':
@@ -147,6 +156,11 @@ class NotificationNavigationService {
       case 'contract_renewal_rejected':
       case 'maintenance_reminder':
         _navigateToContractWithReplace(navigator, notificationData);
+        break;
+
+      case 'referral_used':
+      case 'referral_reward_unlocked':
+        _navigateToProfileWithReplace(navigator, notificationData);
         break;
 
       // Alerte - naviguer vers l'intervention si un ID est fourni, sinon vers le profil (adresse requise)
@@ -279,8 +293,9 @@ class NotificationNavigationService {
       if (response['success'] == true && response['data'] != null) {
         final intervention = response['data'];
 
-        // Vérifier si un rapport existe
-        if (intervention['report_data'] != null) {
+        // Vérifier si un rapport existe (report_data OU report_submitted_at)
+        if (intervention['report_data'] != null ||
+            intervention['report_submitted_at'] != null) {
           navigator.pushReplacement(
             MaterialPageRoute(
               builder: (context) =>
@@ -544,6 +559,7 @@ class NotificationNavigationService {
   }
 
   /// Navigation vers le second paiement (50% à la dernière visite)
+  // ignore: unused_element
   Future<void> _navigateToSecondPaymentWithReplace(
       NavigatorState navigator, Map<String, dynamic> data) async {
     final int? subscriptionId =
@@ -588,6 +604,33 @@ class NotificationNavigationService {
     } catch (e) {
       if (kDebugMode) debugPrint('❌ Erreur navigation second paiement: $e');
       _showSnackBarAndPop(navigator, 'Erreur lors du chargement du contrat');
+    }
+  }
+
+  /// Naviguer vers l'accueil de l'application (replace)
+  void _navigateToHomeWithReplace(NavigatorState navigator) {
+    if (kDebugMode) debugPrint('→ Navigation vers l\'accueil (replace)');
+    if (navigator.canPop()) {
+      navigator.popUntil((route) => route.isFirst);
+    } else {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const CustomerMainScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  /// Naviguer vers l'accueil de l'application (context)
+  void _navigateToHome(BuildContext context) {
+    if (kDebugMode) debugPrint('→ Navigation vers l\'accueil');
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.popUntil((route) => route.isFirst);
+    } else {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const CustomerMainScreen()),
+        (route) => false,
+      );
     }
   }
 
@@ -695,15 +738,21 @@ class NotificationNavigationService {
         _navigateToContractDetails(context, notificationData);
         break;
 
-      // Second paiement requis (50% à la dernière visite)
+      // Second paiement / solde requis (50%) -> Redirection vers l'accueil de l'application
       case 'second_payment_required':
-        _navigateToSecondPayment(context, notificationData);
+      case 'payment_required':
+        _navigateToHome(context);
         break;
 
       case 'contract_expiring':
       case 'contract_renewal_request':
       case 'maintenance_reminder':
         _navigateToContracts(context);
+        break;
+
+      case 'referral_used':
+      case 'referral_reward_unlocked':
+        _navigateToProfile(context, notificationData);
         break;
 
       // Contrat activé - naviguer vers le contrat
@@ -878,7 +927,8 @@ class NotificationNavigationService {
       if (response['success'] == true && response['data'] != null) {
         final intervention = response['data'];
 
-        if (intervention['report_data'] != null) {
+        if (intervention['report_data'] != null ||
+            intervention['report_submitted_at'] != null) {
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -1095,6 +1145,16 @@ class NotificationNavigationService {
     );
   }
 
+  /// Navigation vers les offres d'entretien avec remplacement
+  void _navigateToMaintenanceOffersWithReplace(NavigatorState navigator) {
+    if (kDebugMode) debugPrint('→ Navigation vers offres d\'entretien (replace)');
+    navigator.pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => const MaintenanceOffersScreen(),
+      ),
+    );
+  }
+
   /// Navigation vers le paiement de souscription ou les offres
   void _navigateToSubscriptionPaymentOrOffers(
       BuildContext context, Map<String, dynamic> data) {
@@ -1228,6 +1288,7 @@ class NotificationNavigationService {
   }
 
   /// Navigation vers le second paiement (50% à la dernière visite)
+  // ignore: unused_element
   Future<void> _navigateToSecondPayment(
       BuildContext context, Map<String, dynamic> data) async {
     final int? subscriptionId =

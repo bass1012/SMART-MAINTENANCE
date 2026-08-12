@@ -5,6 +5,10 @@ import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/features/technician/presentation/screens/create_report_screen.dart';
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/diagnostic_report_screen.dart';
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/view_report_screen.dart';
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/view_diagnostic_report_screen.dart';
+import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
@@ -35,11 +39,11 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
   Future<void> _downloadReportPDF(Map<String, dynamic> report) async {
     try {
       // Afficher un loader
-      SnackBarHelper.showLoading(context, 'Téléchargement du rapport...',
+      SnackBarHelper.showLoading(context, 'Téléchargement du rapport PDF...',
           duration: const Duration(seconds: 30));
 
-      // Télécharger le rapport HTML
-      final htmlContent =
+      // Télécharger le rapport PDF (octets)
+      final pdfBytes =
           await _interventionRepository.downloadTechnicianReport(report['id']);
 
       // Obtenir le répertoire de téléchargements
@@ -53,10 +57,10 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
         directory = await getApplicationDocumentsDirectory();
       }
 
-      // Créer le fichier
-      final fileName = 'rapport-${report['id']}.html';
+      // Créer le fichier PDF
+      final fileName = 'rapport-${report['id']}.pdf';
       final file = File('${directory!.path}/$fileName');
-      await file.writeAsString(htmlContent);
+      await file.writeAsBytes(pdfBytes);
 
       // Masquer le loader
       SnackBarHelper.hide(context);
@@ -64,7 +68,7 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
       // Afficher le succès
       SnackBarHelper.showSuccess(
         context,
-        'Rapport téléchargé: $fileName',
+        'Rapport PDF téléchargé: $fileName',
         emoji: '📄',
         action: SnackBarAction(
           label: 'Ouvrir',
@@ -122,6 +126,10 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                     // Équipements (nouveau format)
                     'equipments':
                         item['equipments'] is List ? item['equipments'] : [],
+                    'tasks_done': item['tasks_done'],
+                    'observations': item['observations'],
+                    'photos_before': item['photos_before'],
+                    'photos_after': item['photos_after'],
                     // Mesures techniques (format legacy)
                     'pression': item['pression']?.toString() ?? '',
                     'temperature': item['temperature']?.toString() ?? '',
@@ -308,9 +316,7 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
         ],
       ),
       child: InkWell(
-        onTap: () {
-          _showReportDetails(report);
-        },
+        onTap: () => _openReportDetail(report),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -434,16 +440,38 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.picture_as_pdf, color: Color(0xFF0a543d)),
+                    tooltip: 'Télécharger le rapport',
+                    onPressed: () => _downloadReportPDF(report),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _openReportDetail(report),
+                    icon: const Icon(Icons.description, size: 18),
+                    label: Text('Voir rapport',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2196F3),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.blue.shade600, Colors.blue.shade400],
+                        colors: [Colors.grey.shade700, Colors.grey.shade600],
                       ),
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.blue.withValues(alpha: 0.3),
-                          blurRadius: 6,
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
                       ],
@@ -460,7 +488,7 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                            horizontal: 14, vertical: 10),
                       ),
                     ),
                   ),
@@ -471,6 +499,39 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
         ),
       ),
     );
+  }
+
+  void _openReportDetail(Map<String, dynamic> report) {
+    final type = (report['report_type'] ?? report['type'] ?? '').toString().toLowerCase();
+    final title = (report['title'] ?? report['intervention_title'] ?? '').toString().toLowerCase();
+    final isDiagnostic = type == 'diagnostic' ||
+        report['diagnostic_report_id'] != null ||
+        report['diagnostic_report'] != null ||
+        report['diagnosticReports'] != null ||
+        title.contains('diagnostic') ||
+        title.contains('installation') ||
+        title.contains('réparation') ||
+        title.contains('dépannage');
+
+    if (isDiagnostic) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ViewDiagnosticReportScreen(
+            intervention: report,
+          ),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ViewReportScreen(
+            intervention: report,
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildStatusBadge(String status) {
@@ -743,50 +804,40 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.orange.shade200),
                     ),
-                    child: Column(
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 12,
                       children: [
-                        Row(
-                          children: [
-                            if (report['pression']?.toString().isNotEmpty ==
-                                true)
-                              Expanded(
-                                  child: _buildMeasureItem(Icons.compress,
-                                      'Pression', '${report['pression']} bar')),
-                            if (report['temperature']?.toString().isNotEmpty ==
-                                    true ||
-                                report['puissance']?.toString().isNotEmpty ==
-                                    true)
-                              Expanded(
-                                  child: _buildMeasureItem(
-                                      Icons.power,
-                                      'Puissance',
-                                      '${report['puissance'] ?? report['temperature']} CV')),
-                          ],
-                        ),
-                        if (report['intensite']?.toString().isNotEmpty ==
-                                true ||
-                            report['tension']?.toString().isNotEmpty == true)
-                          const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            if (report['intensite']?.toString().isNotEmpty ==
-                                true)
-                              Expanded(
-                                  child: _buildMeasureItem(
-                                      Icons.electrical_services,
-                                      'Intensité',
-                                      '${report['intensite']} A')),
-                            if (report['tension']?.toString().isNotEmpty ==
-                                true)
-                              Expanded(
-                                  child: _buildMeasureItem(Icons.bolt,
-                                      'Tension', '${report['tension']} V')),
-                          ],
-                        ),
+                        if (report['pression']?.toString().isNotEmpty == true)
+                          _buildMeasureItem(Icons.compress, 'Pression',
+                              '${report['pression']} bar'),
+                        if (report['puissance']?.toString().isNotEmpty == true)
+                          _buildMeasureItem(Icons.power, 'Puissance',
+                              '${report['puissance']} CV'),
+                        if (report['intensite']?.toString().isNotEmpty == true)
+                          _buildMeasureItem(Icons.electrical_services,
+                              'Intensité', '${report['intensite']} A'),
+                        if (report['tension']?.toString().isNotEmpty == true)
+                          _buildMeasureItem(
+                              Icons.bolt, 'Tension', '${report['tension']} V'),
+                        if ((report['freon'] ??
+                                report['before_freon'] ??
+                                report['type_freon'])
+                            ?.toString()
+                            .isNotEmpty ==
+                            true)
+                          _buildMeasureItem(
+                              Icons.cloud_outlined,
+                              'Fréon',
+                              '${report['freon'] ?? report['before_freon'] ?? report['type_freon']}'),
                       ],
                     ),
                   ),
                 ],
+
+                // Travaux effectués
+                if (report['tasks_done'] != null)
+                  _buildTasksDoneSection(report['tasks_done']),
 
                 const SizedBox(height: 24),
                 Row(
@@ -857,17 +908,50 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
       Navigator.pop(context); // Fermer le loader
 
       if (response['success'] && response['data'] != null) {
-        final intervention = response['data'];
+        final intervention = Map<String, dynamic>.from(response['data']);
 
-        // Naviguer vers l'écran de création/modification du rapport
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CreateReportScreen(
-              intervention: intervention,
+        // Transmettre les données de rapport à l'intervention si disponibles dans l'objet report local
+        if (report['diagnostic_report'] != null && intervention['diagnostic_report'] == null) {
+          intervention['diagnostic_report'] = report['diagnostic_report'];
+        }
+        if (report['report_data'] != null && intervention['report_data'] == null) {
+          intervention['report_data'] = report['report_data'];
+        }
+
+        final type = (report['report_type'] ?? report['type'] ?? intervention['intervention_type'] ?? '').toString().toLowerCase();
+        final title = (report['title'] ?? report['intervention_title'] ?? intervention['title'] ?? '').toString().toLowerCase();
+
+        final isDiagnostic = type == 'diagnostic' ||
+            report['diagnostic_report_id'] != null ||
+            report['diagnostic_report'] != null ||
+            intervention['diagnostic_report'] != null ||
+            (intervention['diagnosticReports'] is List && (intervention['diagnosticReports'] as List).isNotEmpty) ||
+            title.contains('diagnostic') ||
+            title.contains('installation') ||
+            title.contains('réparation') ||
+            title.contains('dépannage');
+
+        final dynamic result;
+        if (isDiagnostic) {
+          result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DiagnosticReportScreen(
+                interventionId: intervention['id'],
+                intervention: intervention,
+              ),
             ),
-          ),
-        );
+          );
+        } else {
+          result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CreateReportScreen(
+                intervention: intervention,
+              ),
+            ),
+          );
+        }
 
         // Recharger la liste si le rapport a été modifié
         if (result == true) {
@@ -1045,15 +1129,18 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
         return (e['pression']?.toString().isNotEmpty == true) ||
             (e['puissance']?.toString().isNotEmpty == true) ||
             (e['intensite']?.toString().isNotEmpty == true) ||
-            (e['tension']?.toString().isNotEmpty == true);
+            (e['tension']?.toString().isNotEmpty == true) ||
+            (e['freon']?.toString().isNotEmpty == true) ||
+            (e['before_freon']?.toString().isNotEmpty == true);
       });
     }
     // Format legacy
     return (report['pression']?.toString().isNotEmpty == true) ||
-        (report['temperature']?.toString().isNotEmpty == true) ||
         (report['puissance']?.toString().isNotEmpty == true) ||
         (report['intensite']?.toString().isNotEmpty == true) ||
-        (report['tension']?.toString().isNotEmpty == true);
+        (report['tension']?.toString().isNotEmpty == true) ||
+        (report['freon']?.toString().isNotEmpty == true) ||
+        (report['before_freon']?.toString().isNotEmpty == true);
   }
 
   bool _hasEquipments(Map<String, dynamic> report) {
@@ -1098,15 +1185,34 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
     final state = equipment['state']?.toString() ?? '';
     final type = equipment['type']?.toString() ?? '';
     final brand = equipment['brand']?.toString() ?? '';
-    final pression = equipment['pression']?.toString() ?? '';
-    final puissance = equipment['puissance']?.toString() ?? '';
-    final intensite = equipment['intensite']?.toString() ?? '';
-    final tension = equipment['tension']?.toString() ?? '';
+    final name = (equipment['name'] ?? equipment['equipment_name'])?.toString() ?? '';
+    final location = equipment['location']?.toString() ?? '';
 
-    final hasMeasures = pression.isNotEmpty ||
-        puissance.isNotEmpty ||
-        intensite.isNotEmpty ||
-        tension.isNotEmpty;
+    // Données techniques AVANT
+    final bPression = (equipment['before_pression'] ?? equipment['pression'])?.toString() ?? '';
+    final bPuissance = (equipment['before_puissance'] ?? equipment['puissance'])?.toString() ?? '';
+    final bIntensite = (equipment['before_intensite'] ?? equipment['intensite'])?.toString() ?? '';
+    final bTension = (equipment['before_tension'] ?? equipment['tension'])?.toString() ?? '';
+    final bFreon = (equipment['before_freon'] ?? equipment['freon'] ?? equipment['type_freon'])?.toString() ?? '';
+
+    final hasBeforeMeasures = bPression.isNotEmpty ||
+        bPuissance.isNotEmpty ||
+        bIntensite.isNotEmpty ||
+        bTension.isNotEmpty ||
+        bFreon.isNotEmpty;
+
+    // Données techniques APRÈS
+    final aPression = equipment['after_pression']?.toString() ?? '';
+    final aPuissance = equipment['after_puissance']?.toString() ?? '';
+    final aIntensite = equipment['after_intensite']?.toString() ?? '';
+    final aTension = equipment['after_tension']?.toString() ?? '';
+    final aFreon = equipment['after_freon']?.toString() ?? '';
+
+    final hasAfterMeasures = aPression.isNotEmpty ||
+        aPuissance.isNotEmpty ||
+        aIntensite.isNotEmpty ||
+        aTension.isNotEmpty ||
+        aFreon.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1143,7 +1249,9 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  brand.isNotEmpty ? '$brand - $type' : 'Équipement $index',
+                  name.isNotEmpty
+                      ? name
+                      : (brand.isNotEmpty ? '$brand - $type' : 'Équipement $index'),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.blue.shade900,
@@ -1169,9 +1277,25 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                 ),
             ],
           ),
-          // Mesures techniques
-          if (hasMeasures) ...[
+          if (location.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Emplacement: $location',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+          ],
+          // Mesures techniques AVANT
+          if (hasBeforeMeasures) ...[
             const SizedBox(height: 8),
+            Text(
+              '🟠 Données Techniques — AVANT Intervention',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: Colors.orange.shade900,
+              ),
+            ),
+            const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -1183,23 +1307,153 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
                 spacing: 16,
                 runSpacing: 8,
                 children: [
-                  if (pression.isNotEmpty)
+                  if (bPuissance.isNotEmpty)
                     _buildMeasureItem(
-                        Icons.compress, 'Pression', '$pression bar'),
-                  if (puissance.isNotEmpty)
+                        Icons.power, 'Puissance', '$bPuissance CV'),
+                  if (bPression.isNotEmpty)
                     _buildMeasureItem(
-                        Icons.power, 'Puissance', '$puissance CV'),
-                  if (intensite.isNotEmpty)
+                        Icons.compress, 'Pression', '$bPression bar'),
+                  if (bIntensite.isNotEmpty)
                     _buildMeasureItem(
-                        Icons.electrical_services, 'Intensité', '$intensite A'),
-                  if (tension.isNotEmpty)
-                    _buildMeasureItem(Icons.bolt, 'Tension', '$tension V'),
+                        Icons.electrical_services, 'Intensité', '$bIntensite A'),
+                  if (bTension.isNotEmpty)
+                    _buildMeasureItem(Icons.bolt, 'Tension', '$bTension V'),
+                  if (bFreon.isNotEmpty)
+                    _buildMeasureItem(Icons.cloud_outlined, 'Fréon', bFreon),
+                ],
+              ),
+            ),
+          ],
+          // Mesures techniques APRÈS
+          if (hasAfterMeasures) ...[
+            const SizedBox(height: 8),
+            Text(
+              '🟢 Données Techniques — APRÈS Intervention',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: const Color(0xFF0a543d),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0a543d).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF0a543d).withValues(alpha: 0.3)),
+              ),
+              child: Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  if (aPuissance.isNotEmpty)
+                    _buildMeasureItem(
+                        Icons.power, 'Puissance', '$aPuissance CV'),
+                  if (aPression.isNotEmpty)
+                    _buildMeasureItem(
+                        Icons.compress, 'Pression', '$aPression bar'),
+                  if (aIntensite.isNotEmpty)
+                    _buildMeasureItem(
+                        Icons.electrical_services, 'Intensité', '$aIntensite A'),
+                  if (aTension.isNotEmpty)
+                    _buildMeasureItem(Icons.bolt, 'Tension', '$aTension V'),
+                  if (aFreon.isNotEmpty)
+                    _buildMeasureItem(Icons.cloud_outlined, 'Fréon', aFreon),
                 ],
               ),
             ),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildTasksDoneSection(dynamic tasksData) {
+    if (tasksData == null) return const SizedBox.shrink();
+
+    Map<dynamic, dynamic> mapData = {};
+    if (tasksData is Map) {
+      mapData = tasksData;
+    } else if (tasksData is String) {
+      try {
+        final decoded = json.decode(tasksData);
+        if (decoded is Map) mapData = decoded;
+      } catch (_) {}
+    }
+    if (mapData.isEmpty) return const SizedBox.shrink();
+
+    const taskLabels = {
+      'filtres_air': 'Nettoyage des filtres à air',
+      'batterie_evaporateur': 'Nettoyage de la batterie évaporateur',
+      'bacs_condensat': 'Nettoyage des bacs à condensat',
+      'turbine': 'Nettoyage de la turbine',
+      'condenseur': 'Nettoyage du condenseur',
+      'carrosserie_evaporateur': 'Nettoyage de la carrosserie évaporateur',
+      'tuyauterie_evacuation':
+          'Soufflement à forte pression de la tuyauterie d\'évacuation des condensats',
+      'parties_electriques': 'Nettoyage des parties électriques',
+      'volets_air': 'Nettoyage des volets d\'air',
+    };
+
+    final hasCheckedTask = taskLabels.keys.any((key) => mapData[key] == true);
+    if (!hasCheckedTask) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            const Icon(Icons.checklist, color: Color(0xFF0a543d), size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Travaux Effectués',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0a543d),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0a543d).withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFF0a543d).withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var entry in taskLabels.entries)
+                if (mapData[entry.key] == true)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle,
+                            color: Color(0xFF0a543d), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            entry.value,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

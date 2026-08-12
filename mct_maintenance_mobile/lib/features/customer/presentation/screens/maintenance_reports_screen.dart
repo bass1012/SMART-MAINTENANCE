@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:mct_maintenance_mobile/models/maintenance_report_model.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
@@ -57,7 +58,40 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
     return SupportFabWrapper(
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Rapports de Maintenance'),
+          elevation: 0,
+          backgroundColor: const Color(0xFF0a543d),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0a543d), Color(0xFF0d6b4d)],
+              ),
+            ),
+          ),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.assignment_rounded,
+                    color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Rapports de Maintenance',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
         ),
         body: Container(
           decoration: const BoxDecoration(
@@ -73,8 +107,7 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
               : _error != null
                   ? Center(child: Text('Erreur: $_error'))
                   : _reports.isEmpty
-                      ? const Center(
-                          child: Text('Aucun rapport de maintenance trouvé'))
+                      ? _buildEmptyState()
                       : ListView.builder(
                           padding: const EdgeInsets.all(16),
                           itemCount: _reports.length,
@@ -83,6 +116,92 @@ class _MaintenanceReportsScreenState extends State<MaintenanceReportsScreen> {
                             return _buildReportCard(report);
                           },
                         ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          padding: const EdgeInsets.symmetric(vertical: 36.0, horizontal: 24.0),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.95),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0a543d).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.assignment_outlined,
+                  size: 48,
+                  color: Color(0xFF0a543d),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Aucun rapport trouvé',
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Vos comptes rendus d\'interventions et rapports de maintenance apparaîtront ici dès leur validation par nos équipes.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _loadReports,
+                  icon: const Icon(Icons.refresh_rounded,
+                      size: 18, color: Colors.white),
+                  label: Text(
+                    'ACTUALISER',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0a543d),
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

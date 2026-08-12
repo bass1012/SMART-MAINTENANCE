@@ -271,12 +271,40 @@ class InterventionRepositoryImpl implements InterventionRepository {
   @override
   Future<Map<String, dynamic>> rateIntervention(
       int id, int rating, String review) async {
-    final response =
-        await _apiService.post('/api/interventions/$id/rate', body: {
-      'rating': rating,
-      'review': review,
-    });
-    return jsonDecode(response.body);
+    try {
+      final response =
+          await _apiService.post('/api/interventions/$id/rate', body: {
+        'rating': rating,
+        'review': review,
+      });
+      final responseData = jsonDecode(response.body);
+
+      final isAlreadyRated = responseData['message'] != null &&
+          responseData['message'].toString().toLowerCase().contains('déjà');
+
+      if (responseData['success'] == true || isAlreadyRated) {
+        await _cacheService.updateCachedIntervention(id, {
+          'rating': rating,
+          'review': review,
+        });
+      }
+
+      return responseData;
+    } catch (e) {
+      if (e.toString().toLowerCase().contains('déjà') ||
+          e.toString().toLowerCase().contains('évaluée')) {
+        await _cacheService.updateCachedIntervention(id, {
+          'rating': rating,
+          'review': review,
+        });
+        return {
+          'success': true,
+          'message': 'Cette intervention a déjà été évaluée',
+          'data': null
+        };
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -287,9 +315,37 @@ class InterventionRepositoryImpl implements InterventionRepository {
     if (!confirmed && rejectionReason != null) {
       body['rejection_reason'] = rejectionReason;
     }
-    final response = await _apiService
-        .post('/api/interventions/$id/confirm-completion', body: body);
-    return jsonDecode(response.body);
+    try {
+      final response = await _apiService
+          .post('/api/interventions/$id/confirm-completion', body: body);
+      final responseData = jsonDecode(response.body);
+
+      final isAlreadyConfirmed = responseData['message'] != null &&
+          responseData['message'].toString().toLowerCase().contains('déjà');
+
+      if (responseData['success'] == true || isAlreadyConfirmed) {
+        await _cacheService.updateCachedIntervention(id, {
+          'customer_confirmed': confirmed,
+          'customer_confirmed_at': DateTime.now().toIso8601String(),
+        });
+      }
+
+      return responseData;
+    } catch (e) {
+      if (e.toString().toLowerCase().contains('déjà') ||
+          e.toString().toLowerCase().contains('confirmée')) {
+        await _cacheService.updateCachedIntervention(id, {
+          'customer_confirmed': confirmed,
+          'customer_confirmed_at': DateTime.now().toIso8601String(),
+        });
+        return {
+          'success': true,
+          'message': 'Cette intervention a déjà été confirmée',
+          'data': null
+        };
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -577,10 +633,9 @@ class InterventionRepositoryImpl implements InterventionRepository {
   }
 
   @override
-  Future<String> downloadTechnicianReport(int reportId) async {
-    final response =
-        await _apiService.get('/api/technician/reports/$reportId/download');
-    return response.body;
+  Future<List<int>> downloadTechnicianReport(int reportId) async {
+    return await _apiService
+        .getBytes('/api/technician/reports/$reportId/download');
   }
 
   @override

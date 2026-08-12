@@ -12,6 +12,7 @@ import 'package:mct_maintenance_mobile/widgets/common/authenticated_network_imag
 import 'diagnostic_payment_screen.dart';
 import 'payment_screen.dart';
 import 'contract_payment_screen.dart';
+import 'package:mct_maintenance_mobile/features/technician/presentation/screens/view_report_screen.dart';
 
 class InterventionDetailScreen extends StatefulWidget {
   final Map<String, dynamic> intervention;
@@ -95,9 +96,25 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
               '🔄 CHANGEMENT DE STATUT DÉTECTÉ: $oldStatus → $newStatus');
       }
 
-      if (mounted) {
+      if (mounted && response['data'] != null) {
+        final wasConfirmed = _intervention['customer_confirmed'] == true ||
+            _intervention['customer_confirmed'] == 'true' ||
+            _intervention['customer_confirmed'] == 1;
+
+        final existingRating =
+            _intervention['rating'] ?? _intervention['rating_value'];
+        final existingReview =
+            _intervention['review'] ?? _intervention['rating_comment'];
+
         setState(() {
-          _intervention = response['data'];
+          _intervention = Map<String, dynamic>.from(response['data']);
+          if (wasConfirmed) {
+            _intervention['customer_confirmed'] = true;
+          }
+          if (existingRating != null && _intervention['rating'] == null) {
+            _intervention['rating'] = existingRating;
+            _intervention['review'] ??= existingReview;
+          }
           _isLoading = false;
         });
 
@@ -296,16 +313,29 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
   // Vérifie si le rapport est soumis mais pas encore confirmé par le client
   bool _hasReportToConfirm() {
     final reportSubmittedAt = _intervention['report_submitted_at'];
-    final customerConfirmed = _intervention['customer_confirmed'] ?? false;
-    return reportSubmittedAt != null && customerConfirmed != true;
+    final cc = _intervention['customer_confirmed'];
+    final isConfirmed = cc == true || cc == 'true' || cc == 1;
+    return reportSubmittedAt != null && !isConfirmed;
   }
 
   // Vérifie si le client a confirmé l'intervention
   bool _isConfirmedByCustomer() {
     final reportSubmittedAt = _intervention['report_submitted_at'];
-    final customerConfirmed = _intervention['customer_confirmed'] ?? false;
+    final cc = _intervention['customer_confirmed'];
+    final isConfirmed = cc == true || cc == 'true' || cc == 1;
     // On peut noter si: pas de rapport (ancien système) OU rapport confirmé
-    return reportSubmittedAt == null || customerConfirmed == true;
+    return reportSubmittedAt == null || isConfirmed;
+  }
+
+  void _openFullReport() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ViewReportScreen(
+          intervention: _intervention,
+        ),
+      ),
+    );
   }
 
   Widget _buildConfirmationSection() {
@@ -328,115 +358,165 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            colors: [Colors.blue.shade50, Colors.white],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.blue.shade600, Colors.blue.shade400],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.fact_check,
-                      color: Colors.white, size: 24),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Confirmation du rapport',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.blue.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline,
-                          color: Colors.blue.shade700, size: 20),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Le technicien a soumis son rapport',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.blue.shade600, Colors.blue.shade400],
                       ),
-                    ],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.fact_check,
+                        color: Colors.white, size: 24),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Veuillez confirmer que l\'intervention a été correctement réalisée, ou contestez si vous avez des remarques.',
-                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Confirmation du rapport',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _openFullReport,
+                    icon: const Icon(Icons.open_in_new, color: Color(0xFF0a543d)),
+                    tooltip: 'Consulter le rapport complet',
                   ),
                 ],
               ),
-            ),
-            if (parsedReport != null && parsedReport.isNotEmpty) ...[
               const SizedBox(height: 16),
-              _buildReportSummary(parsedReport),
-            ],
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showRejectionDialog,
-                    icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                    label: const Text('Contester'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            color: Colors.blue.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _openFullReport,
+                            child: const Text(
+                              'Le technicien a soumis son rapport',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Veuillez confirmer que l\'intervention a été correctement réalisée, ou contestez si vous avez des remarques.',
+                      style: TextStyle(fontSize: 13, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      onTap: _openFullReport,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0a543d).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: const Color(0xFF0a543d).withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.description_outlined,
+                                size: 16, color: Color(0xFF0a543d)),
+                            SizedBox(width: 6),
+                            Text(
+                              'Consulter le rapport complet',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0a543d),
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Icon(Icons.arrow_forward_ios,
+                                size: 12, color: Color(0xFF0a543d)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _confirmIntervention,
-                    icon: const Icon(Icons.check_circle, color: Colors.white),
-                    label: const Text('Confirmer'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0a543d),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ),
+              ),
+              if (parsedReport != null && parsedReport.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _buildReportSummary(parsedReport),
               ],
-            ),
-          ],
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _showRejectionDialog,
+                      icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                      label: const Text('Contester'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _confirmIntervention,
+                      icon: const Icon(Icons.check_circle, color: Colors.white),
+                      label: const Text('Confirmer'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0a543d),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -614,6 +694,8 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
   }
 
   Future<void> _confirmIntervention() async {
+    // Capturer le repository AVANT le await showDialog (évite use_build_context_synchronously)
+    final interventionRepository = context.read<InterventionRepository>();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -642,7 +724,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
-        final interventionRepository = context.read<InterventionRepository>();
+        // Repository déjà capturé avant le await showDialog
         final response =
             await interventionRepository.confirmInterventionCompletion(
           _intervention['id'],
@@ -861,6 +943,11 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         }
 
         if (mounted) {
+          setState(() {
+            _intervention['customer_confirmed'] = true;
+            _intervention['customer_confirmed_at'] =
+                DateTime.now().toIso8601String();
+          });
           SnackBarHelper.showSuccess(
             context,
             'Merci pour votre confirmation !',
@@ -882,6 +969,8 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
 
   Future<void> _showRejectionDialog() async {
     final reasonController = TextEditingController();
+    // Capturer le repository AVANT le await showDialog (évite use_build_context_synchronously)
+    final interventionRepository = context.read<InterventionRepository>();
 
     final result = await showDialog<String>(
       context: context,
@@ -937,7 +1026,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
     if (result != null && result.isNotEmpty) {
       setState(() => _isLoading = true);
       try {
-        final interventionRepository = context.read<InterventionRepository>();
+        // Repository déjà capturé avant le await showDialog
         await interventionRepository.confirmInterventionCompletion(
           _intervention['id'],
           false,
@@ -1239,6 +1328,24 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
               'Vous pouvez annuler cette demande si vous n\'en avez plus besoin.',
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 15, color: Colors.grey),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Le remboursement se fera sous 72h ouvrées.',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -1280,7 +1387,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         ),
         title: const Text('Annuler l\'intervention ?'),
         content: const Text(
-          'Êtes-vous sûr de vouloir annuler cette demande d\'intervention ? Cette action est irréversible.',
+          'Êtes-vous sûr de vouloir annuler cette demande d\'intervention ? Cette action est irréversible. Le remboursement se fera sous 72h ouvrées.',
           textAlign: TextAlign.center,
         ),
         actions: [
@@ -1320,6 +1427,8 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         // Rafraîchir les données
         await _refreshIntervention();
         // Retourner à la liste avec indication de mise à jour
+        // Vérification mounted nécessaire après le second await (_refreshIntervention)
+        if (!mounted) return;
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -2151,6 +2260,12 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         return Colors.indigo;
       case 'completed':
         return Colors.green;
+      case 'diagnostic_submitted':
+        return Colors.cyan.shade700;
+      case 'execution_confirmed':
+        return Colors.green.shade700;
+      case 'scheduled':
+        return Colors.blue;
       case 'cancelled':
         return Colors.red;
       case 'client_unreachable':
@@ -2176,6 +2291,12 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         return 'En cours d\'intervention';
       case 'completed':
         return 'Terminée';
+      case 'diagnostic_submitted':
+        return 'Diagnostic soumis';
+      case 'execution_confirmed':
+        return 'Travaux confirmés';
+      case 'scheduled':
+        return 'Programmée';
       case 'cancelled':
         return 'Annulée';
       case 'client_unreachable':
@@ -2199,9 +2320,13 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
   }
 
   Widget _buildRatingSection() {
-    final hasRating = _intervention['rating'] != null;
-    final rating = _intervention['rating'] ?? 0;
-    final review = _intervention['review'] ?? '';
+    final rawRating = _intervention['rating'] ?? _intervention['rating_value'];
+    final hasRating = rawRating != null && rawRating != 0;
+    final rating = rawRating is int
+        ? rawRating
+        : int.tryParse(rawRating?.toString() ?? '0') ?? 0;
+    final review =
+        _intervention['review'] ?? _intervention['rating_comment'] ?? '';
 
     return Card(
       elevation: 2,
@@ -2621,6 +2746,8 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       BuildContext dialogContext, int rating, String review) async {
     // Sauvegarder si un rating existait AVANT la soumission
     final hadRatingBefore = _intervention['rating'] != null;
+    // Capturer le repository AVANT les awaits (évite use_build_context_synchronously)
+    final interventionRepository = context.read<InterventionRepository>();
 
     try {
       // Fermer le clavier
@@ -2635,7 +2762,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         ),
       );
 
-      final interventionRepository = context.read<InterventionRepository>();
+      // Repository déjà capturé avant le try block
       await interventionRepository.rateIntervention(
         _intervention['id'],
         rating,
@@ -2643,16 +2770,22 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       );
 
       // Fermer le loader
-      if (mounted) Navigator.of(dialogContext).pop();
+      if (context.mounted) Navigator.of(dialogContext).pop();
 
       // Fermer le dialog de notation
-      if (mounted) Navigator.of(dialogContext).pop();
+      if (context.mounted) Navigator.of(dialogContext).pop();
 
       // Rafraîchir les données
+      if (context.mounted) {
+        setState(() {
+          _intervention['rating'] = rating;
+          _intervention['review'] = review.trim();
+        });
+      }
       await _refreshIntervention();
 
       // Afficher un message de succès
-      if (mounted) {
+      if (context.mounted) {
         SnackBarHelper.showSuccess(
           context,
           'Merci pour votre évaluation !',
@@ -2661,7 +2794,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       }
     } catch (e) {
       // Fermer le loader
-      if (mounted) Navigator.of(dialogContext).pop();
+      if (context.mounted) Navigator.of(dialogContext).pop();
 
       // Vérifier si le message d'erreur indique que c'est déjà évalué
       final errorMessage = e.toString().toLowerCase();
@@ -2669,6 +2802,12 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
           errorMessage.contains('already rated');
 
       if (isAlreadyRated || hadRatingBefore) {
+        if (mounted) {
+          setState(() {
+            _intervention['rating'] ??= rating;
+            _intervention['review'] ??= review.trim();
+          });
+        }
         // Rafraîchir les données pour afficher l'évaluation existante
         await _refreshIntervention();
 

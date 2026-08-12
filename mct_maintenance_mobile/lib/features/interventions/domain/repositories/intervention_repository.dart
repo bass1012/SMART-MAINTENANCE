@@ -33,7 +33,7 @@ abstract class InterventionRepository {
   Future<Map<String, dynamic>> submitDiagnosticReport(Map<String, dynamic> data);
   Future<Map<String, dynamic>> getTechnicianCalendar({String? startDate, String? endDate});
   Future<Map<String, dynamic>> getTechnicianReports();
-  Future<String> downloadTechnicianReport(int reportId);
+  Future<List<int>> downloadTechnicianReport(int reportId);
   Future<Map<String, dynamic>> getTechnicianReviews();
   Future<Map<String, dynamic>> replyToReview(int reviewId, String reply);
   Future<Map<String, dynamic>> suggestTechnicians({required int interventionId, int maxResults = 10});

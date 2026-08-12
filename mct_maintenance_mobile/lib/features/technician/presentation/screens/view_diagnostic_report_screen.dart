@@ -221,13 +221,19 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
                     _buildSection(
                       '6/ Description / Constat de la Panne',
                       Icons.report_problem,
-                      report['problem_description'] ?? 'Non renseigné',
+                      report['problem_description'] ??
+                          report['work_description'] ??
+                          report['description'] ??
+                          'Non renseigné',
                     ),
                     const SizedBox(height: 24),
 
                     // POINT 7 : MATÉRIELS NÉCESSAIRES
                     if ((report['materials_needed'] != null && report['materials_needed'].toString().isNotEmpty) ||
-                        _partsList.isNotEmpty) ...[
+                        _partsList.isNotEmpty ||
+                        report['labor_cost'] != null ||
+                        report['estimated_total'] != null ||
+                        report['total_cost'] != null) ...[
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -251,6 +257,7 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
                           if (report['materials_needed'] != null && report['materials_needed'].toString().isNotEmpty)
                             Container(
                               width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 12),
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: Colors.grey[50],
@@ -263,9 +270,10 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
                               ),
                             ),
                           if (_partsList.isNotEmpty) ...[
-                            const SizedBox(height: 12),
                             _buildPartsSection(_partsList),
+                            const SizedBox(height: 12),
                           ],
+                          _buildCostsSection(report),
                         ],
                       ),
                       const SizedBox(height: 24),
@@ -303,11 +311,12 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
                     const SizedBox(height: 24),
 
                     // Notes
-                    if (report['notes'] != null && report['notes'].toString().isNotEmpty)
+                    if ((report['notes'] != null && report['notes'].toString().isNotEmpty) ||
+                        (report['observations'] != null && report['observations'].toString().isNotEmpty))
                       _buildSection(
                         'Notes / Observations',
                         Icons.comment,
-                        report['notes'],
+                        (report['notes'] ?? report['observations']).toString(),
                       ),
                     const SizedBox(height: 24),
 
@@ -784,47 +793,90 @@ class _ViewDiagnosticReportScreenState extends State<ViewDiagnosticReportScreen>
     );
   }
 
+  Widget _buildCostsSection(Map<String, dynamic> report) {
+    final laborCostRaw = report['labor_cost'] ?? 0;
+    final totalRaw = report['estimated_total'] ?? report['total_cost'] ?? report['total_estimated'] ?? 0;
+
+    final laborCost = num.tryParse(laborCostRaw.toString()) ?? 0;
+    final total = num.tryParse(totalRaw.toString()) ?? 0;
+    final fmt = NumberFormat('#,###', 'fr_FR');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0a543d).withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF0a543d).withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Coût main d\'œuvre: ${fmt.format(laborCost)} FCFA',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+          ),
+          Text(
+            'Total estimé: ${fmt.format(total)} FCFA',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0a543d)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPartsSection(List<dynamic> parts) {
+    final fmt = NumberFormat('#,###', 'fr_FR');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ...parts.map((part) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0a543d).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.settings,
-                    color: Color(0xFF0a543d),
-                  ),
+        ...parts.map((part) {
+          final pMap = part is Map ? part : {'name': part.toString()};
+          final name = pMap['name'] ?? pMap['label'] ?? pMap['title'] ?? 'Pièce sans nom';
+          final qty = pMap['quantity'] ?? pMap['qty'] ?? 1;
+          final unitPriceRaw = pMap['unitPrice'] ?? pMap['unit_price'] ?? pMap['price'];
+          final unitPriceNum = unitPriceRaw != null ? num.tryParse(unitPriceRaw.toString()) : null;
+          final priceText = (unitPriceNum != null && unitPriceNum > 0) ? '${fmt.format(unitPriceNum)} FCFA' : '-';
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0a543d).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                title: Text(
-                  part['name'] ?? 'Pièce sans nom',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                child: const Icon(
+                  Icons.settings,
+                  color: Color(0xFF0a543d),
                 ),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'x${part['quantity'] ?? 0}',
-                    style: TextStyle(
-                      color: Colors.blue[700],
-                      fontWeight: FontWeight.bold,
-                    ),
+              ),
+              title: Text(
+                name.toString(),
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: Text('Prix unitaire: $priceText'),
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'x$qty',
+                  style: TextStyle(
+                    color: Colors.blue[700],
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-            )),
+            ),
+          );
+        }),
       ],
     );
   }

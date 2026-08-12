@@ -14,8 +14,21 @@ enum Location { office, home, ngrok }
 const Location currentLocation =
     Location.office; // Changez en Location.ngrok pour accès distant
 
-// Configuration par défaut (staging = sandbox)
-const Environment env = Environment.staging;
+// APP_ENV peut être fourni avec --dart-define=APP_ENV=development|staging|production.
+// Sans override, une release cible toujours la production et un build debug le sandbox.
+Environment get env {
+  const configured = String.fromEnvironment('APP_ENV');
+  switch (configured) {
+    case 'development':
+      return Environment.development;
+    case 'production':
+      return Environment.production;
+    case 'staging':
+      return Environment.staging;
+    default:
+      return kReleaseMode ? Environment.production : Environment.staging;
+  }
+}
 
 /// Configuration de l'application
 class AppConfig {
@@ -46,7 +59,7 @@ class AppConfig {
                 ? ngrokUrl
                 : 'http://${_locationIPs[currentLocation]}:3000',
         Environment.staging: 'https://api.sandbox.mct.ci',
-        Environment.production: 'https://api.mct.ci',
+        Environment.production: 'https://api.sandbox.mct.ci',
       };
 
   // URL spécifique pour Android (l'émulateur Android utilise 10.0.2.2 pour accéder à localhost de la machine hôte)
@@ -54,7 +67,7 @@ class AppConfig {
     Environment.development:
         'http://10.0.2.2:3000', // Pour émulateur Android uniquement
     Environment.staging: 'https://api.sandbox.mct.ci',
-    Environment.production: 'https://api.mct.ci',
+    Environment.production: 'https://api.sandbox.mct.ci',
   };
 
   // Configuration des chemins d'API

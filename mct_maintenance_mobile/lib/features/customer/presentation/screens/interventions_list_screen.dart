@@ -14,6 +14,7 @@ import 'subscription_payment_screen.dart';
 import 'contract_payment_screen.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
 import 'package:mct_maintenance_mobile/utils/test_keys.dart';
+import 'package:mct_maintenance_mobile/widgets/common/skeleton_loader_widget.dart';
 
 class InterventionsListScreen extends StatefulWidget {
   const InterventionsListScreen({super.key});
@@ -207,7 +208,7 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
               // Liste des interventions
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? SkeletonLoaderWidget.listSkeleton()
                     : _filteredInterventions.isEmpty
                         ? _buildEmptyState()
                         : RefreshIndicator(
@@ -902,26 +903,99 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _navigateToSubscriptionPayment(subscription),
-                icon: const Icon(Icons.credit_card, size: 18),
-                label: const Text('Payer maintenant'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _confirmCancelSubscription(subscription),
+                    icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                    label: const Text(
+                      'Annuler',
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _navigateToSubscriptionPayment(subscription),
+                    icon: const Icon(Icons.credit_card, size: 18),
+                    label: const Text('Payer'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmCancelSubscription(Map<String, dynamic> subscription) async {
+    final subscriptionId = subscription['id'] is int
+        ? subscription['id']
+        : int.parse(subscription['id'].toString());
+
+    final offer = subscription['offer'] as Map<String, dynamic>?;
+    final title = offer?['title'] ?? 'Offre d\'entretien #$subscriptionId';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Annuler la souscription'),
+        content: Text(
+          'Êtes-vous sûr de vouloir annuler "$title" en attente de paiement ?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Non'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Oui, annuler', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        final subRepo = context.read<SubscriptionRepository>();
+        final response = await subRepo.cancelSubscription(subscriptionId);
+        if (mounted) {
+          if (response['success'] == true) {
+            SnackBarHelper.showSuccess(context, 'Souscription annulée avec succès');
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context); // Fermer le bottom sheet
+            }
+            _loadData(); // Rafraîchir la liste
+          } else {
+            SnackBarHelper.showError(context, response['message'] ?? 'Erreur d\'annulation');
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          SnackBarHelper.showError(context, 'Erreur lors de l\'annulation : $e');
+        }
+      }
+    }
   }
 
   Future<void> _navigateToSubscriptionPayment(
@@ -1431,6 +1505,12 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
         return Icons.engineering;
       case 'completed':
         return Icons.check_circle;
+      case 'diagnostic_submitted':
+        return Icons.assignment_turned_in;
+      case 'execution_confirmed':
+        return Icons.verified;
+      case 'scheduled':
+        return Icons.event;
       case 'cancelled':
         return Icons.cancel;
       default:
@@ -1454,6 +1534,12 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
         return Colors.indigo;
       case 'completed':
         return Colors.green;
+      case 'diagnostic_submitted':
+        return Colors.cyan.shade700;
+      case 'execution_confirmed':
+        return Colors.green.shade700;
+      case 'scheduled':
+        return Colors.blue;
       case 'cancelled':
         return Colors.red;
       case 'client_unreachable':
@@ -1479,6 +1565,12 @@ class _InterventionsListScreenState extends State<InterventionsListScreen> {
         return 'Intervention en cours';
       case 'completed':
         return 'Terminée';
+      case 'diagnostic_submitted':
+        return 'Diagnostic soumis';
+      case 'execution_confirmed':
+        return 'Travaux confirmés';
+      case 'scheduled':
+        return 'Programmée';
       case 'cancelled':
         return 'Annulée';
       case 'client_unreachable':

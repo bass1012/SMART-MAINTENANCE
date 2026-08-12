@@ -13,6 +13,7 @@ class UserModel {
   final double? latitude;
   final double? longitude;
   final String? address;
+  final String? referralCode;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -39,6 +40,7 @@ class UserModel {
     this.latitude,
     this.longitude,
     this.address,
+    this.referralCode,
     this.createdAt,
     this.updatedAt,
   });
@@ -74,6 +76,7 @@ class UserModel {
       longitude:
           _parseDouble(userData['longitude'] ?? profileData['longitude']),
       address: userData['address'] ?? profileData['address'],
+      referralCode: profileData['referral_code'] ?? profileData['referralCode'],
       createdAt: userData['createdAt'] != null
           ? DateTime.parse(userData['createdAt'])
           : null,
@@ -99,6 +102,7 @@ class UserModel {
       'latitude': latitude,
       'longitude': longitude,
       'address': address,
+      'referral_code': referralCode,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };
@@ -119,6 +123,7 @@ class UserModel {
     Map<String, dynamic>? preferences,
     double? latitude,
     double? longitude,
+    String? referralCode,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -136,6 +141,7 @@ class UserModel {
       preferences: preferences ?? this.preferences,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      referralCode: referralCode ?? this.referralCode,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

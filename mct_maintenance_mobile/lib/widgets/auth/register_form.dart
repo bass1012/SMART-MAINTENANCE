@@ -25,6 +25,8 @@ class _RegisterFormState extends State<RegisterForm> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
+  final TextEditingController _referredByCodeController =
+      TextEditingController();
 
   // Champs supplémentaires (CustomerForm)
   String? _companyType;
@@ -82,7 +84,7 @@ class _RegisterFormState extends State<RegisterForm> {
 
     // Email optionnel mais valide si renseigné (recommandé pour le fallback SMS)
     if (_emailController.text.trim().isNotEmpty) {
-      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+      final emailRegex = RegExp(r'^[\w\+\-\.]+@([\w-]+\.)+[\w-]{2,4}$');
       if (!emailRegex.hasMatch(_emailController.text.trim())) {
         _showError('Veuillez entrer une adresse email valide');
         return false;
@@ -138,6 +140,9 @@ class _RegisterFormState extends State<RegisterForm> {
         'last_name': _lastNameController.text.trim(),
         'email': _emailController.text.trim().toLowerCase(),
         'phone': _phoneController.text.trim(),
+        'referred_by_code': _referredByCodeController.text.trim().isNotEmpty
+            ? _referredByCodeController.text.trim()
+            : null,
         'company_name': _companyNameController.text.trim().isNotEmpty
             ? _companyNameController.text.trim()
             : null,
@@ -347,83 +352,81 @@ class _RegisterFormState extends State<RegisterForm> {
   Widget build(BuildContext context) {
     return Form(
       key: _formKey,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            // Indicateur d'étapes
-            _buildStepIndicator(),
-            const SizedBox(height: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          // Indicateur d'étapes
+          _buildStepIndicator(),
+          const SizedBox(height: 24),
 
-            // Afficher la section appropriée selon l'étape
-            if (_currentStep == 0) _buildSection1(),
-            if (_currentStep == 1) _buildSection2(),
+          // Afficher la section appropriée selon l'étape
+          if (_currentStep == 0) _buildSection1(),
+          if (_currentStep == 1) _buildSection2(),
 
-            const SizedBox(height: 24),
+          const SizedBox(height: 24),
 
-            // Divider avec texte
-            Row(
+          // Divider avec texte
+          Row(
+            children: [
+              Expanded(
+                child: Divider(
+                  color: Colors.grey.shade300,
+                  thickness: 1,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'OU',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Divider(
+                  color: Colors.grey.shade300,
+                  thickness: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Lien vers la page de connexion
+          Center(
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Expanded(
-                  child: Divider(
-                    color: Colors.grey.shade300,
-                    thickness: 1,
+                Text(
+                  'Déjà un compte ? ',
+                  style: GoogleFonts.poppins(
+                    color: Colors.grey.shade700,
+                    fontSize: 14,
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                InkWell(
+                  onTap: _isLoading
+                      ? null
+                      : () =>
+                          Navigator.pushReplacementNamed(context, '/login'),
                   child: Text(
-                    'OU',
+                    'Connectez-vous',
                     style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF0a543d),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: Divider(
-                    color: Colors.grey.shade300,
-                    thickness: 1,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Lien vers la page de connexion
-            Center(
-              child: Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    'Déjà un compte ? ',
-                    style: GoogleFonts.poppins(
-                      color: Colors.grey.shade700,
-                      fontSize: 14,
-                    ),
-                  ),
-                  InkWell(
-                    onTap: _isLoading
-                        ? null
-                        : () =>
-                            Navigator.pushReplacementNamed(context, '/login'),
-                    child: Text(
-                      'Connectez-vous',
-                      style: GoogleFonts.poppins(
-                        color: const Color(0xFF0a543d),
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -559,6 +562,15 @@ class _RegisterFormState extends State<RegisterForm> {
         ),
         const SizedBox(height: 14),
 
+        // Code Parrainage (Optionnel)
+        _buildModernTextField(
+          controller: _referredByCodeController,
+          label: 'Code parrainage (si vous en avez)',
+          hintText: 'Entrez ici votre code parrainage, si vous en avez',
+          icon: Icons.card_giftcard_outlined,
+        ),
+        const SizedBox(height: 14),
+
         // Nom
         _buildModernTextField(
           controller: _lastNameController,
@@ -625,7 +637,7 @@ class _RegisterFormState extends State<RegisterForm> {
           hintText: 'exemple@domaine.com',
           validator: (value) {
             if (value != null && value.isNotEmpty) {
-              final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+              final emailRegex = RegExp(r'^[\w\+\-\.]+@([\w-]+\.)+[\w-]{2,4}$');
               if (!emailRegex.hasMatch(value)) {
                 return 'Veuillez entrer une adresse email valide';
               }
@@ -1056,6 +1068,7 @@ class _RegisterFormState extends State<RegisterForm> {
     _companyNameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _referredByCodeController.dispose();
     super.dispose();
   }
 }

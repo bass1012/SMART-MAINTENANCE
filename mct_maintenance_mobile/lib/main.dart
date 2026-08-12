@@ -86,13 +86,18 @@ void _setupApp() {
     ),
   );
 
-  // Gestion des erreurs non capturées
+  // Gestion des erreurs non capturées de la couche Flutter UI
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
-    // Vous pouvez ajouter ici un envoi d'erreur à un service de suivi comme Sentry
+    debugPrint('🚨 FATAL FLUTTER ERROR: ${details.exceptionAsString()}');
   };
 
   // Gestion des erreurs asynchrones non capturées
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    debugPrint('🚨 UNHANDLED DART ASYNC ERROR: $error\n$stack');
+    return true;
+  };
+
   if (kReleaseMode) {
     ErrorWidget.builder =
         (_) => const Center(child: Text("Une erreur s'est produite"));

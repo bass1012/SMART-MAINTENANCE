@@ -12,7 +12,10 @@ class AvatarHelper {
 
   /// Construit l'URL complète de l'avatar à partir du nom de fichier ou data URL
   static String buildAvatarUrl(String? profileImage) {
-    if (profileImage == null || profileImage.isEmpty) {
+    if (profileImage == null ||
+        profileImage.isEmpty ||
+        profileImage == 'null' ||
+        profileImage == 'undefined') {
       return '';
     }
 
@@ -37,7 +40,10 @@ class AvatarHelper {
 
   /// Vérifie si un avatar est disponible
   static bool hasAvatar(String? profileImage) {
-    return profileImage != null && profileImage.isNotEmpty;
+    return profileImage != null &&
+        profileImage.isNotEmpty &&
+        profileImage != 'null' &&
+        profileImage != 'undefined';
   }
 
   /// Retourne l'ImageProvider adapté : MemoryImage si base64, NetworkImage sinon

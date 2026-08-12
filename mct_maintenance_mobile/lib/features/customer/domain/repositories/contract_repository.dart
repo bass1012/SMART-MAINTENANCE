@@ -16,7 +16,7 @@ abstract class ContractRepository {
   Future<QuoteContract> rejectQuote(String quoteId, String reason);
   Future<Map<String, dynamic>> requestContractRenewal(int contractId);
   Future<Map<String, dynamic>> getCustomerQuotesRaw();
-  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId);
+  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId, {String? reference});
   Future<Map<String, dynamic>> confirmContractPayment(int subscriptionId);
   Future<List<int>> downloadQuotePDF(String quoteId);
 }

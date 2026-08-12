@@ -7,7 +7,7 @@ abstract class PaymentRepository {
     String? redirectUrl,
     bool? autoRedirect,
   });
-  
+
   Future<Map<String, dynamic>> initializeDiagnosticPayment({
     required int interventionId,
     required double amount,
@@ -35,8 +35,8 @@ abstract class PaymentRepository {
 
   Future<Map<String, dynamic>> checkPaymentStatus(String reference);
   Future<Map<String, dynamic>> getPaymentHistory();
-  Future<List<int>> downloadInvoicePDF(String orderId);
+  Future<List<int>> downloadInvoicePDF(int orderId);
   Future<Map<String, dynamic>> verifyOrderPayment(int orderId);
   Future<Map<String, dynamic>> verifyDiagnosticPayment(int interventionId);
-  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId);
+  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId, {String? reference});
 }

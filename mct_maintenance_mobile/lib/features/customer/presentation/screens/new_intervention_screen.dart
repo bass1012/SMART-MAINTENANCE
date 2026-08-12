@@ -20,18 +20,22 @@ import 'package:mct_maintenance_mobile/models/repair_service.dart';
 import 'package:mct_maintenance_mobile/models/installation_service.dart';
 import 'diagnostic_payment_screen.dart';
 import 'intervention_detail_screen.dart';
+import 'subscription_payment_screen.dart';
 
 class NewInterventionScreen extends StatefulWidget {
   final String? preSelectedType;
   final int? preSelectedOfferId;
+  final int? preSelectedSubscriptionId;
   final int? preSelectedEquipmentCount;
 
   const NewInterventionScreen({
     super.key,
     this.preSelectedType,
     this.preSelectedOfferId,
+    this.preSelectedSubscriptionId,
     this.preSelectedEquipmentCount,
   });
+
 
   @override
   State<NewInterventionScreen> createState() => _NewInterventionScreenState();
@@ -70,6 +74,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
 
   // Souscriptions actives et quota
   List<Map<String, dynamic>> _activeSubscriptions = [];
+  int? _selectedSubscriptionId;
   int? _maxEquipmentAllowed; // Quota max disponible pour l'offre sélectionnée
 
   // Services de réparation
@@ -88,6 +93,9 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
   bool get _isTypeLocked =>
       widget.preSelectedType != null &&
       widget.preSelectedType!.trim().isNotEmpty;
+
+  bool get _isOfferLocked =>
+      widget.preSelectedOfferId != null;
 
   @override
   void dispose() {
@@ -181,11 +189,13 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
       final subscriptions = await subscriptionRepository.getSubscriptions();
       setState(() {
         _maintenanceOffers = offers
-            .map((offer) => {
+            .map<Map<String, dynamic>>((offer) => <String, dynamic>{
                   'id': offer.id,
                   'title': offer.title,
                   'price': offer.price,
                   'description': offer.description,
+                  'isAnnual': offer.isAnnual,
+                  'offerType': offer.offerType,
                 })
             .toList();
         // Filtrer les souscriptions actives avec payment_status = paid ou partial
@@ -207,34 +217,69 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     }
   }
 
+  Map<String, dynamic>? _getAvailableSubscriptionForOffer(String? offerId) {
+    if (offerId == null || _activeSubscriptions.isEmpty) return null;
+    try {
+      return _activeSubscriptions.firstWhere((s) {
+        if (s['maintenance_offer_id'].toString() != offerId) return false;
+        final eqCount = s['equipment_count'] as int? ?? 1;
+        final eqUsed = s['equipment_used'] as int? ?? 0;
+        final visitsTotal = s['visits_total'] as int?;
+        final visitsCompleted = s['visits_completed'] as int?;
+        if (visitsTotal != null && visitsTotal > 1) {
+          return (visitsCompleted ?? 0) < visitsTotal;
+        }
+        return (eqCount - eqUsed) > 0;
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _updateQuotaForSelectedOffer(String? offerId) {
     if (offerId == null) {
-      setState(() => _maxEquipmentAllowed = null);
+      setState(() {
+        _selectedSubscriptionId = null;
+        _maxEquipmentAllowed = null;
+      });
       return;
     }
 
-    // Chercher une souscription active pour cette offre
     Map<String, dynamic>? subscription;
-    try {
-      subscription = _activeSubscriptions.firstWhere(
-        (s) => s['maintenance_offer_id'].toString() == offerId,
-      );
-    } catch (_) {
-      subscription = null;
+    if (widget.preSelectedSubscriptionId != null) {
+      try {
+        subscription = _activeSubscriptions.firstWhere(
+          (s) => s['id'] == widget.preSelectedSubscriptionId,
+        );
+      } catch (_) {}
+    } else {
+      subscription = _getAvailableSubscriptionForOffer(offerId);
     }
 
     if (subscription != null) {
       final equipmentCount = subscription['equipment_count'] as int? ?? 1;
       final equipmentUsed = subscription['equipment_used'] as int? ?? 0;
       final remaining = equipmentCount - equipmentUsed;
-      setState(() {
-        _maxEquipmentAllowed = remaining > 0 ? remaining : null;
-        // Note: on ne limite plus automatiquement - l'utilisateur peut dépasser et payer la différence
-      });
+      if (remaining > 0) {
+        setState(() {
+          _selectedSubscriptionId = subscription!['id'] as int?;
+          _maxEquipmentAllowed = remaining;
+          _equipmentCountController.text = remaining.toString();
+        });
+      } else {
+        setState(() {
+          _selectedSubscriptionId = null;
+          _maxEquipmentAllowed = null;
+        });
+      }
     } else {
-      setState(() => _maxEquipmentAllowed = null);
+      setState(() {
+        _selectedSubscriptionId = null;
+        _maxEquipmentAllowed = null;
+      });
     }
   }
+
 
   Future<void> _loadRepairServices() async {
     setState(() => _isLoadingRepairServices = true);
@@ -627,8 +672,40 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
 
     try {
       final apiService = context.read<BaseApiService>();
+      String offerTitle = '';
+      String offerType = 'on_demand';
+      bool isAnnual = false;
+      String? offerId;
+      final count = int.tryParse(_equipmentCountController.text) ?? 1;
+
+      if (_selectedType == 'Maintenance' && _selectedMaintenanceOffer != null) {
+        offerId = _selectedMaintenanceOffer;
+        final offerMap = _maintenanceOffers.firstWhere(
+          (o) => o['id'].toString() == _selectedMaintenanceOffer,
+          orElse: () => <String, dynamic>{},
+        );
+        offerTitle = (offerMap['title'] ?? '').toString();
+        offerType = (offerMap['offer_type'] ?? offerMap['offerType'] ?? 'on_demand').toString();
+        final visitsTotal = (offerMap['visits_total'] as int?) ?? 1;
+        final durationMonths = (offerMap['duration_months'] as int?) ?? 1;
+        isAnnual = offerMap['isAnnual'] == true ||
+            offerMap['is_annual'] == true ||
+            offerType == 'annual' ||
+            visitsTotal > 1 ||
+            durationMonths > 1 ||
+            offerTitle.toLowerCase().contains('annuel') ||
+            offerTitle.toLowerCase().contains('abonnement');
+      }
+
       final response = await apiService.post('/api/promotions/validate', body: {
         'code': code,
+        'offerId': offerId,
+        'maintenanceOfferId': offerId,
+        'offerTitle': offerTitle,
+        'offerType': offerType,
+        'equipmentCount': count,
+        'count': count,
+        'isAnnual': isAnnual,
       });
 
       final responseData = jsonDecode(response.body);
@@ -745,7 +822,42 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
       String title = _titleController.text.trim();
       if (title.isEmpty) {
         if (_selectedType == 'Maintenance') {
-          title = 'Demande de maintenance';
+          String offerTitle = '';
+          bool isAnnualOffer = false;
+          if (_selectedMaintenanceOffer != null) {
+            try {
+              final selectedOffer = _maintenanceOffers.firstWhere(
+                (o) => o['id'].toString() == _selectedMaintenanceOffer,
+              );
+              offerTitle = selectedOffer['title']?.toString() ?? '';
+              isAnnualOffer = selectedOffer['isAnnual'] == true ||
+                  selectedOffer['offerType'] == 'annual';
+            } catch (_) {}
+          }
+
+          Map<String, dynamic>? activeSub;
+          final subId = widget.preSelectedSubscriptionId ?? _selectedSubscriptionId;
+          if (subId != null && _activeSubscriptions.isNotEmpty) {
+            try {
+              activeSub = _activeSubscriptions.firstWhere(
+                (s) => s['id'] == subId,
+              );
+            } catch (_) {}
+          }
+
+          final visitsTotal = (activeSub?['visits_total'] as int?) ?? (isAnnualOffer ? 4 : 1);
+          final visitsCompleted = (activeSub?['visits_completed'] as int?) ?? (activeSub?['equipment_used'] as int?) ?? 0;
+          final currentVisit = visitsCompleted + 1;
+
+          if (offerTitle.isNotEmpty) {
+            if (isAnnualOffer || visitsTotal > 1) {
+              title = 'Entretien $offerTitle - Visite $currentVisit/$visitsTotal';
+            } else {
+              title = 'Entretien $offerTitle';
+            }
+          } else {
+            title = 'Entretien de maintenance';
+          }
         } else if (_selectedType == 'installation' &&
             _selectedInstallationServiceId != null) {
           // Utiliser le titre du service d'installation sélectionné
@@ -806,15 +918,54 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
 
       // Appel API avec images (OPTION 1 - Multipart/Form-Data)
       Map<String, dynamic> createdIntervention;
-      if (_selectedImages.isNotEmpty) {
-        createdIntervention = await interventionRepository.createInterventionWithImages(
-          data: interventionData,
-          images: _selectedImages,
+
+      bool isAnnualOffer = false;
+      if (_selectedType == 'Maintenance' && _selectedMaintenanceOffer != null) {
+        final selectedOfferMap = _maintenanceOffers
+            .where((o) => o['id'].toString() == _selectedMaintenanceOffer)
+            .firstOrNull;
+        if (selectedOfferMap != null) {
+          isAnnualOffer = selectedOfferMap['isAnnual'] == true ||
+              selectedOfferMap['offerType'] == 'annual';
+        }
+      }
+
+      // Si le client possède déjà une souscription couvrante active pour cette offre,
+      // on utilise sa souscription existante au lieu d'en créer une nouvelle !
+      final availableSub = _getAvailableSubscriptionForOffer(_selectedMaintenanceOffer);
+      final int? effectiveSubscriptionId = widget.preSelectedSubscriptionId ??
+          _selectedSubscriptionId ??
+          availableSub?['id'] as int?;
+
+      final bool isUsingExistingSubscription =
+          effectiveSubscriptionId != null ||
+              (_maxEquipmentAllowed != null && _maxEquipmentAllowed! > 0);
+
+      if (effectiveSubscriptionId != null) {
+        interventionData['subscription_id'] = effectiveSubscriptionId;
+      }
+
+      if (isAnnualOffer && !isUsingExistingSubscription) {
+
+        final subscriptionRepo = context.read<SubscriptionRepository>();
+        createdIntervention = await subscriptionRepo.createMaintenanceSubscription(
+          maintenanceOfferId: int.parse(_selectedMaintenanceOffer!),
+          equipmentCount: int.tryParse(_equipmentCountController.text) ?? 1,
+          firstInterventionDate: scheduledDateTime,
+          promoCode: _appliedPromo != null ? _appliedPromo!['code'] : null,
+          interventionData: interventionData,
         );
       } else {
-        // Sans images, utiliser la méthode classique
-        createdIntervention =
-            await interventionRepository.createIntervention(interventionData);
+        if (_selectedImages.isNotEmpty) {
+          createdIntervention = await interventionRepository.createInterventionWithImages(
+            data: interventionData,
+            images: _selectedImages,
+          );
+        } else {
+          // Sans images, utiliser la méthode classique
+          createdIntervention =
+              await interventionRepository.createIntervention(interventionData);
+        }
       }
 
       // Alternative: OPTION 2 - Base64 (décommenter pour utiliser)
@@ -824,6 +975,55 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
       // );
 
       if (mounted) {
+        if (isAnnualOffer && !isUsingExistingSubscription) {
+
+          final dataMap = (createdIntervention['data'] as Map<String, dynamic>?) ?? createdIntervention;
+          final subMap = (dataMap['subscription'] as Map<String, dynamic>?) ?? dataMap;
+          final pricingMap = (dataMap['pricing'] as Map<String, dynamic>?) ?? {};
+
+          final subId = (subMap['id'] as num?)?.toInt() ?? (dataMap['id'] as num?)?.toInt() ?? 0;
+          final firstPayment = (subMap['first_payment_amount'] as num?)?.toDouble() ?? (pricingMap['first_payment_amount'] as num?)?.toDouble();
+          final totalPrice = (subMap['price'] as num?)?.toDouble() ?? (pricingMap['final_price'] as num?)?.toDouble() ?? (dataMap['price'] as num?)?.toDouble() ?? 0.0;
+          
+          final double amountToPay;
+          if (_maintenancePaymentOption == 'full') {
+            amountToPay = totalPrice > 0 ? totalPrice : (firstPayment ?? 0.0);
+          } else {
+            amountToPay = (firstPayment != null && firstPayment > 0) ? firstPayment : totalPrice;
+          }
+
+          if (kDebugMode) {
+            debugPrint('🔍 [NewIntervention] Redirection vers SubscriptionPaymentScreen: subId=$subId, amountToPay=$amountToPay (option: $_maintenancePaymentOption)');
+          }
+
+          
+          SnackBarHelper.showSuccess(
+            context,
+            'Souscription créée. Redirection vers le paiement...',
+            emoji: '✅',
+          );
+          
+          final paymentResult = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SubscriptionPaymentScreen(
+                subscriptionId: subId,
+                subscriptionName: title,
+                amount: amountToPay,
+                offerId: int.parse(_selectedMaintenanceOffer!),
+                paymentOption: _maintenancePaymentOption,
+              ),
+
+            ),
+          );
+
+          if (mounted && (paymentResult == true)) {
+            Navigator.pop(context, true);
+          }
+          return;
+
+        }
+
         // Message personnalisé selon le type d'intervention
         String successMessage;
         if (_selectedType == 'installation') {
@@ -1133,6 +1333,15 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                               _selectedMaintenanceOffer = null;
                               _selectedRepairServiceId = null;
                               _selectedInstallationServiceId = null;
+                              final String lowVal = (value ?? '').toLowerCase().trim();
+                              if (lowVal == 'installation' ||
+                                  lowVal == 'repair' ||
+                                  lowVal == 'réparation' ||
+                                  lowVal == 'dépannage') {
+                                _promoCodeController.clear();
+                                _appliedPromo = null;
+                                _promoDiscount = 0.0;
+                              }
                               if (value == 'Maintenance') {
                                 _loadMaintenanceOffers();
                               }
@@ -1279,13 +1488,43 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                 // Offres de maintenance (visible seulement si type = Maintenance)
                 if (_selectedType == 'Maintenance') ...[
                   const SizedBox(height: 16),
-                  Text(
-                    'Offre de maintenance',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF0a543d),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Offre de maintenance',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF0a543d),
+                        ),
+                      ),
+                      if (_activeSubscriptions.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF86EFAC)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.stars,
+                                  size: 14, color: Color(0xFF16A34A)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${_activeSubscriptions.length} Abonnement(s) actif(s)',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF15803D),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -1317,6 +1556,24 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                               hintText: 'Sélectionnez une offre de maintenance',
                               hintStyle: GoogleFonts.poppins(
                                   color: Colors.grey, fontSize: 14),
+                              helperText: _isOfferLocked
+                                  ? 'Offre sélectionnée depuis les services (verrouillée)'
+                                  : null,
+                              helperStyle: GoogleFonts.poppins(
+                                color: const Color(0xFF0a543d),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              suffixIcon: _isOfferLocked
+                                  ? const Padding(
+                                      padding: EdgeInsets.only(right: 12.0),
+                                      child: Icon(
+                                        Icons.lock_outline,
+                                        color: Color(0xFF0a543d),
+                                        size: 20,
+                                      ),
+                                    )
+                                  : null,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide:
@@ -1326,6 +1583,11 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide:
                                     BorderSide(color: Colors.grey.shade300),
+                              ),
+                              disabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade400),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1361,11 +1623,34 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                             items: _maintenanceOffers.map((offer) {
                               final title = offer['title'] ?? '';
                               final price = offer['price'] ?? 0;
+
+                              final hasActiveSub = _activeSubscriptions.any(
+                                (s) =>
+                                    s['maintenance_offer_id'].toString() ==
+                                        offer['id'].toString() &&
+                                    ((s['equipment_count'] as int? ?? 1) -
+                                            (s['equipment_used'] as int? ??
+                                                0)) >
+                                        0,
+                              );
+
+                              final labelText = hasActiveSub
+                                  ? '$title — 0 FCFA (Inclus dans votre abonnement 🌟)'
+                                  : '$title - ${price.toStringAsFixed(0)} FCFA';
+
                               return DropdownMenuItem<String>(
                                 value: offer['id'].toString(),
                                 child: Text(
-                                  '$title - ${price.toStringAsFixed(0)} FCFA',
-                                  style: GoogleFonts.poppins(fontSize: 14),
+                                  labelText,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: hasActiveSub
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                    color: hasActiveSub
+                                        ? const Color(0xFF15803D)
+                                        : Colors.black87,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               );
@@ -1377,10 +1662,13 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                               }
                               return null;
                             },
-                            onChanged: (value) {
-                              setState(() => _selectedMaintenanceOffer = value);
-                              _updateQuotaForSelectedOffer(value);
-                            },
+                            onChanged: _isOfferLocked
+                                ? null
+                                : (value) {
+                                    setState(
+                                        () => _selectedMaintenanceOffer = value);
+                                    _updateQuotaForSelectedOffer(value);
+                                  },
                           ),
                   ),
                   // Affichage du prix total calculé
@@ -1571,75 +1859,195 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
                   ),
                 ],
 
-                // Option de paiement pour la maintenance
+                // Option de paiement pour la maintenance (précisée et masquée si couverte par abonnement)
                 if (_selectedType == 'Maintenance' && _selectedMaintenanceOffer != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Option de paiement',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.95),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
+                  Builder(builder: (context) {
+                    final equipCount = int.tryParse(_equipmentCountController.text) ?? 1;
+
+                    final availableSub = _getAvailableSubscriptionForOffer(_selectedMaintenanceOffer);
+                    final int? effectiveSubscriptionId = widget.preSelectedSubscriptionId ??
+                        _selectedSubscriptionId ??
+                        availableSub?['id'] as int?;
+
+                    final bool hasActiveSub = effectiveSubscriptionId != null &&
+                        (_maxEquipmentAllowed != null && _maxEquipmentAllowed! > 0);
+
+                    final quotaRemaining = _maxEquipmentAllowed ?? 0;
+                    final equipmentCovered = (hasActiveSub && quotaRemaining > 0)
+                        ? (equipCount <= quotaRemaining ? equipCount : quotaRemaining)
+                        : (hasActiveSub ? equipCount : 0);
+                    final equipmentToPay = equipCount - equipmentCovered;
+
+                    final bool isFullyCovered = hasActiveSub && equipmentToPay <= 0;
+                    final bool isPartiallyCovered = hasActiveSub && equipmentToPay > 0;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        RadioListTile<String>(
-                          title: Text(
-                            'Acompte (50%) et Solde après travaux',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: _maintenancePaymentOption == 'split'
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
+                        const SizedBox(height: 16),
+                        Text(
+                          isPartiallyCovered
+                              ? 'Option de paiement ($equipmentToPay équipement(s) supplémentaire(s))'
+                              : 'Option de paiement',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (isFullyCovered) ...[
+                          // Un abonnement existe et couvre l'intervention :
+                          // On retire les modalités de paiement (radio buttons) et on le précise clairement !
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF86EFAC)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.03),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF16A34A),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.workspace_premium,
+                                      color: Colors.white, size: 22),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Inclus dans votre abonnement',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF15803D),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Cette intervention est couverte par votre contrat d\'abonnement actif. Aucun acompte ni solde n\'est à régler.',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          height: 1.4,
+                                          color: const Color(0xFF166534),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          value: 'split',
-                          groupValue: _maintenancePaymentOption,
-                          activeColor: const Color(0xFF0a543d),
-                          onChanged: (value) {
-                            setState(() => _maintenancePaymentOption = value!);
-                          },
-                        ),
-                        Divider(height: 1, color: Colors.grey.shade200),
-                        RadioListTile<String>(
-                          title: Text(
-                            'Payer la totalité maintenant (100%)',
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              fontWeight: _maintenancePaymentOption == 'full'
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
+                        ] else ...[
+                          if (isPartiallyCovered) ...[
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.orange.shade200),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline,
+                                      color: Colors.orange.shade800, size: 20),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      '$equipmentCovered équipement(s) couvert(s) par votre abonnement. Choisissez la modalité de paiement pour le(s) $equipmentToPay équipement(s) supplémentaire(s) :',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.orange.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.95),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                RadioListTile<String>(
+                                  title: Text(
+                                    'Acompte (50%) et Solde après travaux',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight:
+                                          _maintenancePaymentOption == 'split'
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                    ),
+                                  ),
+                                  value: 'split',
+                                  groupValue: _maintenancePaymentOption,
+                                  activeColor: const Color(0xFF0a543d),
+                                  onChanged: (value) {
+                                    setState(
+                                        () => _maintenancePaymentOption = value!);
+                                  },
+                                ),
+                                Divider(height: 1, color: Colors.grey.shade200),
+                                RadioListTile<String>(
+                                  title: Text(
+                                    'Payer la totalité maintenant (100%)',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight:
+                                          _maintenancePaymentOption == 'full'
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                    ),
+                                  ),
+                                  value: 'full',
+                                  groupValue: _maintenancePaymentOption,
+                                  activeColor: const Color(0xFF0a543d),
+                                  onChanged: (value) {
+                                    setState(
+                                        () => _maintenancePaymentOption = value!);
+                                  },
+                                ),
+                              ],
                             ),
                           ),
-                          value: 'full',
-                          groupValue: _maintenancePaymentOption,
-                          activeColor: const Color(0xFF0a543d),
-                          onChanged: (value) {
-                            setState(() => _maintenancePaymentOption = value!);
-                          },
-                        ),
+                        ],
                       ],
-                    ),
-                  ),
+                    );
+                  }),
                 ],
+
 
                 // Sélection du service d'installation (pour type installation)
                 if (_selectedType == 'installation') ...[
@@ -2599,6 +3007,14 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
   }
 
   Widget _buildPromoCodeSection() {
+    final String currentType = (_selectedType ?? '').toLowerCase().trim();
+    if (currentType == 'installation' ||
+        currentType == 'repair' ||
+        currentType == 'réparation' ||
+        currentType == 'dépannage') {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -104,15 +104,33 @@ class _TabShell extends StatefulWidget {
 
 class _TabShellState extends State<_TabShell>
     with AutomaticKeepAliveClientMixin {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Navigator(
-      onGenerateRoute: (_) => MaterialPageRoute(
-        builder: (_) => widget.child,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final nav = _navigatorKey.currentState;
+        if (nav != null && nav.canPop()) {
+          nav.pop();
+        } else {
+          final rootNav = Navigator.of(context, rootNavigator: true);
+          if (rootNav.canPop()) {
+            rootNav.pop();
+          }
+        }
+      },
+      child: Navigator(
+        key: _navigatorKey,
+        onGenerateRoute: (_) => MaterialPageRoute(
+          builder: (_) => widget.child,
+        ),
       ),
     );
   }

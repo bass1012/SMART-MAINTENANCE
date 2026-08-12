@@ -18,19 +18,24 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
   Future<List<Map<String, dynamic>>> getPendingSubscriptionPayments() async {
     final subscriptions = await getSubscriptions();
     return subscriptions
-        .where((s) => s['payment_status'] == 'pending' && s['status'] == 'active')
+        .where((s) =>
+            s['payment_status'] == 'pending' &&
+            (s['status'] == 'active' || s['status'] == 'pending_payment'))
         .toList();
   }
 
   @override
-  Future<Map<String, dynamic>> getSubscriptionDetails(int subscriptionId) async {
-    final response = await _apiService.get('/api/customer/subscriptions/$subscriptionId');
+  Future<Map<String, dynamic>> getSubscriptionDetails(
+      int subscriptionId) async {
+    final response =
+        await _apiService.get('/api/customer/subscriptions/$subscriptionId');
     return jsonDecode(response.body);
   }
 
   @override
   Future<Map<String, dynamic>> cancelSubscription(int subscriptionId) async {
-    final response = await _apiService.post('/api/customer/subscriptions/$subscriptionId/cancel');
+    final response = await _apiService
+        .post('/api/customer/subscriptions/$subscriptionId/cancel');
     return jsonDecode(response.body);
   }
 
@@ -39,10 +44,59 @@ class SubscriptionRepositoryImpl implements SubscriptionRepository {
     required int serviceId,
     required String serviceType,
   }) async {
-    final response = await _apiService.post('/api/customer/subscriptions', body: {
+    final response =
+        await _apiService.post('/api/customer/subscriptions', body: {
       'service_id': serviceId,
       'service_type': serviceType,
     });
     return jsonDecode(response.body);
   }
+
+  @override
+  Future<Map<String, dynamic>> createMaintenanceSubscription({
+    required int maintenanceOfferId,
+    required int equipmentCount,
+    DateTime? firstInterventionDate,
+    String? promoCode,
+    Map<String, dynamic>? interventionData,
+  }) async {
+    final response =
+        await _apiService.post('/api/customer/subscriptions', body: {
+      'maintenance_offer_id': maintenanceOfferId,
+      'equipment_count': equipmentCount,
+      if (firstInterventionDate != null)
+        'first_intervention_date':
+            firstInterventionDate.toIso8601String().split('T').first,
+      if (promoCode != null) 'promo_code': promoCode,
+      if (interventionData != null) ...interventionData,
+    });
+    return jsonDecode(response.body);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createAnnualSubscription({
+    required int maintenanceOfferId,
+    required int equipmentCount,
+    required DateTime firstInterventionDate,
+    int? splitId,
+    Map<String, dynamic>? interventionData,
+  }) async {
+    final response =
+        await _apiService.post('/api/customer/subscriptions/annual', body: {
+      'maintenance_offer_id': maintenanceOfferId,
+      'equipment_count': equipmentCount,
+      'first_intervention_date':
+          firstInterventionDate.toIso8601String().split('T').first,
+      if (splitId != null) 'split_id': splitId,
+      if (interventionData != null) ...interventionData,
+    });
+    return jsonDecode(response.body);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getReferralReward() async {
+    final response = await _apiService.get('/api/customer/referral-reward');
+    return jsonDecode(response.body);
+  }
 }
+

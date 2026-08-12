@@ -292,7 +292,7 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
                     _buildSettingTile(
                       icon: Icons.info_outline,
                       title: 'À propos',
-                      subtitle: 'Version 1.0.0',
+                      subtitle: _appVersion.isNotEmpty ? 'Version $_appVersion' : 'Version 1.0.0',
                       onTap: () => _showAboutDialog(),
                     ),
 

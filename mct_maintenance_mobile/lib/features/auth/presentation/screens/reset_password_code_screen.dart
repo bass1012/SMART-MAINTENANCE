@@ -28,6 +28,8 @@ class _ResetPasswordCodeScreenState extends State<ResetPasswordCodeScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
+  bool get _isPhone => _email.isNotEmpty && !_email.contains('@');
+
   @override
   void initState() {
     super.initState();
@@ -211,7 +213,9 @@ class _ResetPasswordCodeScreenState extends State<ResetPasswordCodeScreen> {
                               ],
                             ),
                             child: Icon(
-                              _codeVerified ? Icons.lock_reset : Icons.security,
+                              _codeVerified
+                                  ? Icons.lock_outline
+                                  : Icons.shield_outlined,
                               size: 80,
                               color: Colors.white,
                             ),
@@ -243,7 +247,9 @@ class _ResetPasswordCodeScreenState extends State<ResetPasswordCodeScreen> {
                           Text(
                             _codeVerified
                                 ? 'Choisissez un nouveau mot de passe sécurisé'
-                                : 'Entrez le code à 6 chiffres reçu par email',
+                                : _isPhone
+                                    ? 'Entrez le code à 6 chiffres reçu par SMS'
+                                    : 'Entrez le code à 6 chiffres reçu par email / SMS',
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               color: Colors.white.withValues(alpha: 0.9),
@@ -318,7 +324,10 @@ class _ResetPasswordCodeScreenState extends State<ResetPasswordCodeScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.email, color: Color(0xFF0a543d)),
+                Icon(
+                  _isPhone ? Icons.phone_android : Icons.email,
+                  color: const Color(0xFF0a543d),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(

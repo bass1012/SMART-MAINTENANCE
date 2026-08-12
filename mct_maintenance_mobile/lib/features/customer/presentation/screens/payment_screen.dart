@@ -428,6 +428,18 @@ class _PaymentScreenState extends State<PaymentScreen>
       }
       _currentOrderId = orderId;
 
+      if (widget.amount <= 0) {
+        _isWaitingForPayment = true;
+        await _checkPaymentStatus();
+        if (_isWaitingForPayment) {
+          _isWaitingForPayment = false;
+          _currentOrderId = null;
+          throw Exception(
+              'Le serveur n\'a pas confirmé la commande gratuite.');
+        }
+        return;
+      }
+
       if (kDebugMode) {
         debugPrint(
             '💳 Initialisation paiement FineoPay pour commande #$orderId (étape ${widget.paymentStep})');
@@ -553,23 +565,32 @@ class _PaymentScreenState extends State<PaymentScreen>
 
       if (response['success'] == true) {
         final order = response['data'] ?? {};
-        final paymentStatus = order['paymentStatus'] ?? order['payment_status'] ?? order['status'];
-        final firstPaymentStatus = order['firstPaymentStatus'] ?? order['first_payment_status'];
-        final secondPaymentStatus = order['secondPaymentStatus'] ?? order['second_payment_status'];
+        final paymentStatus = order['paymentStatus'] ??
+            order['payment_status'] ??
+            order['status'];
+        final firstPaymentStatus =
+            order['firstPaymentStatus'] ?? order['first_payment_status'];
+        final secondPaymentStatus =
+            order['secondPaymentStatus'] ?? order['second_payment_status'];
         bool isPaid = false;
         if (widget.paymentStep == 2) {
           // SECOND PAIEMENT (50% solde)
           isPaid = secondPaymentStatus == 'paid' || paymentStatus == 'paid';
         } else if (widget.paymentStep == 1) {
           // PREMIER PAIEMENT (50% acompte)
-          isPaid = firstPaymentStatus == 'paid' || paymentStatus == 'partial' || paymentStatus == 'paid';
+          isPaid = firstPaymentStatus == 'paid' ||
+              paymentStatus == 'partial' ||
+              paymentStatus == 'paid';
         } else {
           // PAIEMENT 100% INTÉGRAL
-          isPaid = paymentStatus == 'paid' || secondPaymentStatus == 'paid' || order['status'] == 'completed';
+          isPaid = paymentStatus == 'paid' ||
+              secondPaymentStatus == 'paid' ||
+              order['status'] == 'completed';
         }
 
         if (kDebugMode) {
-          debugPrint('📊 Statut du paiement (étape ${widget.paymentStep}): $paymentStatus, 1er: $firstPaymentStatus, 2nd: $secondPaymentStatus, isPaid: $isPaid');
+          debugPrint(
+              '📊 Statut du paiement (étape ${widget.paymentStep}): $paymentStatus, 1er: $firstPaymentStatus, 2nd: $secondPaymentStatus, isPaid: $isPaid');
         }
 
         if (isPaid) {
@@ -754,7 +775,8 @@ class _PaymentScreenState extends State<PaymentScreen>
       decoration: BoxDecoration(
         color: const Color(0xFF0a543d).withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF0a543d).withValues(alpha: 0.2)),
+        border:
+            Border.all(color: const Color(0xFF0a543d).withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [

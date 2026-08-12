@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/features/interventions/domain/repositories/intervention_repository.dart';
 import 'package:mct_maintenance_mobile/services/connectivity_service.dart';
@@ -54,42 +55,146 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
   @override
   void initState() {
     super.initState();
-    _addEquipment();
+    _loadExistingDiagnosticReport();
+    if (_equipments.isEmpty) {
+      _addEquipment();
+    }
   }
 
-  @override
-  void dispose() {
-    for (var eq in _equipments) {
-      final Map<String, TextEditingController> ctrlMap = eq['controllers'];
-      for (var controller in ctrlMap.values) {
-        controller.dispose();
+  void _loadExistingDiagnosticReport() {
+    Map<String, dynamic> diag = {};
+
+    if (widget.intervention['diagnostic_report'] != null) {
+      final r = widget.intervention['diagnostic_report'];
+      if (r is Map) diag = Map<String, dynamic>.from(r);
+      if (r is String) {
+        try {
+          diag = json.decode(r);
+        } catch (_) {}
+      }
+    } else if (widget.intervention['diagnosticReports'] is List &&
+        (widget.intervention['diagnosticReports'] as List).isNotEmpty) {
+      final first = (widget.intervention['diagnosticReports'] as List)[0];
+      if (first is Map) diag = Map<String, dynamic>.from(first);
+    } else if (widget.intervention['report_data'] != null) {
+      final r = widget.intervention['report_data'];
+      if (r is Map) diag = Map<String, dynamic>.from(r);
+      if (r is String) {
+        try {
+          diag = json.decode(r);
+        } catch (_) {}
+      }
+    } else {
+      diag = widget.intervention;
+    }
+
+    if (diag.isEmpty) return;
+
+    final problem = diag['problem_description'] ?? diag['work_description'] ?? diag['description'];
+    if (problem != null) _problemController.text = problem.toString();
+
+    final materials = diag['materials_needed'];
+    if (materials != null) _materialsNeededController.text = materials.toString();
+
+    final solution = diag['recommended_solution'];
+    if (solution != null) _solutionController.text = solution.toString();
+
+    final duration = diag['estimated_duration'] ?? diag['duration'];
+    if (duration != null) _durationController.text = duration.toString();
+
+    final notes = diag['notes'] ?? diag['observations'];
+    if (notes != null) _notesController.text = notes.toString();
+
+    final urgency = diag['urgency_level'];
+    if (urgency != null && _urgencyLevels.contains(urgency.toString())) {
+      _selectedUrgency = urgency.toString();
+    }
+
+    // Pièces
+    final partsData = diag['parts_needed'] ?? diag['spare_parts'] ?? diag['materials_used'];
+    if (partsData != null) {
+      List parsedParts = [];
+      if (partsData is String) {
+        try {
+          parsedParts = json.decode(partsData);
+        } catch (_) {}
+      } else if (partsData is List) {
+        parsedParts = partsData;
+      }
+      _partsList.clear();
+      for (var item in parsedParts) {
+        if (item is Map) {
+          _partsList.add(Map<String, dynamic>.from(item));
+        } else if (item != null && item.toString().isNotEmpty) {
+          _partsList.add({'name': item.toString(), 'quantity': 1});
+        }
       }
     }
-    _problemController.dispose();
-    _materialsNeededController.dispose();
-    _solutionController.dispose();
-    _durationController.dispose();
-    _notesController.dispose();
-    super.dispose();
+
+    // Équipements
+    final eqData = diag['equipments'];
+    List parsedEq = [];
+    if (eqData is String) {
+      try {
+        parsedEq = json.decode(eqData);
+      } catch (_) {}
+    } else if (eqData is List) {
+      parsedEq = eqData;
+    }
+
+    if (parsedEq.isNotEmpty) {
+      _equipments.clear();
+      for (var item in parsedEq) {
+        if (item is Map) {
+          _addEquipment(initialData: Map<String, dynamic>.from(item));
+        }
+      }
+    } else if (diag['pression'] != null || diag['intensite'] != null || diag['equipment_brand'] != null) {
+      _equipments.clear();
+      _addEquipment(initialData: diag);
+    }
   }
 
-  void _addEquipment() {
+  void _addEquipment({Map<String, dynamic>? initialData}) {
     final newIndex = _equipments.length + 1;
+    final rawType = (initialData?['type'] ?? initialData?['equipment_type'])?.toString() ?? 'Mural';
+    String matchedType = 'Mural';
+    for (var t in _equipmentTypes) {
+      if (t.toLowerCase() == rawType.toLowerCase()) {
+        matchedType = t;
+        break;
+      }
+    }
+
+    final name = (initialData?['name'] ?? initialData?['equipment_name'])?.toString() ?? '';
+    final brand = (initialData?['brand'] ?? initialData?['equipment_brand'])?.toString() ?? '';
+    final location = initialData?['location']?.toString() ?? '';
+    final state = (initialData?['state'] ?? initialData?['equipment_state'])?.toString() ?? '';
+    final tested = initialData?['tested'] != null
+        ? (initialData!['tested'] == true || initialData['tested'] == 'Oui' || initialData['tested'] == 1)
+        : true;
+
+    final bIntensite = (initialData?['before_intensite'] ?? initialData?['intensite'])?.toString() ?? '';
+    final bTension = (initialData?['before_tension'] ?? initialData?['tension'])?.toString() ?? '';
+    final bFreon = (initialData?['before_freon'] ?? initialData?['freon'] ?? initialData?['type_freon'])?.toString() ?? '';
+    final bPression = (initialData?['before_pression'] ?? initialData?['pression'])?.toString() ?? '';
+    final bPuissance = (initialData?['before_puissance'] ?? initialData?['puissance'])?.toString() ?? '';
+
     setState(() {
       _equipments.add({
         'index': newIndex,
-        'type': 'Mural',
-        'tested': true,
+        'type': matchedType,
+        'tested': tested,
         'controllers': {
-          'name': TextEditingController(),
-          'brand': TextEditingController(),
-          'location': TextEditingController(),
-          'state': TextEditingController(), // Vide par défaut
-          'before_intensite': TextEditingController(),
-          'before_tension': TextEditingController(),
-          'before_freon': TextEditingController(),
-          'before_pression': TextEditingController(),
-          'before_puissance': TextEditingController(),
+          'name': TextEditingController(text: name),
+          'brand': TextEditingController(text: brand),
+          'location': TextEditingController(text: location),
+          'state': TextEditingController(text: state),
+          'before_intensite': TextEditingController(text: bIntensite),
+          'before_tension': TextEditingController(text: bTension),
+          'before_freon': TextEditingController(text: bFreon),
+          'before_pression': TextEditingController(text: bPression),
+          'before_puissance': TextEditingController(text: bPuissance),
         },
       });
     });
@@ -915,7 +1020,7 @@ class _DiagnosticReportScreenState extends State<DiagnosticReportScreen> {
                   child: TextFormField(
                     controller: bFreonCtrl,
                     decoration: _buildRoundedInputDecoration(
-                      labelText: 'Type de Fréon',
+                      labelText: 'Fréon',
                       hintText: 'Ex: R410A, R32',
                       prefixIcon: const Icon(Icons.cloud_outlined, size: 18),
                     ),

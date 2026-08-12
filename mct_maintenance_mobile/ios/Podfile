@@ -41,9 +41,38 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     
-    # Fix pour Firebase - Permettre les imports non-modulaires
     target.build_configurations.each do |config|
+      # Fix pour Firebase - Permettre les imports non-modulaires
       config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+
+      # Fix simulateur Apple Silicon (Debug) :
+      # Generated.xcconfig exclut arm64 du simulateur (EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386 arm64)
+      # On override pour ne garder que i386, autorisant arm64 natif sur M1/M2/M3
+      if config.name == 'Debug'
+        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
+      end
+
+      # Fix App Store (Release/Archive) :
+      # Exclure arm64 simulateur pour que objective_c.framework soit taggé IOS (pas IOSSIMULATOR)
+      if config.name == 'Release'
+        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+        config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+      end
     end
   end
+
+  # Override aussi sur le projet Runner principal (Generated.xcconfig a priorité basse)
+  # Les build settings du projet Xcode ont priorité sur les xcconfig inclus
+  runner_project = installer.aggregate_targets.first.user_project
+  runner_project.targets.select { |t| t.name == 'Runner' }.each do |target|
+    target.build_configurations.each do |config|
+      if config.name == 'Debug'
+        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
+      end
+      if config.name == 'Release'
+        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+      end
+    end
+  end
+  runner_project.save
 end

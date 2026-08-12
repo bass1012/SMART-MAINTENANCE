@@ -51,9 +51,10 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     'batterie_evaporateur': false,
     'bacs_condensat': false,
     'turbine': false,
-    'volets_air': false,
+    'condenseur': false,
     'carrosserie_evaporateur': false,
     'tuyauterie_evacuation': false,
+    'parties_electriques': false,
   };
 
   static const Map<String, String> _taskLabels = {
@@ -61,10 +62,11 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     'batterie_evaporateur': 'Nettoyage de la batterie évaporateur',
     'bacs_condensat': 'Nettoyage des bacs à condensat',
     'turbine': 'Nettoyage de la turbine',
-    'volets_air': 'Nettoyage des volets d\'air',
+    'condenseur': 'Nettoyage du condenseur',
     'carrosserie_evaporateur': 'Nettoyage de la carrosserie évaporateur',
     'tuyauterie_evacuation':
         'Soufflement à forte pression de la tuyauterie d\'évacuation des condensats',
+    'parties_electriques': 'Nettoyage des parties électriques',
   };
 
   // === TYPES D'ÉQUIPEMENT ===
@@ -133,11 +135,12 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
     if (mounted) {
       setState(() {
-        // 1. Charger l'heure de début
+        // 1. Charger l'heure de début (depuis started_at API ou SharedPreferences)
         if (_startTime == null) {
           String? startedAtStr = _intervention['started_at'] ??
-              prefs.getString('intervention_${id}_started_at') ??
-              _intervention['created_at'];
+              prefs.getString('intervention_${id}_started_at');
+          startedAtStr ??= _intervention['created_at'];
+
           if (startedAtStr != null) {
             try {
               final startedAt = DateTime.parse(startedAtStr).toLocal();
@@ -146,7 +149,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           }
         }
 
-        // 2. Charger l'heure de fin (par défaut = l'heure actuelle MAINTENANT)
+        // 2. Charger l'heure de fin (depuis completed_at ou l'heure actuelle MAINTENANT)
         if (_endTime == null) {
           String? completedAtStr = _intervention['completed_at'] ??
               prefs.getString('intervention_${id}_completed_at');
@@ -162,23 +165,12 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
           }
         }
 
-        // 3. Si _startTime est toujours nul, déduire 30 minutes par rapport à _endTime
-        if (_startTime == null) {
+        // 3. Si _startTime est toujours nul (aucun début enregistré), déduire 30 minutes par rapport à _endTime
+        if (_startTime == null && _endTime != null) {
           final endDt = DateTime(now.year, now.month, now.day, _endTime!.hour, _endTime!.minute);
           final startDt = endDt.subtract(const Duration(minutes: 30));
           _startTime = TimeOfDay(hour: startDt.hour, minute: startDt.minute);
           prefs.setString('intervention_${id}_started_at', startDt.toIso8601String());
-        }
-
-        // 4. Si _startTime == _endTime ou si _endTime est inférieur à _startTime (ex: ouvert instantanément)
-        if (_startTime != null && _endTime != null) {
-          final startMins = _startTime!.hour * 60 + _startTime!.minute;
-          final endMins = _endTime!.hour * 60 + _endTime!.minute;
-          if (endMins <= startMins) {
-            final endDt = DateTime(now.year, now.month, now.day, _endTime!.hour, _endTime!.minute);
-            final startDt = endDt.subtract(const Duration(minutes: 30));
-            _startTime = TimeOfDay(hour: startDt.hour, minute: startDt.minute);
-          }
         }
       });
     }
@@ -198,9 +190,17 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
   Map<String, dynamic> _createEquipmentMap(int index,
       {Map<String, dynamic>? initialData}) {
-    final type =
+    final rawType =
         (initialData?['type'] ?? initialData?['equipment_type'])?.toString() ??
-            '';
+            'Mural';
+    String matchedType = 'Mural';
+    for (var t in _equipmentTypes) {
+      if (t.toLowerCase() == rawType.toLowerCase()) {
+        matchedType = t;
+        break;
+      }
+    }
+
     final brand = (initialData?['brand'] ?? initialData?['equipment_brand'])
             ?.toString() ??
         '';
@@ -217,7 +217,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                 ?.toString() ??
             '';
     final beforeFreon =
-        (initialData?['before_freon'] ?? initialData?['freon'])?.toString() ??
+        (initialData?['before_freon'] ?? initialData?['freon'] ?? initialData?['type_freon'])?.toString() ??
             '';
     final beforePression =
         (initialData?['before_pression'] ?? initialData?['pression'])
@@ -235,6 +235,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     final name =
         (initialData?['name'] ?? initialData?['equipment_name'])?.toString() ??
             '';
+    final tested = initialData?['tested'] != null
+        ? (initialData!['tested'] == true || initialData['tested'] == 'Oui' || initialData['tested'] == 1)
+        : true;
 
     final Map<String, TextEditingController> controllers = {
       'brand': TextEditingController(text: brand),
@@ -255,8 +258,8 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
     return {
       'index': index,
-      'type': type,
-      'tested': initialData?['tested'],
+      'type': matchedType,
+      'tested': tested,
       'controllers': controllers,
     };
   }
@@ -271,15 +274,20 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   }
 
   void _loadExistingReportData() {
-    if (_intervention['report_data'] == null) return;
     try {
       final reportData = _intervention['report_data'];
       Map<String, dynamic> data = {};
 
       if (reportData is String && reportData.isNotEmpty) {
-        data = json.decode(reportData);
+        try {
+          data = json.decode(reportData);
+        } catch (_) {}
       } else if (reportData is Map) {
         data = Map<String, dynamic>.from(reportData);
+      }
+
+      if (data.isEmpty && _intervention.isNotEmpty) {
+        data = _intervention;
       }
 
       if (data.isEmpty) return;
@@ -335,7 +343,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       if (data['tasks_done'] != null && data['tasks_done'] is Map) {
         final tasks = Map<String, dynamic>.from(data['tasks_done']);
         tasks.forEach((key, value) {
-          if (_tasksDone.containsKey(key)) {
+          if (key == 'volets_air') {
+            _tasksDone['condenseur'] = value == true;
+          } else if (_tasksDone.containsKey(key)) {
             _tasksDone[key] = value == true;
           }
         });
@@ -474,9 +484,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     if (_startTime == null || _endTime == null) return 0;
     final startMinutes = _startTime!.hour * 60 + _startTime!.minute;
     final endMinutes = _endTime!.hour * 60 + _endTime!.minute;
-    final diff = endMinutes - startMinutes;
+    int diff = endMinutes - startMinutes;
     if (diff < 0) {
-      return 0;
+      diff += 1440; // Gère le passage de minuit (ex: 23:45 à 00:30)
     }
     return diff;
   }
@@ -634,8 +644,8 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
   }
 
   bool _validateFinalPhase() {
-    if (_tasksDone.values.any((done) => !done)) {
-      SnackBarHelper.showWarning(context, 'Cochez tous les travaux effectués');
+    if (_tasksDone.values.every((done) => !done)) {
+      SnackBarHelper.showWarning(context, 'Cochez au moins un travail effectué');
       return false;
     }
     if (_photosAfter.isEmpty) {
@@ -870,9 +880,9 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title, IconData icon) {
+  Widget _buildSectionTitle(String title, IconData icon, {Widget? trailing}) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0a543d).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
@@ -891,6 +901,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
               ),
             ),
           ),
+          if (trailing != null) trailing,
         ],
       ),
     );
@@ -1317,7 +1328,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                   children: [
                     Expanded(
                         child: _buildTechField(
-                            'Type de Fréon', 'before_freon', equipment)),
+                            'Fréon', 'before_freon', equipment)),
                     const SizedBox(width: 12),
                     const Expanded(child: SizedBox()),
                   ],
@@ -1384,7 +1395,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
                     children: [
                       Expanded(
                           child: _buildTechField(
-                              'Type de Fréon', 'after_freon', equipment)),
+                              'Fréon', 'after_freon', equipment)),
                       const SizedBox(width: 12),
                       const Expanded(child: SizedBox()),
                     ],
@@ -1499,7 +1510,34 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
                         // ── Point 7 : Travaux effectués ──
                         _buildSectionTitle(
-                            '7. Travaux effectués', Icons.checklist),
+                          '7. Travaux effectués',
+                          Icons.checklist,
+                          trailing: TextButton.icon(
+                            onPressed: () {
+                              final allChecked = _tasksDone.values.every((v) => v);
+                              setState(() {
+                                _tasksDone.updateAll((key, value) => !allChecked);
+                              });
+                            },
+                            icon: Icon(
+                              _tasksDone.values.every((v) => v)
+                                  ? Icons.deselect
+                                  : Icons.select_all,
+                              size: 18,
+                              color: const Color(0xFF0a543d),
+                            ),
+                            label: Text(
+                              _tasksDone.values.every((v) => v)
+                                  ? 'Tout décocher'
+                                  : 'Tout cocher',
+                              style: const TextStyle(
+                                color: Color(0xFF0a543d),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 12),
                         Card(
                           elevation: 2,

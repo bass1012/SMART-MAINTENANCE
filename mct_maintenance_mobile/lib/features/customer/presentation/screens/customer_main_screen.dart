@@ -36,6 +36,7 @@ import 'package:mct_maintenance_mobile/services/notification_navigation_service.
 import 'package:provider/provider.dart';
 import 'package:mct_maintenance_mobile/widgets/common/loading_indicator.dart';
 import 'package:mct_maintenance_mobile/widgets/common/responsive_background.dart';
+import 'package:mct_maintenance_mobile/widgets/customer/contact_form_bottom_sheet.dart';
 
 class CustomerMainScreen extends StatefulWidget {
   const CustomerMainScreen({super.key});
@@ -393,6 +394,9 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
     }
 
     try {
+      // Capturer le repository AVANT les awaits (évite use_build_context_synchronously)
+      final interventionRepository = context.read<InterventionRepository>();
+
       // Récupérer les interventions ignorées (Plus tard)
       final prefs = await SharedPreferences.getInstance();
       final ignoredIds =
@@ -400,7 +404,6 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
       if (kDebugMode) debugPrint('📋 Interventions ignorées: $ignoredIds');
 
       if (kDebugMode) debugPrint('📞 Appel API getUnratedInterventions...');
-      final interventionRepository = context.read<InterventionRepository>();
       final unratedInterventions =
           await interventionRepository.getUnratedInterventions();
 
@@ -497,6 +500,139 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
         SnackBarHelper.showError(context, 'Erreur lors du chargement: $e');
       }
     }
+  }
+
+  bool get _isOutsideBusinessHours {
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    final currentMinute = now.minute;
+    final dayOfWeek = now.weekday; // 1 = Lundi, 7 = Dimanche
+
+    if (dayOfWeek == 7) {
+      return true; // Dimanche
+    } else if (dayOfWeek == 6) {
+      // Samedi : 9h à 12h
+      if (currentHour < 9 || currentHour >= 12) {
+        return true;
+      }
+    } else {
+      // Lundi à Vendredi : 8h à 17h30
+      if (currentHour < 8 ||
+          currentHour > 17 ||
+          (currentHour == 17 && currentMinute > 30)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Widget _buildCallbackBanner() {
+    final bool isClosed = _isOutsideBusinessHours;
+
+    // Ne s'afficher QUE lorsque le service est fermé (hors-horaires d'ouverture)
+    if (!isClosed) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: ResponsiveHelper.getHorizontalPadding(context).clamp(24.0, 48.0),
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isClosed
+                ? [Colors.orange.shade50, Colors.amber.shade50]
+                : [
+                    const Color(0xFF0a543d).withValues(alpha: 0.1),
+                    const Color(0xFF0d6b4d).withValues(alpha: 0.05),
+                  ],
+          ),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isClosed ? Colors.orange.shade200 : const Color(0xFF0a543d).withValues(alpha: 0.2),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isClosed ? Colors.orange.shade100 : const Color(0xFF0a543d).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isClosed ? Icons.access_time_filled_rounded : Icons.headset_mic_rounded,
+                color: isClosed ? Colors.orange.shade900 : const Color(0xFF0a543d),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isClosed ? 'Support fermé (Hors-horaires)' : 'Besoin d\'assistance téléphonique ?',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: isClosed ? Colors.orange.shade900 : const Color(0xFF0a543d),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isClosed
+                        ? 'Laissez une demande de rappel pour être recontacté dès la réouverture.'
+                        : 'Laissez vos coordonnées pour qu\'un conseiller vous rappelle gratuitement.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: isClosed ? Colors.orange.shade800 : Colors.black87,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () {
+                ContactFormBottomSheet.show(context, user: _user);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0a543d),
+                foregroundColor: Colors.white,
+                elevation: 2,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.phone_callback, size: 16),
+              label: Text(
+                'Rappel',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadUnreadNotifications() async {
@@ -729,7 +865,12 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
+
+                      // Bannière / Carte Demande de Rappel
+                      _buildCallbackBanner(),
+
+                      const SizedBox(height: 16),
 
                       // Bannière défilante - Horaires service client
                       _buildScrollingBanner(),
@@ -2052,9 +2193,10 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
               ),
               borderRadius: BorderRadius.circular(24),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 // Icône
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -2217,7 +2359,7 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
                                     _checkUnratedInterventions();
                                   }
                                 } catch (e) {
-                                  if (mounted) {
+                                  if (context.mounted) {
                                     SnackBarHelper.showError(
                                       context,
                                       'Erreur: $e',
@@ -2247,8 +2389,9 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 // Widget pour le texte défilant animé

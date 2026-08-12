@@ -168,7 +168,7 @@ class _FakeInterventionRepository implements InterventionRepository {
   @override
   Future<Map<String, dynamic>> getTechnicianReports() async => {};
   @override
-  Future<String> downloadTechnicianReport(int id) async => '';
+  Future<List<int>> downloadTechnicianReport(int id) async => [];
   @override
   Future<Map<String, dynamic>> getTechnicianReviews() async => {};
   @override
@@ -180,6 +180,26 @@ class _FakeInterventionRepository implements InterventionRepository {
 }
 
 class _FakeSubscriptionRepository implements SubscriptionRepository {
+  @override
+  Future<Map<String, dynamic>> createMaintenanceSubscription({
+    required int maintenanceOfferId,
+    required int equipmentCount,
+    DateTime? firstInterventionDate,
+    String? promoCode,
+    Map<String, dynamic>? interventionData,
+  }) async =>
+      {};
+
+  @override
+  Future<Map<String, dynamic>> createAnnualSubscription({
+    required int maintenanceOfferId,
+    required int equipmentCount,
+    required DateTime firstInterventionDate,
+    int? splitId,
+    Map<String, dynamic>? interventionData,
+  }) async =>
+      {};
+
   @override
   Future<List<Map<String, dynamic>>> getPendingSubscriptionPayments() async =>
       [];
@@ -193,6 +213,8 @@ class _FakeSubscriptionRepository implements SubscriptionRepository {
   Future<Map<String, dynamic>> createServiceSubscription(
           {required int serviceId, required String serviceType}) async =>
       {};
+  @override
+  Future<Map<String, dynamic>> getReferralReward() async => {};
 }
 
 class _FakePaymentRepository implements PaymentRepository {
@@ -239,7 +261,7 @@ class _FakePaymentRepository implements PaymentRepository {
           bool? autoRedirect}) async =>
       {};
   @override
-  Future<List<int>> downloadInvoicePDF(String orderId) async => [];
+  Future<List<int>> downloadInvoicePDF(int orderId) async => [];
   @override
   Future<Map<String, dynamic>> verifyOrderPayment(int orderId) async => {};
   @override
@@ -247,8 +269,8 @@ class _FakePaymentRepository implements PaymentRepository {
           int interventionId) async =>
       {};
   @override
-  Future<Map<String, dynamic>> verifySubscriptionPayment(
-          int subscriptionId) async =>
+  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId,
+          {String? reference}) async =>
       {};
 }
 

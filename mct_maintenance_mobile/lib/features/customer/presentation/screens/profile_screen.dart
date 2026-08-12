@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/models/user_model.dart';
 import 'package:mct_maintenance_mobile/features/auth/domain/repositories/auth_repository.dart';
@@ -13,6 +14,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:mct_maintenance_mobile/utils/avatar_helper.dart';
 import 'package:mct_maintenance_mobile/utils/snackbar_helper.dart';
+import 'package:mct_maintenance_mobile/features/customer/domain/repositories/subscription_repository.dart';
+import 'package:mct_maintenance_mobile/widgets/common/skeleton_loader_widget.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -67,6 +70,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  Map<String, dynamic>? _referralRewardInfo;
+
   Future<void> _loadUserProfile() async {
     setState(() => _isLoading = true);
 
@@ -85,12 +90,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _addressController.text = _user?.address ?? '';
           _isLoading = false;
         });
+        _loadReferralReward();
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         SnackBarHelper.showError(context, e.toString());
       }
+    }
+  }
+
+  Future<void> _loadReferralReward() async {
+    try {
+      final subRepo = context.read<SubscriptionRepository>();
+      final rewardData = await subRepo.getReferralReward();
+      if (mounted && rewardData['success'] == true) {
+        setState(() {
+          _referralRewardInfo = rewardData;
+        });
+      }
+    } catch (_) {}
+  }
+
+  String _getReferralStatusText() {
+    if (_referralRewardInfo == null) {
+      return '0 filleul recruté (parrainez 3 amis pour débloquer -50% sur votre 3ème demande d\'intervention)';
+    }
+    final int count = (_referralRewardInfo!['referrals_count'] as int?) ?? 0;
+    final bool eligible = _referralRewardInfo!['eligible'] == true;
+
+    if (eligible) {
+      return '🎉 Récompense débloquée (-50% sur votre 3ème demande d\'intervention) ! ($count filleuls recrutés)';
+    }
+    if (count == 0) {
+      return '0 filleul recruté (parrainez 3 personnes pour débloquer -50% sur votre 3ème demande d\'intervention)';
+    } else if (count == 1) {
+      return '1/3 filleul recruté (parrainez encore 2 personnes pour débloquer -50% sur votre 3ème demande d\'intervention)';
+    } else {
+      return '$count/3 filleuls recrutés (parrainez encore ${3 - count} personne pour débloquer -50% sur votre 3ème demande d\'intervention)';
     }
   }
 
@@ -493,9 +530,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           child: _isLoading
-              ? Center(
-                  child: CircularProgressIndicator(
-                    color: const Color(0xFF0a543d),
+              ? Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    children: [
+                      const SkeletonLoaderWidget(width: double.infinity, height: 160, borderRadius: 20),
+                      const SizedBox(height: 20),
+                      const SkeletonLoaderWidget(width: double.infinity, height: 120, borderRadius: 16),
+                      const SizedBox(height: 20),
+                      SkeletonLoaderWidget.listSkeleton(count: 2),
+                    ],
                   ),
                 )
               : SingleChildScrollView(
@@ -591,7 +635,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: Colors.white,
                                 ),
                               ),
-                              const SizedBox(height: 6),
                               Text(
                                 _user?.email ?? '',
                                 style: GoogleFonts.poppins(
@@ -599,6 +642,111 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: Colors.white70,
                                 ),
                               ),
+                              if (_user?.referralCode != null && _user!.referralCode!.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.25),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.card_giftcard,
+                                            color: Colors.white,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Code parrainage',
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 11,
+                                                    color: Colors.white70,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  _user!.referralCode!,
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          InkWell(
+                                            onTap: () {
+                                              Clipboard.setData(ClipboardData(text: _user!.referralCode!));
+                                              SnackBarHelper.showSuccess(
+                                                context,
+                                                'Code copié !',
+                                                duration: const Duration(seconds: 2),
+                                              );
+                                            },
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.2),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.copy,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const Divider(color: Colors.white24, height: 16),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            _referralRewardInfo != null && _referralRewardInfo!['eligible'] == true
+                                                ? Icons.stars_rounded
+                                                : Icons.people_outline,
+                                            color: _referralRewardInfo != null && _referralRewardInfo!['eligible'] == true
+                                                ? const Color(0xFFFFD700)
+                                                : Colors.white70,
+                                            size: 16,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              _getReferralStatusText(),
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 11,
+                                                fontWeight: _referralRewardInfo != null && _referralRewardInfo!['eligible'] == true
+                                                    ? FontWeight.w600
+                                                    : FontWeight.normal,
+                                                color: _referralRewardInfo != null && _referralRewardInfo!['eligible'] == true
+                                                    ? const Color(0xFFFFD700)
+                                                    : Colors.white70,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ],
                         ),
@@ -911,68 +1059,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildAvatar() {
-    Widget avatarContent;
-
     if (_selectedImage != null) {
-      avatarContent = ClipOval(
-        child: Image.file(
-          _selectedImage!,
-          width: 120,
-          height: 120,
-          fit: BoxFit.cover,
-        ),
+      return CircleAvatar(
+        radius: 60,
+        backgroundColor: Colors.white,
+        backgroundImage: FileImage(_selectedImage!),
       );
-    } else if (AvatarHelper.hasAvatar(_user?.profileImage)) {
-      final imageUrl = AvatarHelper.buildAvatarUrl(_user!.profileImage);
-      final cacheKey = AvatarHelper.isBase64Url(_user!.profileImage)
-          ? null
-          : _user!.profileImage!.split('/').last;
+    }
 
-      if (kDebugMode) debugPrint('🖼️ Affichage avatar: $imageUrl');
-      if (kDebugMode && cacheKey != null) debugPrint('🔑 Cache key: $cacheKey');
-
-      if (AvatarHelper.isBase64Url(_user!.profileImage)) {
-        avatarContent = ClipOval(
-          child: Image(
-            image: AvatarHelper.buildImageProvider(_user!.profileImage)!,
-            width: 120,
-            height: 120,
-            fit: BoxFit.cover,
-          ),
-        );
-      } else {
-        avatarContent = ClipOval(
-          child: CachedNetworkImage(
-            imageUrl: imageUrl,
-            cacheKey: cacheKey,
-            width: 120,
-            height: 120,
-            fit: BoxFit.cover,
-            placeholder: (context, url) => SizedBox(
-              width: 120,
-              height: 120,
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: Theme.of(context).primaryColor,
-                ),
-              ),
-            ),
-            errorWidget: (context, url, error) {
-              if (kDebugMode) debugPrint('❌ Erreur chargement image: $error');
-              if (kDebugMode) debugPrint('🔗 URL tentée: $url');
-              return _buildInitialsAvatar();
-            },
-          ),
-        );
-      }
-    } else {
-      avatarContent = _buildInitialsAvatar();
+    if (!AvatarHelper.hasAvatar(_user?.profileImage)) {
+      return _buildInitialsAvatar();
     }
 
     return CircleAvatar(
       radius: 60,
       backgroundColor: Colors.white,
-      child: avatarContent,
+      foregroundImage: AvatarHelper.buildImageProvider(_user!.profileImage),
+      onForegroundImageError: (exception, stackTrace) {
+        if (kDebugMode) {
+          debugPrint('❌ Erreur de chargement de l\'avatar: $exception');
+        }
+      },
+      child: _buildInitialsAvatar(),
     );
   }
 

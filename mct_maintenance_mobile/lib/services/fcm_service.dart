@@ -266,6 +266,8 @@ class FCMService {
       'payment_failed',
       'payment_refunded',
       'payment_pending',
+      'payment_required', // Paiement du solde 50% requis
+      'second_payment_required', // Paiement du solde contrat requis
       'diagnostic_payment_confirmed', // Paiement diagnostic confirmé
       'diagnostic_payment_failed', // Échec paiement diagnostic
       'report_submitted', // Rapport d'intervention soumis
@@ -277,6 +279,8 @@ class FCMService {
       'announcement', // Annonces
       'alert', // Alertes
       'promotion', // Promotions
+      'referral_used', // Nouveau filleul inscrit
+      'referral_reward_unlocked', // Récompense parrainage débloquée
     ];
 
     if (type != null && importantTypes.contains(type)) {

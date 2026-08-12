@@ -135,6 +135,8 @@ class _FAQScreenState extends State<FAQScreen> {
     return SupportFabWrapper(
       child: Scaffold(
         body: Container(
+          width: double.infinity,
+          height: double.infinity,
           decoration: const BoxDecoration(
             image: DecorationImage(
               image: AssetImage('assets/images/background_tech_2.png'),

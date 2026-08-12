@@ -31,10 +31,12 @@ class _ReportSummaryScreenState extends State<ReportSummaryScreen> {
     'batterie_evaporateur': 'Nettoyage de la batterie évaporateur',
     'bacs_condensat': 'Nettoyage des bacs à condensat',
     'turbine': 'Nettoyage de la turbine',
-    'volets_air': 'Nettoyage des volets d\'air',
+    'condenseur': 'Nettoyage du condenseur',
     'carrosserie_evaporateur': 'Nettoyage de la carrosserie évaporateur',
     'tuyauterie_evacuation':
         'Soufflement à forte pression de la tuyauterie d\'évacuation des condensats',
+    'parties_electriques': 'Nettoyage des parties électriques',
+    'volets_air': 'Nettoyage des volets d\'air',
   };
 
   @override
@@ -801,11 +803,11 @@ Smart Maintenance - Service de qualité
               spacing: 8,
               runSpacing: 8,
               children: [
+                if (bPuissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$bPuissance CV', Colors.orange.shade800),
                 if (bPression.isNotEmpty)
                   _buildMeasureItem(
                       Icons.compress, 'Pression', '$bPression bar', Colors.orange.shade800),
-                if (bPuissance.isNotEmpty)
-                  _buildMeasureItem(Icons.power, 'Puissance', '$bPuissance CV', Colors.orange.shade800),
                 if (bIntensite.isNotEmpty)
                   _buildMeasureItem(
                       Icons.electrical_services, 'Intensité', '$bIntensite A', Colors.orange.shade800),
@@ -832,11 +834,11 @@ Smart Maintenance - Service de qualité
               spacing: 8,
               runSpacing: 8,
               children: [
+                if (aPuissance.isNotEmpty)
+                  _buildMeasureItem(Icons.power, 'Puissance', '$aPuissance CV', const Color(0xFF0a543d)),
                 if (aPression.isNotEmpty)
                   _buildMeasureItem(
                       Icons.compress, 'Pression', '$aPression bar', const Color(0xFF0a543d)),
-                if (aPuissance.isNotEmpty)
-                  _buildMeasureItem(Icons.power, 'Puissance', '$aPuissance CV', const Color(0xFF0a543d)),
                 if (aIntensite.isNotEmpty)
                   _buildMeasureItem(
                       Icons.electrical_services, 'Intensité', '$aIntensite A', const Color(0xFF0a543d)),

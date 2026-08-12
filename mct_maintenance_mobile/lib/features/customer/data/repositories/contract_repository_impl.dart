@@ -78,8 +78,11 @@ class ContractRepositoryImpl implements ContractRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId) async {
-    final response = await _apiService.get('/api/fineopay/verify-subscription-payment/$subscriptionId');
+  Future<Map<String, dynamic>> verifySubscriptionPayment(int subscriptionId, {String? reference}) async {
+    final path = reference != null && reference.isNotEmpty
+        ? '/api/fineopay/verify-subscription-payment/$subscriptionId?reference=$reference'
+        : '/api/fineopay/verify-subscription-payment/$subscriptionId';
+    final response = await _apiService.get(path);
     return jsonDecode(response.body);
   }
 

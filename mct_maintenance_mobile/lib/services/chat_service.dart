@@ -34,7 +34,6 @@ class ChatService {
 
   bool _isConnected = false;
   String? _userId;
-  String? _token; // Stocker le token pour la ré-authentification
 
   // Cache des messages pour éviter de les perdre lors de la recréation du widget
   List<Map<String, dynamic>> _cachedMessages = [];
@@ -218,9 +217,6 @@ class ChatService {
         return;
       }
 
-      // Stocker le token pour la ré-authentification
-      _token = token;
-
       // URL du serveur (utilise la configuration centralisée)
       final serverUrl = AppConfig.baseUrl;
 
@@ -230,6 +226,7 @@ class ChatService {
       if (kDebugMode) debugPrint('💬 User ID: $_userId');
 
       _socket = IO.io(serverUrl, <String, dynamic>{
+        'auth': {'token': token},
         'transports': ['websocket', 'polling'],
         'autoConnect': false,
         'reconnection': true,
@@ -285,10 +282,7 @@ class ChatService {
 
       // S'authentifier avec le token stocké
       if (kDebugMode) debugPrint('💬 Envoi de l\'authentification...');
-      _socket!.emit('chat:authenticate', {
-        'token': _token,
-        'userId': _userId,
-      });
+      _socket!.emit('chat:authenticate');
     });
 
     _socket!.onDisconnect((_) {

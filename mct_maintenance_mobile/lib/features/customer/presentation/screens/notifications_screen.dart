@@ -326,6 +326,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ],
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage('assets/images/background_tech_2.png'),
@@ -334,7 +336,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ),
         child: Container(
-          color: Colors.black.withValues(alpha: 0.35),
+          color: Colors.transparent,
           child: _isLoading
               ? const Center(child: LoadingIndicator())
               : _notifications.isEmpty
@@ -358,39 +360,55 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.grey.shade100,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
             ),
-            child: Icon(
-              Icons.notifications_off_outlined,
-              size: 80,
-              color: Colors.grey.shade400,
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey.shade50,
+              ),
+              child: Icon(
+                Icons.notifications_off_outlined,
+                size: 72,
+                color: Colors.grey.shade400,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Aucune notification',
-            style: GoogleFonts.poppins(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+            const SizedBox(height: 24),
+            Text(
+              'Aucune notification',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Vous n\'avez pas encore de notifications',
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: Colors.grey.shade600,
+            const SizedBox(height: 8),
+            Text(
+              'Vous n\'avez pas encore de notifications',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: Colors.grey.shade600,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -588,6 +606,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'diagnostic_payment_confirmed':
         return Icons.check_circle_outline;
       case 'payment_pending':
+      case 'payment_required':
       case 'second_payment_required':
         return Icons.schedule_outlined;
       case 'payment_failed':
@@ -628,6 +647,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'intervention_confirmed':
         return [const Color(0xFF4CAF50), const Color(0xFF388E3C)]; // Vert
       case 'payment_pending':
+      case 'payment_required':
       case 'report_submitted':
       case 'second_payment_required':
         return [const Color(0xFFFF9800), const Color(0xFFF57C00)]; // Orange
