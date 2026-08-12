@@ -1,8 +1,8 @@
 
-const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage, MaintenanceOffer, RepairService, InstallationService, Subscription, DiagnosticReport, Quote, SystemConfig, Order, TechnicianProfile } = require('../../models');
+const { MaintenanceSchedule, User, Intervention, CustomerProfile, Equipment, InterventionImage, MaintenanceOffer, RepairService, InstallationService, Subscription, DiagnosticReport, Quote, QuoteItem, SystemConfig, Order, TechnicianProfile, Promotion } = require('../../models');
 const { Op, sequelize } = require('sequelize');
 const { sequelize: db } = require('../../config/database');
-const { 
+const {
   notifyNewIntervention,
   notifyInterventionAssigned,
   notifyTechnicianAssignedToCustomer,
@@ -29,6 +29,7 @@ const schedulingService = require('../../services/schedulingService');
 const contractSchedulingService = require('../../services/contractSchedulingService');
 const {
   buildInterventionReadWhere,
+  buildInterventionListWhere,
   InterventionAccessDeniedError
 } = require('../../policies/interventionAccessPolicy');
 const {
@@ -58,11 +59,11 @@ const escapeHtml = (str) => {
 const getAllInterventions = async (req, res) => {
   try {
     const { status, priority, customer_id, technician_id, has_rating, include_unpaid, filter, page = 1, limit = 10 } = req.query;
-    
-    const where = {};
+
+    const where = await buildInterventionListWhere({ user: req.user });
     if (status) where.status = status;
     if (priority) where.priority = priority;
-    
+
     // 🔒 Masquer les demandes d'intervention impayées du dashboard principal
     // Sauf si include_unpaid=true ou filter=unpaid_diagnostic est demandé
     if (include_unpaid !== 'true' && filter !== 'unpaid_diagnostic' && status !== 'pending_payment') {
@@ -74,7 +75,7 @@ const getAllInterventions = async (req, res) => {
         { status: { [Op.ne]: 'pending' } }
       ];
     }
-    
+
     // Filtre pour has_rating (évaluations)
     if (has_rating === 'true') {
       where.rating = { [Op.not]: null };
@@ -83,24 +84,38 @@ const getAllInterventions = async (req, res) => {
       where.rating = null;
       console.log('🔍 Filtre: has_rating=false (rating = null)');
     }
-    
+
     // 🔒 Isolation de sécurité par rôle utilisateur
     const userRole = req.user?.role;
     const authUserId = req.user?.id;
 
     if (userRole === 'customer') {
-      // Pour les clients, restreindre strictement à leurs propres interventions
-      const customerProfile = await CustomerProfile.findOne({
-        where: { user_id: authUserId }
-      });
-      where.customer_id = customerProfile?.id ?? -1;
-      console.log(`🔒 [Sécurité Client] CustomerProfile.id ${customerProfile?.id ?? 'absent'} pour User.id ${authUserId}`);
-    } else if (customer_id) {
-      // Contrat canonique : le filtre reçoit exclusivement un CustomerProfile.id.
-      where.customer_id = customer_id;
+      console.log(`🔒 [Sécurité Client] périmètre CustomerProfile.id ${where.customer_id} pour User.id ${authUserId}`);
+    } else if (userRole !== 'technician' && customer_id) {
+      const cId = Number(customer_id);
+      const ids = [cId];
+      try {
+        const cp = await CustomerProfile.findOne({
+          where: {
+            [Op.or]: [
+              { id: cId },
+              { user_id: cId }
+            ]
+          },
+          attributes: ['id', 'user_id']
+        });
+        if (cp) {
+          if (cp.id) ids.push(Number(cp.id));
+          if (cp.user_id) ids.push(Number(cp.user_id));
+        }
+      } catch (e) {
+        console.warn('Erreur résolution CustomerProfile customer_id:', e);
+      }
+      const uniqueIds = [...new Set(ids)];
+      where.customer_id = { [Op.in]: uniqueIds };
     }
-    
-    if (technician_id) where.technician_id = technician_id;
+
+    if (userRole !== 'technician' && technician_id) where.technician_id = technician_id;
 
     const offset = (page - 1) * limit;
 
@@ -175,7 +190,7 @@ const getAllInterventions = async (req, res) => {
           last_name: plain.customer.last_name
         };
       }
-      
+
       // Vérifier si le client a une souscription active pour cette offre
       let has_active_subscription = false;
       if (plain.maintenance_offer_id && customer) {
@@ -192,7 +207,7 @@ const getAllInterventions = async (req, res) => {
       }
 
       const diagReport = plain.diagnosticReports && plain.diagnosticReports.length > 0 ? plain.diagnosticReports[0] : null;
-      
+
       return {
         ...plain,
         customer,
@@ -217,6 +232,9 @@ const getAllInterventions = async (req, res) => {
       }
     });
   } catch (error) {
+    if (error instanceof InterventionAccessDeniedError) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
     console.error('Erreur lors de la récupération des interventions:', error);
     res.status(500).json({
       success: false,
@@ -233,7 +251,7 @@ const getInterventionById = async (req, res) => {
       interventionId: id,
       user: req.user
     });
-    
+
     const intervention = await Intervention.findOne({
       where: accessWhere,
       include: [
@@ -243,9 +261,9 @@ const getInterventionById = async (req, res) => {
           attributes: ['id', 'image_url', 'order', 'image_type'],
           required: false
         },
-        { 
-          model: CustomerProfile, 
-          as: 'customer', 
+        {
+          model: CustomerProfile,
+          as: 'customer',
           attributes: ['id', 'first_name', 'last_name'],
           required: false,
           include: [{
@@ -290,17 +308,17 @@ const getInterventionById = async (req, res) => {
         message: 'Intervention non trouvée'
       });
     }
-    
+
     // Séparer les images par type
     const allImages = intervention.images || [];
     console.log(`🔍 Debug - Total images: ${allImages.length}`);
     allImages.forEach(img => {
       console.log(`  - Image ${img.id}: type="${img.image_type}" url=${img.image_url}`);
     });
-    
+
     const interventionImages = allImages.filter(img => img.image_type === 'intervention' || !img.image_type);
     const reportImages = allImages.filter(img => img.image_type === 'report');
-    
+
     console.log(`📸 Intervention ${id}: ${interventionImages.length} images client, ${reportImages.length} images rapport`);
 
     // Préparer la réponse avec images séparées et rapport de diagnostic
@@ -310,7 +328,7 @@ const getInterventionById = async (req, res) => {
     if (interventionData.diagnosticReports && interventionData.diagnosticReports.length > 0) {
       interventionData.diagnostic_report = interventionData.diagnosticReports[0];
     }
-    
+
     // Récupérer le devis associé si présent
     try {
       const quote = await Quote.findOne({
@@ -356,17 +374,31 @@ const createIntervention = [
   // Middleware multer pour gérer l'upload d'images (max 5)
   upload.array('images', 5),
   validateUploadedFileSignatures,
-  
+
   async (req, res) => {
     const transaction = await Intervention.sequelize.transaction();
     let committed = false;
-    
+
     try {
       console.log('📝 Création d\'une nouvelle intervention...');
       console.log('📋 Données reçues:', req.body);
-      
-      const interventionData = req.body;
-      
+
+      const interventionData = { ...req.body };
+
+      const requestedSubId = req.body.subscription_id;
+      // Les identifiants d'affectation et états financiers sont exclusivement calculés
+      // ou renseignés par le back-office. Ils ne doivent jamais être acceptés d'un client.
+      if (req.user.role === 'customer') {
+        [
+          'technician_id', 'status', 'subscription_id', 'contract_id',
+          'diagnostic_fee', 'diagnostic_paid', 'diagnostic_payment_date',
+          'is_free_diagnosis', 'total_price', 'second_payment_amount',
+          'second_payment_status', 'second_payment_date', 'customer_confirmed',
+          'customer_confirmed_at', 'report_data', 'report_submitted_at',
+          'rating', 'review', 'discount_amount'
+        ].forEach(field => delete interventionData[field]);
+      }
+
       // Validation des données requises
       if (!interventionData.title || !interventionData.description || !interventionData.scheduled_date) {
         await transaction.rollback();
@@ -374,6 +406,10 @@ const createIntervention = [
           success: false,
           message: 'Données manquantes: title, description, customer_id et scheduled_date sont requis'
         });
+      }
+      if (!Number.isInteger(Number(interventionData.equipment_count || 1)) || Number(interventionData.equipment_count || 1) < 1) {
+        await transaction.rollback();
+        return res.status(400).json({ success: false, message: 'Le nombre d’équipements doit être un entier positif' });
       }
 
       const customerProfile = await resolveInterventionCustomerProfile({
@@ -389,58 +425,80 @@ const createIntervention = [
       // Pour l'entretien : gratuit si le client a une souscription active, sinon payant
       const interventionType = interventionData.intervention_type?.toLowerCase() || '';
       console.log(`📋 Type d'intervention reçu: "${interventionData.intervention_type}" -> normalized: "${interventionType}"`);
-      
-      const requiresDiagnosticFee = interventionType === 'diagnostic' || 
-                                     interventionType === 'repair' || 
-                                     interventionType === 'réparation' ||
-                                     interventionType === 'reparation' ||
-                                     interventionType === 'installation' ||
-                                     interventionType === 'dépannage' ||
-                                     interventionType === 'depannage';
-      
+
+      const requiresDiagnosticFee = interventionType === 'diagnostic' ||
+        interventionType === 'repair' ||
+        interventionType === 'réparation' ||
+        interventionType === 'reparation' ||
+        interventionType === 'installation' ||
+        interventionType === 'dépannage' ||
+        interventionType === 'depannage';
+
       console.log(`📋 requiresDiagnosticFee: ${requiresDiagnosticFee}`);
-      
+
       let diagnosticFee = 0;
       let isFreeDiagnosis = true;
       let equipmentCoveredBySubscription = 0;
       let equipmentToPay = 0;
-      
+
       // Vérifier si c'est un entretien sans souscription active
       const isMaintenanceType = interventionType === 'entretien' || interventionType === 'maintenance';
       console.log(`📋 isMaintenanceType: ${isMaintenanceType}`);
-      
+
       let hasActiveSubscription = false;
       let activeSubscription = null; // Variable pour stocker la souscription à marquer comme utilisée
-      
-      if (isMaintenanceType && interventionData.maintenance_offer_id) {
-        // Vérifier si le client a une souscription active pour cette offre
+
+      if (isMaintenanceType && (interventionData.maintenance_offer_id || requestedSubId)) {
+        // Vérifier si le client a une souscription active (par subscription_id explicite ou par offre)
         // Les souscriptions utilisent User.id ; les interventions utilisent CustomerProfile.id.
-        const maintenanceOfferId = parseInt(interventionData.maintenance_offer_id);
-        
-        console.log(`🔍 Vérification souscription: User.id=${customerUserId}, CustomerProfile.id=${actualCustomerId}, Offre=${maintenanceOfferId}`);
-        
-        activeSubscription = await Subscription.findOne({
-          where: {
-            customer_id: customerUserId,
-            maintenance_offer_id: maintenanceOfferId,
-            status: 'active',
-            payment_status: 'paid'
-          }
-        });
-        
+        const maintenanceOfferId = interventionData.maintenance_offer_id ? parseInt(interventionData.maintenance_offer_id) : null;
+
+        console.log(`🔍 Vérification souscription: User.id=${customerUserId}, CustomerProfile.id=${actualCustomerId}, Offre=${maintenanceOfferId}, SubId=${requestedSubId}`);
+
+        // 1. Essayer d'abord par subscription_id direct si fourni
+        if (requestedSubId) {
+          activeSubscription = await Subscription.findOne({
+            where: {
+              id: requestedSubId,
+              customer_id: { [Op.in]: [customerUserId, actualCustomerId] },
+              status: 'active',
+              [Op.or]: [
+                { payment_status: { [Op.in]: ['paid', 'partial'] } },
+                { first_payment_status: 'paid' }
+              ]
+            }
+          });
+        }
+
+        // 2. Sinon chercher par offre de maintenance
+        if (!activeSubscription && maintenanceOfferId) {
+          activeSubscription = await Subscription.findOne({
+            where: {
+              customer_id: { [Op.in]: [customerUserId, actualCustomerId] },
+              maintenance_offer_id: maintenanceOfferId,
+              status: 'active',
+              [Op.or]: [
+                { payment_status: { [Op.in]: ['paid', 'partial'] } },
+                { first_payment_status: 'paid' }
+              ]
+            }
+          });
+        }
+
         // Vérifier qu'il reste des équipements disponibles et calculer le coût partiel
         if (activeSubscription) {
           const equipmentCount = activeSubscription.equipment_count || 1;
           const equipmentUsed = activeSubscription.equipment_used || 0;
           const equipmentRemaining = equipmentCount - equipmentUsed;
           const requestedEquipment = parseInt(interventionData.equipment_count) || 1;
-          
+
           if (equipmentRemaining > 0) {
             // Calculer combien d'équipements sont couverts par la souscription
             equipmentCoveredBySubscription = Math.min(requestedEquipment, equipmentRemaining);
             equipmentToPay = Math.max(0, requestedEquipment - equipmentRemaining);
-            
+
             hasActiveSubscription = true;
+            interventionData.subscription_id = activeSubscription.id;
             console.log(`🔍 Souscription active #${activeSubscription.id} - Quota: ${equipmentUsed}/${equipmentCount} utilisés, ${equipmentRemaining} restant(s)`);
             console.log(`   📊 Demandé: ${requestedEquipment}, Couvert: ${equipmentCoveredBySubscription}, À payer: ${equipmentToPay}`);
           } else {
@@ -453,14 +511,14 @@ const createIntervention = [
         } else {
           hasActiveSubscription = false;
           equipmentToPay = parseInt(interventionData.equipment_count) || 1;
-          console.log(`🔍 Aucune souscription active pour offre #${maintenanceOfferId}`);
+          console.log(`🔍 Aucune souscription active pour offre #${maintenanceOfferId} / subId #${requestedSubId}`);
         }
       }
-      
+
       if (requiresDiagnosticFee) {
         // Récupérer les frais de diagnostic depuis la configuration
         const configuredDiagnosticFee = await SystemConfig.getValue('diagnostic_default_fee', 4000);
-        
+
         // Pour les réparations et installations: pas de coût direct
         // Le technicien effectue d'abord un diagnostic, puis envoie un devis
         if (interventionType === 'repair' || interventionType === 'réparation' || interventionType === 'reparation') {
@@ -483,7 +541,7 @@ const createIntervention = [
         const maintenanceOffer = await MaintenanceOffer.findByPk(interventionData.maintenance_offer_id);
         const unitPrice = maintenanceOffer ? parseFloat(maintenanceOffer.price) : 0;
         const requestedEquipment = parseInt(interventionData.equipment_count) || 1;
-        
+
         if (!hasActiveSubscription) {
           // Pas de souscription active
           const totalPrice = unitPrice * requestedEquipment;
@@ -517,22 +575,30 @@ const createIntervention = [
         console.log('✓ Pas de frais de diagnostic (type: ' + interventionType + ')');
       }
 
-      // ✅ Si un technicien est assigné dès la création, vérifier sa disponibilité
+      // ✅ Si un technicien est assigné dès la création, vérifier sa disponibilité et sa validité
       if (interventionData.technician_id) {
+        const targetTech = await User.findByPk(interventionData.technician_id);
+        if (!targetTech || targetTech.role !== 'technician' || targetTech.status === 'deleted') {
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message: 'Le technicien spécifié est invalide ou n\'existe plus'
+          });
+        }
         console.log('🔍 [CREATE] Vérification disponibilité pour technicien:', interventionData.technician_id);
         console.log('🔍 [CREATE] scheduled_date:', interventionData.scheduled_date);
-        
+
         // Combiner date et heure si scheduled_time est fourni séparément
         let scheduledDateTime = interventionData.scheduled_date;
         if (interventionData.scheduled_time) {
-          const dateStr = typeof interventionData.scheduled_date === 'string' 
-            ? interventionData.scheduled_date.split('T')[0] 
+          const dateStr = typeof interventionData.scheduled_date === 'string'
+            ? interventionData.scheduled_date.split('T')[0]
             : new Date(interventionData.scheduled_date).toISOString().split('T')[0];
           scheduledDateTime = new Date(`${dateStr}T${interventionData.scheduled_time}:00`);
         }
-        
+
         console.log('🔍 [CREATE] scheduledDateTime final:', scheduledDateTime);
-        
+
         const timeSlotCheck = await schedulingService.checkTimeSlotAvailability(
           interventionData.technician_id,
           scheduledDateTime,
@@ -560,10 +626,10 @@ const createIntervention = [
       // ✅ Combiner scheduled_date et scheduled_time si les deux sont fournis
       console.log('📅 scheduled_date reçu:', interventionData.scheduled_date);
       console.log('🕐 scheduled_time reçu:', interventionData.scheduled_time);
-      
+
       if (interventionData.scheduled_time && interventionData.scheduled_date) {
-        const dateStr = typeof interventionData.scheduled_date === 'string' 
-          ? interventionData.scheduled_date.split('T')[0] 
+        const dateStr = typeof interventionData.scheduled_date === 'string'
+          ? interventionData.scheduled_date.split('T')[0]
           : new Date(interventionData.scheduled_date).toISOString().split('T')[0];
         const combinedDateStr = `${dateStr}T${interventionData.scheduled_time}:00Z`;
         interventionData.scheduled_date = new Date(combinedDateStr);
@@ -583,8 +649,63 @@ const createIntervention = [
         }
       }
 
-      // Déduire la réduction de code promo si présente dans les données
-      const promoDiscount = parseFloat(interventionData.discount_amount || 0);
+      // La réduction est recalculée depuis la promotion persistée ; le montant du client est ignoré.
+      let promoDiscount = 0;
+      let appliedPromotion = null;
+      if (interventionData.promo_code) {
+        const today = new Date().toISOString().slice(0, 10);
+        appliedPromotion = await Promotion.findOne({ where: { code: interventionData.promo_code }, transaction });
+        const isUsable = appliedPromotion && appliedPromotion.isActive &&
+          ['all', 'customers'].includes(appliedPromotion.target) &&
+          String(appliedPromotion.startDate) <= today && String(appliedPromotion.endDate) >= today &&
+          (!appliedPromotion.usageLimit || appliedPromotion.usageCount < appliedPromotion.usageLimit);
+        if (!isUsable) {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, message: 'Code promotionnel invalide ou expiré' });
+        }
+
+        // Vérification des restrictions par offre pour FGA1, FGA2 et FGA3
+        const codeUpper = interventionData.promo_code.toUpperCase().trim();
+        const selectedOffer = interventionData.maintenance_offer_id ? await MaintenanceOffer.findByPk(interventionData.maintenance_offer_id, { transaction }) : null;
+        const offerTitle = selectedOffer ? (selectedOffer.title || '').toLowerCase() : '';
+        const offerType = selectedOffer ? selectedOffer.offer_type : 'on_demand';
+        let isAnnual = false;
+        if (selectedOffer) {
+          if (selectedOffer.offer_type === 'annual') {
+            isAnnual = true;
+          } else if (selectedOffer.offer_type === 'on_demand') {
+            isAnnual = false;
+          } else if (selectedOffer.visits_total && selectedOffer.visits_total > 1) {
+            isAnnual = true;
+          }
+        }
+        if (offerTitle.includes('annuel') || offerTitle.includes('abonnement')) {
+          isAnnual = true;
+        }
+
+        if (codeUpper === 'FGA1') {
+          if (isAnnual) {
+            await transaction.rollback();
+            return res.status(400).json({ success: false, message: 'Le code FGA1 est utilisable uniquement sur les offres à la demande.' });
+          }
+          if (offerTitle.includes('confort')) {
+            await transaction.rollback();
+            return res.status(400).json({ success: false, message: 'Le code FGA1 n\'est pas utilisable sur l\'offre Confort (utilisez le code FGA2).' });
+          }
+        } else if (codeUpper === 'FGA2') {
+          if (isAnnual || (offerTitle && !offerTitle.includes('confort'))) {
+            await transaction.rollback();
+            return res.status(400).json({ success: false, message: 'Le code FGA2 est utilisable uniquement sur l\'offre Confort à la demande.' });
+          }
+        } else if (codeUpper === 'FGA3') {
+          await transaction.rollback();
+          return res.status(400).json({ success: false, message: 'Le code FGA3 est réservé exclusivement aux abonnements annuels (à partir de 3 splits).' });
+        }
+        promoDiscount = appliedPromotion.type === 'percentage'
+          ? calcTotalPrice * Math.min(Math.max(Number(appliedPromotion.value), 0), 100) / 100
+          : Math.max(Number(appliedPromotion.value) || 0, 0);
+        promoDiscount = Math.min(promoDiscount, calcTotalPrice);
+      }
       if (promoDiscount > 0) {
         diagnosticFee = Math.max(0, diagnosticFee - promoDiscount);
         calcTotalPrice = Math.max(0, calcTotalPrice - promoDiscount);
@@ -612,11 +733,11 @@ const createIntervention = [
       // Sauvegarder les images si présentes (images du client)
       if (req.files && req.files.length > 0) {
         console.log(`📸 ${req.files.length} image(s) client uploadée(s)`);
-        
+
         const imagePromises = req.files.map((file, index) => {
           const imageUrl = `/uploads/interventions/${file.filename}`;
           console.log(`   ${index + 1}. ${imageUrl}`);
-          
+
           return InterventionImage.create({
             intervention_id: intervention.id,
             image_url: imageUrl,
@@ -624,36 +745,40 @@ const createIntervention = [
             image_type: 'intervention' // Images du client
           }, { transaction });
         });
-        
+
         await Promise.all(imagePromises);
         console.log(`✅ ${req.files.length} image(s) client enregistrée(s) en base`);
       }
 
       // Mettre à jour le quota d'équipements de la souscription
       if (activeSubscription) {
-        // Utiliser le nombre d'équipements de l'intervention (ou equipment_count_used si spécifié)
+        const isScheduledContract = activeSubscription.contract_type === 'scheduled' || (activeSubscription.visits_total && activeSubscription.visits_total > 1);
         const requestedCount = parseInt(interventionData.equipment_count_used) || parseInt(interventionData.equipment_count) || 1;
         const equipmentCountUsed = Math.min(
           Math.max(1, requestedCount),
           (activeSubscription.equipment_count - activeSubscription.equipment_used) // Ne pas dépasser le quota restant
         );
-        
+
         const newEquipmentUsed = (activeSubscription.equipment_used || 0) + equipmentCountUsed;
-        const isFullyUsed = newEquipmentUsed >= activeSubscription.equipment_count;
-        
+        const isFullyUsed = !isScheduledContract && (newEquipmentUsed >= activeSubscription.equipment_count);
+
         await activeSubscription.update({
           equipment_used: newEquipmentUsed,
-          status: isFullyUsed ? 'used' : 'active',
+          status: isFullyUsed ? 'used' : (activeSubscription.status === 'pending_payment' ? 'active' : activeSubscription.status),
           intervention_id: intervention.id,
           used_at: isFullyUsed ? new Date() : activeSubscription.used_at
         }, { transaction });
-        
+
         console.log(`✅ Souscription #${activeSubscription.id}: ${equipmentCountUsed} équipement(s) utilisé(s) - Total: ${newEquipmentUsed}/${activeSubscription.equipment_count}`);
         if (isFullyUsed) {
           console.log(`   📋 Souscription entièrement consommée, marquée comme 'used'`);
         } else {
           console.log(`   📋 Quota restant: ${activeSubscription.equipment_count - newEquipmentUsed} équipement(s)`);
         }
+      }
+
+      if (appliedPromotion) {
+        await appliedPromotion.increment('usageCount', { transaction });
       }
 
       await transaction.commit();
@@ -668,9 +793,9 @@ const createIntervention = [
             as: 'images',
             attributes: ['id', 'image_url', 'order', 'image_type']
           },
-          { 
-            model: CustomerProfile, 
-            as: 'customer', 
+          {
+            model: CustomerProfile,
+            as: 'customer',
             attributes: ['id', 'first_name', 'last_name'],
             required: false,
             include: [{
@@ -679,11 +804,11 @@ const createIntervention = [
               attributes: ['id', 'email', 'phone']
             }]
           },
-          { 
-            model: User, 
-            as: 'technician', 
-            attributes: ['id', 'first_name', 'last_name', 'email', 'phone'], 
-            required: false 
+          {
+            model: User,
+            as: 'technician',
+            attributes: ['id', 'first_name', 'last_name', 'email', 'phone'],
+            required: false
           }
         ],
         order: [
@@ -701,7 +826,7 @@ const createIntervention = [
           first_name: createdIntervention.customer?.first_name || '',
           last_name: createdIntervention.customer?.last_name || ''
         };
-        
+
         // 1. Notifier le client (confirmation de création)
         await notificationService.create({
           userId: customer.id,
@@ -750,7 +875,7 @@ const createIntervention = [
         if (createdIntervention.technician_id && createdIntervention.technician) {
           await notifyInterventionAssigned(createdIntervention, createdIntervention.technician);
           console.log('✅ Notification envoyée au technicien');
-          
+
           // 4. Notifier aussi le client que le technicien a été assigné
           await notifyTechnicianAssignedToCustomer(createdIntervention, customer, createdIntervention.technician);
           console.log('✅ Notification client - technicien assigné');
@@ -795,7 +920,7 @@ const createIntervention = [
           is_free_diagnosis: isFreeDiagnosis
         }
       });
-      
+
       console.log(`📤 Réponse envoyée: diagnostic_fee=${diagnosticFee}, is_free_diagnosis=${isFreeDiagnosis}`);
 
     } catch (error) {
@@ -822,8 +947,15 @@ const updateIntervention = async (req, res) => {
     const { id } = req.params;
     const { customer_id, customerId, ...updateData } = req.body;
 
-    const intervention = await Intervention.findByPk(id);
-    
+    const intervention = await Intervention.findByPk(id, {
+      include: [
+        {
+          model: CustomerProfile,
+          as: 'customer'
+        }
+      ]
+    });
+
     if (!intervention) {
       return res.status(404).json({
         success: false,
@@ -831,12 +963,43 @@ const updateIntervention = async (req, res) => {
       });
     }
 
+    const isAdminOrManager = ['admin', 'manager'].includes(req.user?.role);
+    const isOwnerCustomer = req.user?.role === 'customer' &&
+      (intervention.customer?.user_id === req.user.id || intervention.customer_id === req.user.id);
+
+    if (!isAdminOrManager && !isOwnerCustomer) {
+      return res.status(403).json({ success: false, message: 'Accès refusé à la modification de cette intervention' });
+    }
+
+    if (req.path.endsWith('/cancel')) {
+      updateData.status = 'cancelled';
+    }
+
+    if (isOwnerCustomer && !isAdminOrManager) {
+      if (updateData.status !== 'cancelled' || Object.keys(updateData).some(k => !['status', 'cancellation_reason', 'reason'].includes(k))) {
+        return res.status(403).json({ success: false, message: 'Les clients sont uniquement autorisés à annuler une intervention' });
+      }
+      if (['completed', 'in_progress'].includes(intervention.status)) {
+        return res.status(400).json({ success: false, message: 'Impossible d\'annuler une intervention en cours ou terminée' });
+      }
+    }
+
+    if (updateData.technician_id) {
+      const targetTech = await User.findByPk(updateData.technician_id);
+      if (!targetTech || targetTech.role !== 'technician' || targetTech.status === 'deleted') {
+        return res.status(400).json({
+          success: false,
+          message: 'Le technicien spécifié est invalide ou n\'existe plus'
+        });
+      }
+    }
+
     // Vérifier si le statut passe à 'cancelled' pour récupérer le quota
     const oldStatus = intervention.status;
     const newStatus = updateData.status;
-    
+
     await intervention.update(updateData);
-    
+
     // Récupérer le quota si l'intervention est annulée
     if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
       await refundSubscriptionQuota(intervention);
@@ -845,8 +1008,8 @@ const updateIntervention = async (req, res) => {
     // Récupérer l'intervention mise à jour avec les relations
     const updatedIntervention = await Intervention.findByPk(id, {
       include: [
-        { 
-          model: CustomerProfile, 
+        {
+          model: CustomerProfile,
           as: 'customer',
           attributes: ['id', 'first_name', 'last_name'],
           include: [
@@ -864,7 +1027,7 @@ const updateIntervention = async (req, res) => {
     // 📬 Notifier le client de la modification (SAUF si c'est une assignation de technicien)
     // Si technician_id est modifié, utiliser la route /assign qui gère les notifications spécifiques
     const isTechnicianAssignment = updateData.hasOwnProperty('technician_id');
-    
+
     if (!isTechnicianAssignment) {
       try {
         if (updatedIntervention.customer) {
@@ -875,7 +1038,7 @@ const updateIntervention = async (req, res) => {
             first_name: updatedIntervention.customer.first_name || '',
             last_name: updatedIntervention.customer.last_name || ''
           };
-          
+
           console.log('📤 Envoi notification modification intervention au client user_id:', customer.id);
           await notifyInterventionUpdated(updatedIntervention, customer);
           console.log('✅ Notification envoyée au client pour la modification de l\'intervention');
@@ -903,7 +1066,7 @@ const updateIntervention = async (req, res) => {
 
 const deleteIntervention = async (req, res) => {
   const transaction = await db.transaction();
-  
+
   try {
     const { id } = req.params;
 
@@ -913,7 +1076,7 @@ const deleteIntervention = async (req, res) => {
         { model: Quote, as: 'quotes' }
       ]
     });
-    
+
     if (!intervention) {
       await transaction.rollback();
       return res.status(404).json({
@@ -926,28 +1089,28 @@ const deleteIntervention = async (req, res) => {
     if (intervention.diagnosticReports && intervention.diagnosticReports.length > 0) {
       for (const report of intervention.diagnosticReports) {
         // Supprimer les devis associés au rapport
-        await Quote.destroy({ 
+        await Quote.destroy({
           where: { diagnostic_report_id: report.id },
-          transaction 
+          transaction
         });
       }
       // Supprimer les rapports
-      await DiagnosticReport.destroy({ 
+      await DiagnosticReport.destroy({
         where: { intervention_id: id },
-        transaction 
+        transaction
       });
     }
 
     // Supprimer les devis directement liés à l'intervention
-    await Quote.destroy({ 
+    await Quote.destroy({
       where: { intervention_id: id },
-      transaction 
+      transaction
     });
 
     // Supprimer les images d'intervention
-    await InterventionImage.destroy({ 
+    await InterventionImage.destroy({
       where: { intervention_id: id },
-      transaction 
+      transaction
     });
 
     // Maintenant supprimer l'intervention
@@ -975,6 +1138,10 @@ const assignIntervention = async (req, res) => {
     const { id } = req.params;
     const { technician_id } = req.body;
 
+    if (!['admin', 'manager'].includes(req.user?.role)) {
+      return res.status(403).json({ success: false, message: 'Seul le back-office peut assigner un technicien' });
+    }
+
     if (!technician_id) {
       return res.status(400).json({
         success: false,
@@ -993,7 +1160,7 @@ const assignIntervention = async (req, res) => {
 
     // Vérifier que le technicien existe
     const technician = await User.findByPk(technician_id);
-    if (!technician || technician.role !== 'technician') {
+    if (!technician || technician.role !== 'technician' || ['deleted', 'inactive'].includes(technician.status)) {
       return res.status(404).json({
         success: false,
         message: 'Technicien non trouvé'
@@ -1020,7 +1187,7 @@ const assignIntervention = async (req, res) => {
 
     // Vérifier la limite d'interventions par jour
     const MAX_DAILY_INTERVENTIONS = process.env.MAX_DAILY_INTERVENTIONS || 6;
-    const interventionDate = intervention.scheduled_date 
+    const interventionDate = intervention.scheduled_date
       ? new Date(intervention.scheduled_date).toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0];
 
@@ -1048,7 +1215,7 @@ const assignIntervention = async (req, res) => {
     }
 
     // Assigner le technicien
-    await intervention.update({ 
+    await intervention.update({
       technician_id,
       status: 'assigned' // Changer le statut en "assigned"
     });
@@ -1056,9 +1223,9 @@ const assignIntervention = async (req, res) => {
     // Récupérer l'intervention mise à jour avec les relations
     const updatedIntervention = await Intervention.findByPk(id, {
       include: [
-        { 
-          model: CustomerProfile, 
-          as: 'customer', 
+        {
+          model: CustomerProfile,
+          as: 'customer',
           attributes: ['id', 'first_name', 'last_name'],
           include: [
             {
@@ -1093,12 +1260,12 @@ const assignIntervention = async (req, res) => {
           first_name: updatedIntervention.customer.first_name || '',
           last_name: updatedIntervention.customer.last_name || ''
         };
-        
+
         console.log(`📤 Envoi notification assignation au client user_id: ${customer.id}`);
         console.log(`👤 Client: ${customer.first_name} ${customer.last_name}`);
         await notifyTechnicianAssignedToCustomer(updatedIntervention, customer, technician);
         console.log('✅ Notification envoyée au client pour l\'assignation du technicien');
-        
+
         // 📧 Email au client et technicien (assignation)
         await sendInterventionAssignedEmail(
           updatedIntervention.get({ plain: true }),
@@ -1134,32 +1301,32 @@ const acceptIntervention = async (req, res, next) => {
   try {
     const { id } = req.params;
     const technicianId = req.user.id;
-    
+
     console.log(`✅ Technicien ${technicianId} accepte l'intervention ${id}`);
-    
+
     const intervention = await Intervention.findOne({
       where: { id, technician_id: technicianId }
     });
-    
+
     if (!intervention) {
       return res.status(404).json({
         success: false,
         message: 'Intervention non trouvée ou non assignée à ce technicien'
       });
     }
-    
+
     if (intervention.status !== 'assigned' && intervention.status !== 'pending') {
       return res.status(400).json({
         success: false,
         message: `Impossible d'accepter une intervention avec le statut: ${intervention.status}`
       });
     }
-    
+
     await intervention.update({
       status: 'accepted',
       accepted_at: new Date()
     });
-    
+
     res.status(200).json({
       success: true,
       message: 'Intervention acceptée avec succès',
@@ -1176,7 +1343,7 @@ const markOnTheWay = async (req, res, next) => {
   try {
     const { id } = req.params;
     const technicianId = req.user.id;
-    
+
     const intervention = await Intervention.findOne({
       where: { id, technician_id: technicianId },
       include: [
@@ -1187,21 +1354,21 @@ const markOnTheWay = async (req, res, next) => {
         }
       ]
     });
-    
+
     if (!intervention) {
       return res.status(404).json({
         success: false,
         message: 'Intervention non trouvée'
       });
     }
-    
+
     if (intervention.status !== 'accepted') {
       return res.status(400).json({
         success: false,
         message: 'Vous devez d\'abord accepter l\'intervention'
       });
     }
-    
+
     await intervention.update({
       status: 'on_the_way',
       departed_at: new Date()
@@ -1217,7 +1384,7 @@ const markOnTheWay = async (req, res, next) => {
     } catch (notifError) {
       console.error('⚠️ Erreur notification (non bloquante):', notifError.message);
     }
-    
+
     res.status(200).json({
       success: true,
       message: 'Statut mis à jour: En route',
@@ -1234,7 +1401,7 @@ const markArrived = async (req, res, next) => {
   try {
     const { id } = req.params;
     const technicianId = req.user.id;
-    
+
     const intervention = await Intervention.findOne({
       where: { id, technician_id: technicianId },
       include: [
@@ -1245,21 +1412,21 @@ const markArrived = async (req, res, next) => {
         }
       ]
     });
-    
+
     if (!intervention) {
       return res.status(404).json({
         success: false,
         message: 'Intervention non trouvée'
       });
     }
-    
+
     if (intervention.status !== 'on_the_way') {
       return res.status(400).json({
         success: false,
         message: 'Vous devez d\'abord signaler que vous êtes en route'
       });
     }
-    
+
     await intervention.update({
       status: 'arrived',
       arrived_at: new Date()
@@ -1275,7 +1442,7 @@ const markArrived = async (req, res, next) => {
     } catch (notifError) {
       console.error('⚠️ Erreur notification (non bloquante):', notifError.message);
     }
-    
+
     res.status(200).json({
       success: true,
       message: 'Statut mis à jour: Arrivé sur les lieux',
@@ -1292,18 +1459,18 @@ const startIntervention = async (req, res, next) => {
   try {
     const { id } = req.params;
     const technicianId = req.user.id;
-    
+
     const intervention = await Intervention.findOne({
       where: { id, technician_id: technicianId }
     });
-    
+
     if (!intervention) {
       return res.status(404).json({
         success: false,
         message: 'Intervention non trouvée'
       });
     }
-    
+
     // Vérifier le statut: 'arrived' pour le workflow normal, 'execution_confirmed' pour l'exécution immédiate
     const validStatuses = ['arrived', 'execution_confirmed', 'in_progress'];
     if (!validStatuses.includes(intervention.status)) {
@@ -1312,7 +1479,7 @@ const startIntervention = async (req, res, next) => {
         message: 'Vous devez d\'abord signaler votre arrivée'
       });
     }
-    
+
     const updateData = {
       status: 'in_progress',
       started_at: intervention.started_at || new Date()
@@ -1344,16 +1511,16 @@ const startIntervention = async (req, res, next) => {
       }
       const existingServerPhotos = Array.isArray(existingInitialReport.photos_before)
         ? existingInitialReport.photos_before.filter(
-            photo => typeof photo === 'string' &&
-              (photo.startsWith('/uploads/') ||
-               photo.startsWith('http://') ||
-               photo.startsWith('https://'))
-          )
+          photo => typeof photo === 'string' &&
+            (photo.startsWith('/uploads/') ||
+              photo.startsWith('http://') ||
+              photo.startsWith('https://'))
+        )
         : [];
 
       if (intervention.status === 'in_progress' &&
-          existingInitialReport.initial_completed === true &&
-          existingServerPhotos.length > 0) {
+        existingInitialReport.initial_completed === true &&
+        existingServerPhotos.length > 0) {
         initialReportData.photos_before = existingServerPhotos;
         initialReportData.photos = existingServerPhotos;
       } else if (uploadedFiles.length > 0) {
@@ -1377,14 +1544,14 @@ const startIntervention = async (req, res, next) => {
     }
 
     await intervention.update(updateData);
-    
+
     // 📧 Email au client (intervention démarrée)
     try {
       // customer_id est un CustomerProfile.id, pas un User.id
       const customerProfile = await CustomerProfile.findByPk(intervention.customer_id, {
         include: [{ model: User, as: 'user' }]
       });
-      
+
       if (customerProfile && customerProfile.user) {
         const technicianUser = await User.findByPk(technicianId);
         const enrichedCustomer = {
@@ -1393,7 +1560,7 @@ const startIntervention = async (req, res, next) => {
           first_name: customerProfile.first_name,
           last_name: customerProfile.last_name
         };
-        
+
         await sendInterventionStartedEmail(
           intervention.get({ plain: true }),
           technicianUser.get({ plain: true }),
@@ -1404,7 +1571,7 @@ const startIntervention = async (req, res, next) => {
     } catch (emailError) {
       console.error('⚠️ Erreur envoi email démarrage:', emailError.message);
     }
-    
+
     res.status(200).json({
       success: true,
       message: 'Intervention démarrée',
@@ -1421,30 +1588,32 @@ const completeIntervention = async (req, res, next) => {
   try {
     const { id } = req.params;
     const technicianId = req.user.id;
-    
+
     const intervention = await Intervention.findOne({
       where: { id, technician_id: technicianId }
     });
-    
+
     if (!intervention) {
       return res.status(404).json({
         success: false,
         message: 'Intervention non trouvée'
       });
     }
-    
+
     if (intervention.status !== 'in_progress') {
       return res.status(400).json({
         success: false,
         message: 'L\'intervention doit être en cours pour être terminée'
       });
     }
-    
+
     await intervention.update({
       status: 'completed',
       completed_at: new Date(),
       report_submitted_at: intervention.report_submitted_at || new Date()
     });
+
+
 
     // 📲 Notifications de fin d'intervention / d'installation (Client & Dashboard)
     try {
@@ -1480,14 +1649,14 @@ const completeIntervention = async (req, res, next) => {
     } catch (notifErr) {
       console.error('⚠️ Erreur notification terminaison:', notifErr.message);
     }
-    
+
     // 📧 Email au client (intervention terminée)
     try {
       // customer_id est un CustomerProfile.id, pas un User.id
       const customerProfile = await CustomerProfile.findByPk(intervention.customer_id, {
         include: [{ model: User, as: 'user' }]
       });
-      
+
       if (customerProfile && customerProfile.user) {
         const enrichedCustomer = {
           id: customerProfile.user.id,
@@ -1495,7 +1664,7 @@ const completeIntervention = async (req, res, next) => {
           first_name: customerProfile.first_name,
           last_name: customerProfile.last_name
         };
-        
+
         await sendInterventionCompletedEmail(
           intervention.get({ plain: true }),
           enrichedCustomer
@@ -1505,7 +1674,7 @@ const completeIntervention = async (req, res, next) => {
     } catch (emailError) {
       console.error('⚠️ Erreur envoi email terminaison:', emailError.message);
     }
-    
+
     // 📅 Planification automatique de la prochaine visite (contrat programmé)
     try {
       const nextVisit = await contractSchedulingService.scheduleNextVisit(intervention.id);
@@ -1515,7 +1684,7 @@ const completeIntervention = async (req, res, next) => {
     } catch (schedulingError) {
       console.error('⚠️ Erreur planification prochaine visite:', schedulingError.message);
     }
-    
+
     res.status(200).json({
       success: true,
       message: 'Intervention terminée avec succès',
@@ -1562,7 +1731,7 @@ const submitReport = async (req, res, next) => {
     } = req.body;
 
     console.log(`📝 Soumission rapport pour intervention ${id}`);
-    
+
     // Parser materials_used si c'est un string JSON
     if (typeof materials_used === 'string') {
       try {
@@ -1595,8 +1764,8 @@ const submitReport = async (req, res, next) => {
     }
 
     // Validation des données - accepter work_description OU intervention_nature
-    const hasDescription = (work_description && work_description.trim().length > 0) || 
-                          (intervention_nature && intervention_nature.trim().length > 0);
+    const hasDescription = (work_description && work_description.trim().length > 0) ||
+      (intervention_nature && intervention_nature.trim().length > 0);
     if (!hasDescription) {
       return res.status(400).json({
         success: false,
@@ -1607,35 +1776,35 @@ const submitReport = async (req, res, next) => {
     // 📸 Sauvegarder les images uploadées par le technicien
     const uploadedFiles = req.files || [];
     console.log(`📸 ${uploadedFiles.length} image(s) reçue(s) du technicien`);
-    
+
     if (uploadedFiles.length > 0) {
       for (let i = 0; i < uploadedFiles.length; i++) {
         const file = uploadedFiles[i];
         const imagePath = `/uploads/interventions/${file.filename}`;
-        
+
         await InterventionImage.create({
           intervention_id: id,
           image_url: imagePath,
           order: i,
           image_type: 'report' // Images du rapport technicien
         });
-        
+
         console.log(`✅ Image rapport sauvegardée: ${imagePath}`);
       }
     }
 
     // Préparer les données du rapport
-    const sparePartsList = spare_parts ? 
-      (typeof spare_parts === 'string' ? JSON.parse(spare_parts) : spare_parts) : 
+    const sparePartsList = spare_parts ?
+      (typeof spare_parts === 'string' ? JSON.parse(spare_parts) : spare_parts) :
       (Array.isArray(materials_used) ? materials_used : []);
-    
+
     // Parser equipments si c'est un string JSON (nouveau format multi-équipements)
     let equipmentsList = [];
     if (equipments) {
       equipmentsList = typeof equipments === 'string' ? JSON.parse(equipments) : equipments;
       console.log(`📦 ${equipmentsList.length} équipement(s) dans le rapport`);
     }
-    
+
     // Récupérer et parser le report_data existant (enregistré au démarrage)
     let existingReportData = {};
     if (intervention.report_data) {
@@ -1670,21 +1839,21 @@ const submitReport = async (req, res, next) => {
     const mergedEquipments = (equipmentsList.length > 0
       ? equipmentsList
       : existingEquipments).map((submittedEquipment, index) => {
-      const existingEquipment = existingEquipments.find(
-        equipment => equipment.index === submittedEquipment.index
-      ) || existingEquipments[index] || {};
-      const mergedEquipment = { ...existingEquipment, ...submittedEquipment };
+        const existingEquipment = existingEquipments.find(
+          equipment => equipment.index === submittedEquipment.index
+        ) || existingEquipments[index] || {};
+        const mergedEquipment = { ...existingEquipment, ...submittedEquipment };
 
-      if (existingReportData.initial_completed === true) {
-        for (const field of protectedBeforeFields) {
-          if (existingEquipment[field] !== undefined &&
+        if (existingReportData.initial_completed === true) {
+          for (const field of protectedBeforeFields) {
+            if (existingEquipment[field] !== undefined &&
               existingEquipment[field] !== null) {
-            mergedEquipment[field] = existingEquipment[field];
+              mergedEquipment[field] = existingEquipment[field];
+            }
           }
         }
-      }
-      return mergedEquipment;
-    });
+        return mergedEquipment;
+      });
 
     const uploadedReportUrls = uploadedFiles.map(
       file => `/uploads/interventions/${file.filename}`
@@ -1693,19 +1862,19 @@ const submitReport = async (req, res, next) => {
     const serverPhotosAfter = [
       ...(Array.isArray(existingReportData.photos_after)
         ? existingReportData.photos_after.filter(
-            photo => typeof photo === 'string' &&
-              (photo.startsWith('http://') ||
-               photo.startsWith('https://') ||
-               photo.startsWith('/uploads/'))
-          )
+          photo => typeof photo === 'string' &&
+            (photo.startsWith('http://') ||
+              photo.startsWith('https://') ||
+              photo.startsWith('/uploads/'))
+        )
         : []),
       ...(Array.isArray(submittedPhotosAfter)
         ? submittedPhotosAfter.filter(
-            photo => typeof photo === 'string' &&
-              (photo.startsWith('http://') ||
-               photo.startsWith('https://') ||
-               photo.startsWith('/uploads/'))
-          )
+          photo => typeof photo === 'string' &&
+            (photo.startsWith('http://') ||
+              photo.startsWith('https://') ||
+              photo.startsWith('/uploads/'))
+        )
         : []),
       ...uploadedReportUrls
     ];
@@ -1761,6 +1930,15 @@ const submitReport = async (req, res, next) => {
     }
     await intervention.update(updatePayload);
 
+    if (updatePayload.status === 'completed' || intervention.status === 'completed') {
+      try {
+        const contractSchedulingService = require('../../services/contractSchedulingService');
+        await contractSchedulingService.scheduleNextVisit(id);
+      } catch (schedError) {
+        console.error(`⚠️ Erreur scheduleNextVisit (#${id}):`, schedError.message);
+      }
+    }
+
     console.log(`✅ Rapport soumis avec succès (${uploadedFiles.length} image(s))`);
 
     // 🔔 Notifier le client et les admins
@@ -1768,9 +1946,9 @@ const submitReport = async (req, res, next) => {
       // Récupérer l'intervention avec toutes les relations pour les notifications
       const interventionWithRelations = await Intervention.findByPk(id, {
         include: [
-          { 
-            model: CustomerProfile, 
-            as: 'customer', 
+          {
+            model: CustomerProfile,
+            as: 'customer',
             attributes: ['id', 'first_name', 'last_name'],
             include: [{
               model: User,
@@ -1782,7 +1960,7 @@ const submitReport = async (req, res, next) => {
         ]
       });
 
-      const technicianName = interventionWithRelations.technician 
+      const technicianName = interventionWithRelations.technician
         ? `${interventionWithRelations.technician.first_name} ${interventionWithRelations.technician.last_name}`
         : 'Technicien';
 
@@ -1830,7 +2008,7 @@ const submitReport = async (req, res, next) => {
       // 2. Notifier tous les admins et managers
       console.log('👥 Recherche des admins/managers pour notification rapport...');
       const admins = await User.findAll({
-        where: { 
+        where: {
           role: { [Op.in]: ['admin', 'manager'] },
           status: 'active'
         },
@@ -1838,7 +2016,7 @@ const submitReport = async (req, res, next) => {
       });
 
       console.log(`👥 ${admins.length} admin(s)/manager(s) trouvé(s)`);
-      
+
       for (const admin of admins) {
         await notificationService.create({
           userId: admin.id,
@@ -1857,7 +2035,7 @@ const submitReport = async (req, res, next) => {
         });
       }
       console.log('✅ Admins notifiés');
-      
+
       // 📧 Email au client (rapport disponible)
       if (interventionWithRelations.customer) {
         const enrichedCustomer = {
@@ -1866,7 +2044,7 @@ const submitReport = async (req, res, next) => {
           first_name: interventionWithRelations.customer.first_name || '',
           last_name: interventionWithRelations.customer.last_name || ''
         };
-        
+
         await sendInterventionReportEmail(
           interventionWithRelations.get({ plain: true }),
           reportData,
@@ -1900,9 +2078,12 @@ const listReports = async (req, res) => {
     const { status, type, start_date, end_date, technicianId, page = 1, limit = 20, q } = req.query;
 
     const where = {};
+    if (req.user?.role === 'technician') {
+      where.technician_id = req.user.id;
+    }
     if (status) where.status = status; // scheduled | in_progress | completed | cancelled
     if (type) where.type = type; // preventive | corrective | inspection
-    if (technicianId) where.technician_id = technicianId;
+    if (req.user?.role !== 'technician' && technicianId) where.technician_id = technicianId;
     if (start_date || end_date) {
       where.scheduled_date = {};
       if (start_date) where.scheduled_date[Op.gte] = new Date(start_date);
@@ -1914,10 +2095,10 @@ const listReports = async (req, res) => {
     const { rows, count } = await MaintenanceSchedule.findAndCountAll({
       where,
       include: [
-        { 
-          model: User, 
-          as: 'technician', 
-          attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] 
+        {
+          model: User,
+          as: 'technician',
+          attributes: ['id', 'first_name', 'last_name', 'email', 'phone']
         },
         {
           model: Equipment,
@@ -1943,25 +2124,25 @@ const listReports = async (req, res) => {
       const techName = tech
         ? ([tech.first_name, tech.last_name].filter(Boolean).join(' ').trim() || tech.email)
         : null;
-      
+
       const equip = ms.equipment;
       const equipName = equip ? `${equip.name} (${equip.type})` : null;
-      
+
       const customer = equip?.customer;
       const customerName = customer
         ? ([customer.first_name, customer.last_name].filter(Boolean).join(' ').trim() || customer.email)
         : null;
-      
+
       // Calculer ou estimer la durée
       let duration = null;
-      
+
       if (ms.status === 'completed') {
         // Pour les interventions terminées, calculer la durée réelle
         if (ms.updatedAt && ms.scheduled_date) {
           const start = new Date(ms.scheduled_date);
           const end = new Date(ms.updatedAt);
           const diffMs = end - start;
-          
+
           // Vérifier que la différence est positive et raisonnable (moins de 24h)
           if (diffMs > 0 && diffMs < 86400000) { // 24h en ms
             const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -1970,7 +2151,7 @@ const listReports = async (req, res) => {
           }
         }
       }
-      
+
       // Si pas de durée calculée, utiliser une durée estimée selon le type
       if (!duration) {
         const estimatedDurations = {
@@ -1980,7 +2161,7 @@ const listReports = async (req, res) => {
         };
         duration = estimatedDurations[ms.type] || '2h 00m';
       }
-      
+
       return {
         id: ms.id,
         title: `${ms.type === 'preventive' ? 'Maintenance' : ms.type === 'corrective' ? 'Dépannage' : 'Inspection'} #${ms.id}`,
@@ -2014,44 +2195,49 @@ const listReports = async (req, res) => {
 // Récupérer le quota de souscription lors de l'annulation d'une intervention
 const refundSubscriptionQuota = async (intervention) => {
   try {
-    // Vérifier si c'est une intervention de type maintenance avec une offre
-    const interventionType = intervention.intervention_type?.toLowerCase() || '';
-    const isMaintenanceType = interventionType === 'entretien' || interventionType === 'maintenance';
-    
-    if (!isMaintenanceType || !intervention.maintenance_offer_id) {
-      console.log('ℹ️ Pas de récupération de quota: intervention non-maintenance ou sans offre');
-      return;
+    let subscription = null;
+    if (intervention.subscription_id) {
+      subscription = await Subscription.findByPk(intervention.subscription_id);
     }
-    
-    // Chercher la souscription qui a été utilisée pour cette intervention
-    const subscription = await Subscription.findOne({
-      where: {
-        intervention_id: intervention.id
-      }
-    });
-    
+    if (!subscription && intervention.id) {
+      subscription = await Subscription.findOne({
+        where: { intervention_id: intervention.id }
+      });
+    }
+
     if (!subscription) {
       console.log(`ℹ️ Aucune souscription liée à l'intervention #${intervention.id}`);
       return;
     }
-    
-    // Calculer le nombre d'équipements à récupérer
+
+    // Si c'est un contrat annuel programmé (multi-visites), décrémenter visits_completed
+    const isMultiVisit = subscription.contract_type === 'scheduled' || (subscription.visits_total && subscription.visits_total > 1);
+    if (isMultiVisit) {
+      const newVisits = Math.max(0, (subscription.visits_completed || 0) - 1);
+      const newStatus = subscription.status === 'completed' && newVisits < subscription.visits_total ? 'active' : subscription.status;
+      await subscription.update({
+        visits_completed: newVisits,
+        status: newStatus
+      });
+      console.log(`✅ Visite recréditée pour souscription #${subscription.id}: ${newVisits}/${subscription.visits_total}`);
+      return;
+    }
+
+    // Pour les abonnements à la demande: décrémenter equipment_used
     const equipmentCountUsed = intervention.equipment_count || 1;
     const newEquipmentUsed = Math.max(0, (subscription.equipment_used || 0) - equipmentCountUsed);
-    
-    // Réactiver la souscription si elle était marquée comme 'used'
     const newStatus = newEquipmentUsed < subscription.equipment_count ? 'active' : subscription.status;
-    
+
     await subscription.update({
       equipment_used: newEquipmentUsed,
       status: newStatus,
       intervention_id: newEquipmentUsed === 0 ? null : subscription.intervention_id,
       used_at: newStatus === 'active' ? null : subscription.used_at
     });
-    
+
     console.log(`✅ Quota récupéré pour souscription #${subscription.id}: ${equipmentCountUsed} équipement(s) recrédité(s)`);
     console.log(`   📊 Nouveau quota utilisé: ${newEquipmentUsed}/${subscription.equipment_count}, Statut: ${newStatus}`);
-    
+
   } catch (error) {
     console.error('❌ Erreur lors de la récupération du quota:', error.message);
     // Ne pas bloquer l'annulation si la récupération échoue
@@ -2063,6 +2249,9 @@ const updateInterventionStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+    if (!['admin', 'manager'].includes(req.user?.role)) {
+      return res.status(403).json({ success: false, message: 'Accès refusé à la modification du statut' });
+    }
     const previousStatus = req.body.previousStatus; // optionnel
 
     // Charger l'intervention avec les relations
@@ -2150,17 +2339,17 @@ const updateInterventionStatus = async (req, res) => {
       console.error('⚠️ Erreur notification (non bloquante):', notifError.message);
     }
 
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       message: 'Statut mis à jour avec succès',
-      data: intervention 
+      data: intervention
     });
   } catch (error) {
     console.error('❌ Erreur lors de la mise à jour du statut:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erreur lors de la mise à jour du statut', 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la mise à jour du statut',
+      error: error.message
     });
   }
 };
@@ -2176,7 +2365,7 @@ const rateIntervention = async (req, res) => {
 
     // Récupérer le CustomerProfile pour obtenir le customer_id
     const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
-    
+
     if (!customerProfile) {
       return res.status(404).json({
         success: false,
@@ -2190,45 +2379,45 @@ const rateIntervention = async (req, res) => {
     // Vérifier que l'intervention existe
     const intervention = await Intervention.findByPk(id);
     if (!intervention) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Intervention non trouvée' 
+      return res.status(404).json({
+        success: false,
+        message: 'Intervention non trouvée'
       });
     }
 
     // Vérifier que l'intervention est terminée
     if (intervention.status !== 'completed') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'L\'intervention doit être terminée pour être évaluée' 
+      return res.status(400).json({
+        success: false,
+        message: 'L\'intervention doit être terminée pour être évaluée'
       });
     }
 
     // Vérifier que c'est bien le client de cette intervention
-    console.log('🔍 Vérification propriétaire:', { 
-      interventionCustomerId: intervention.customer_id, 
-      customerId: customerId 
+    console.log('🔍 Vérification propriétaire:', {
+      interventionCustomerId: intervention.customer_id,
+      customerId: customerId
     });
-    
+
     if (intervention.customer_id !== customerId) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Vous ne pouvez évaluer que vos propres interventions' 
+      return res.status(403).json({
+        success: false,
+        message: 'Vous ne pouvez évaluer que vos propres interventions'
       });
     }
 
     // Vérifier si une évaluation existe déjà
     if (intervention.rating !== null) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cette intervention a déjà été évaluée' 
+      return res.status(400).json({
+        success: false,
+        message: 'Cette intervention a déjà été évaluée'
       });
     }
 
     // Enregistrer l'évaluation
-    await intervention.update({ 
-      rating: parseInt(rating), 
-      review: review || null 
+    await intervention.update({
+      rating: parseInt(rating),
+      review: review || null
     });
 
     console.log('✅ Évaluation enregistrée avec succès');
@@ -2272,17 +2461,19 @@ const rateIntervention = async (req, res) => {
     // Envoyer les notifications (ne pas faire échouer la requête si ça échoue)
     try {
       // Récupérer les informations complètes
+      // NOTE: Intervention.customer → CustomerProfile (voir models/index.js ligne 63)
+      // Intervention.technician → User (voir models/index.js ligne 64)
       const fullIntervention = await Intervention.findByPk(id, {
         include: [
           {
-            model: User,
+            model: CustomerProfile,
             as: 'customer',
-            attributes: ['id', 'email', 'first_name', 'last_name'],
+            attributes: ['id', 'first_name', 'last_name', 'user_id'],
             include: [
               {
-                model: CustomerProfile,
-                as: 'customerProfile',
-                attributes: ['first_name', 'last_name']
+                model: User,
+                as: 'user',
+                attributes: ['email']
               }
             ]
           },
@@ -2295,9 +2486,9 @@ const rateIntervention = async (req, res) => {
       });
 
       // Préparer les informations du client
-      const customerName = fullIntervention.customer.customerProfile 
-        ? `${fullIntervention.customer.customerProfile.first_name} ${fullIntervention.customer.customerProfile.last_name}`
-        : fullIntervention.customer.email;
+      const customerName = (fullIntervention.customer?.first_name && fullIntervention.customer?.last_name)
+        ? `${fullIntervention.customer.first_name} ${fullIntervention.customer.last_name}`
+        : fullIntervention.customer?.user?.email || 'Client inconnu';
 
       // 1. Notifier le technicien
       if (fullIntervention.technician_id) {
@@ -2322,7 +2513,7 @@ const rateIntervention = async (req, res) => {
 
       // 2. Notifier tous les admins et managers
       const admins = await User.findAll({
-        where: { 
+        where: {
           role: { [Op.in]: ['admin', 'manager'] },
           status: 'active'
         }
@@ -2347,7 +2538,7 @@ const rateIntervention = async (req, res) => {
         });
       }
       console.log(`📧 Notifications envoyées à ${admins.length} admin(s)`);
-      
+
       // 📧 Email au technicien (nouvelle évaluation)
       if (fullIntervention.technician) {
         await sendInterventionRatingEmail(
@@ -2362,8 +2553,8 @@ const rateIntervention = async (req, res) => {
       console.error('⚠️ Erreur lors de l\'envoi des notifications:', notificationError.message);
     }
 
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       message: 'Évaluation enregistrée avec succès',
       data: {
         id: intervention.id,
@@ -2383,9 +2574,9 @@ const rateIntervention = async (req, res) => {
         value: e.value
       }))
     });
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erreur lors de l\'enregistrement de l\'évaluation', 
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de l\'enregistrement de l\'évaluation',
       error: error.message,
       details: error.errors?.map(e => e.message)
     });
@@ -2401,7 +2592,7 @@ const getUnratedInterventions = async (req, res) => {
 
     // Récupérer le CustomerProfile pour obtenir le customer_id
     const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
-    
+
     if (!customerProfile) {
       return res.status(404).json({
         success: false,
@@ -2457,7 +2648,7 @@ const getPendingDiagnosticPayments = async (req, res) => {
 
     // Récupérer le profil client
     const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
-    
+
     if (!customerProfile) {
       return res.status(404).json({
         success: false,
@@ -2485,7 +2676,7 @@ const getPendingDiagnosticPayments = async (req, res) => {
       ],
       order: [['created_at', 'DESC']],
       attributes: [
-        'id', 'title', 'description', 'intervention_type', 'status', 
+        'id', 'title', 'description', 'intervention_type', 'status',
         'diagnostic_fee', 'diagnostic_paid', 'is_free_diagnosis',
         'created_at', 'equipment_count', 'address'
       ]
@@ -2519,7 +2710,7 @@ const getPendingConfirmationReports = async (req, res) => {
 
     // Récupérer le profil client
     const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
-    
+
     if (!customerProfile) {
       return res.status(404).json({
         success: false,
@@ -2546,7 +2737,7 @@ const getPendingConfirmationReports = async (req, res) => {
       ],
       order: [['report_submitted_at', 'DESC']],
       attributes: [
-        'id', 'title', 'description', 'intervention_type', 'status', 
+        'id', 'title', 'description', 'intervention_type', 'status',
         'report_submitted_at', 'report_data', 'customer_confirmed',
         'created_at', 'completed_at', 'address',
         'payment_option', 'second_payment_status', 'second_payment_amount',
@@ -2588,8 +2779,8 @@ const confirmInterventionCompletion = async (req, res) => {
     // Récupérer l'intervention
     const intervention = await Intervention.findByPk(id, {
       include: [
-        { 
-          model: CustomerProfile, 
+        {
+          model: CustomerProfile,
           as: 'customer',
           include: [{
             model: User,
@@ -2597,10 +2788,10 @@ const confirmInterventionCompletion = async (req, res) => {
             attributes: ['id', 'email', 'first_name', 'last_name']
           }]
         },
-        { 
-          model: User, 
-          as: 'technician', 
-          attributes: ['id', 'first_name', 'last_name', 'email', 'phone'] 
+        {
+          model: User,
+          as: 'technician',
+          attributes: ['id', 'first_name', 'last_name', 'email', 'phone']
         }
       ]
     });
@@ -2657,7 +2848,7 @@ const confirmInterventionCompletion = async (req, res) => {
 
     // Notifier le technicien
     if (intervention.technician_id) {
-      const customerName = intervention.customer?.user 
+      const customerName = intervention.customer?.user
         ? `${intervention.customer.user.first_name} ${intervention.customer.user.last_name}`
         : 'Le client';
 
@@ -2784,7 +2975,7 @@ const confirmInterventionCompletion = async (req, res) => {
         // 2. CAS DEVIS ASOCIÉ AVEC 50% SOLDE PENDING
         if (!secondPaymentRequired) {
           const quote = await Quote.findOne({
-            where: { 
+            where: {
               [Op.or]: [
                 { intervention_id: id },
                 { id: intervention.quote_id || 0 }
@@ -2818,21 +3009,21 @@ const confirmInterventionCompletion = async (req, res) => {
         // 3. CAS CONTRAT / SOUSCRIPTION AVEC 50% SOLDE PENDING
         if (!secondPaymentRequired && intervention.subscription_id) {
           const subscriptionForPayment = await Subscription.findOne({
-            where: { 
+            where: {
               id: intervention.subscription_id,
               second_payment_status: 'pending'
             }
           });
 
           if (subscriptionForPayment) {
-            secondPaymentAmount = subscriptionForPayment.second_payment_amount || 
+            secondPaymentAmount = subscriptionForPayment.second_payment_amount ||
               Math.round(parseFloat(subscriptionForPayment.price || 0) / 2);
             if (secondPaymentAmount > 0) {
               secondPaymentRequired = true;
               isContractPayment = true;
               const createdDate = new Date(subscriptionForPayment.created_at || Date.now());
               const generatedReference = `CTR-${createdDate.getFullYear()}${String(createdDate.getMonth() + 1).padStart(2, '0')}-${subscriptionForPayment.id}`;
-              
+
               secondPaymentInfo = {
                 type: 'contract',
                 subscription_id: subscriptionForPayment.id,
@@ -2859,9 +3050,10 @@ const confirmInterventionCompletion = async (req, res) => {
           }
 
           // Notifier le client qu'il doit payer le solde 50%
-          if (intervention.customer?.user?.id) {
+          const targetUserId = intervention.customer?.user?.id || intervention.customer?.user_id || intervention.customer_id;
+          if (targetUserId) {
             await notificationService.create({
-              userId: intervention.customer.user.id,
+              userId: targetUserId,
               type: 'payment_required',
               title: '💳 Paiement du solde requis (50%)',
               message: `L'intervention "${intervention.title}" est terminée. Veuillez procéder au paiement du solde de ${secondPaymentAmount.toLocaleString('fr-FR')} FCFA (50% restant).`,
@@ -2884,8 +3076,8 @@ const confirmInterventionCompletion = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: confirmed 
-        ? 'Merci d\'avoir confirmé la fin de l\'intervention' 
+      message: confirmed
+        ? 'Merci d\'avoir confirmé la fin de l\'intervention'
         : 'Votre contestation a été enregistrée. Un administrateur vous contactera.',
       data: responseData
     });
@@ -2974,14 +3166,14 @@ async function suggestTechnicians(req, res) {
 
   } catch (error) {
     console.error('❌ Erreur suggestTechnicians:', error);
-    
+
     if (error.message === 'Intervention non trouvée') {
       return res.status(404).json({
         success: false,
         message: error.message
       });
     }
-    
+
     if (error.message === 'Intervention déjà assignée') {
       return res.status(400).json({
         success: false,
@@ -3031,8 +3223,8 @@ async function autoAssignIntervention(req, res) {
     // Récupérer l'intervention et le technicien complets pour notifications
     const intervention = await Intervention.findByPk(interventionId, {
       include: [
-        { 
-          model: CustomerProfile, 
+        {
+          model: CustomerProfile,
           as: 'customer',
           include: [{
             model: User,
@@ -3054,14 +3246,14 @@ async function autoAssignIntervention(req, res) {
 
   } catch (error) {
     console.error('❌ Erreur autoAssignIntervention:', error);
-    
+
     if (error.message === 'Intervention non trouvée' || error.message === 'Aucun technicien disponible trouvé') {
       return res.status(404).json({
         success: false,
         message: error.message
       });
     }
-    
+
     if (error.message === 'Intervention déjà assignée') {
       return res.status(400).json({
         success: false,
@@ -3085,8 +3277,8 @@ async function sendPaymentLink(req, res) {
 
     const intervention = await Intervention.findByPk(interventionId, {
       include: [
-        { 
-          model: CustomerProfile, 
+        {
+          model: CustomerProfile,
           as: 'customer',
           include: [{
             model: User,
@@ -3130,7 +3322,7 @@ async function sendPaymentLink(req, res) {
         message: 'Identité utilisateur du client introuvable pour cette intervention'
       });
     }
-    
+
     // Vérifier si une souscription active existe déjà
     const existingSubscription = await Subscription.findOne({
       where: {
@@ -3189,7 +3381,7 @@ async function sendPaymentLink(req, res) {
 
     // Envoyer une notification au client (sans le lien, le client paiera depuis l'app)
     const notificationMessage = `Votre offre d'entretien "${intervention.maintenance_offer.title}" est prête ! Montant: ${intervention.maintenance_offer.price} F CFA. Rendez-vous dans "Mes Interventions" pour procéder au paiement.`;
-    
+
     await notificationService.create({
       userId: customerId,
       type: 'maintenance_offer_payment',
