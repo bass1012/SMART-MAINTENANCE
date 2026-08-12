@@ -947,6 +947,21 @@ const updateIntervention = async (req, res) => {
     const { id } = req.params;
     const { customer_id, customerId, ...updateData } = req.body;
 
+    // SÉCURITÉ : les clients ne peuvent qu'annuler leurs propres interventions.
+    // Rejeter immédiatement toute tentative de mise à jour générique d'un client
+    // avant d'accéder à la base de données.
+    if (req.user?.role === 'customer') {
+      const isOnlyCancel = req.path?.endsWith('/cancel') ||
+        (Object.keys(updateData).every(k => ['status', 'cancellation_reason', 'reason'].includes(k)) &&
+         updateData.status === 'cancelled');
+      if (!isOnlyCancel) {
+        return res.status(403).json({
+          success: false,
+          message: 'Accès refusé à la modification de cette intervention'
+        });
+      }
+    }
+
     const intervention = await Intervention.findByPk(id, {
       include: [
         {
@@ -971,7 +986,7 @@ const updateIntervention = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Accès refusé à la modification de cette intervention' });
     }
 
-    if (req.path.endsWith('/cancel')) {
+    if (req.path?.endsWith('/cancel')) {
       updateData.status = 'cancelled';
     }
 

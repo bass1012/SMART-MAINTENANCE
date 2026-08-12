@@ -32,10 +32,13 @@ const resolveInterventionCustomerProfile = async ({
       throw new InterventionCustomerIdentityError(
         400,
         'CUSTOMER_PROFILE_REQUIRED',
-        'customer_id doit contenir un CustomerProfile.id'
+        'customer_id doit être fourni'
       );
     }
-    profile = await model.findByPk(requestedCustomerId, { transaction });
+    // Pour les rôles internes, le customer_id fourni doit être un CustomerProfile.id explicite
+    profile = await model.findByPk(requestedCustomerId, {
+      transaction
+    });
   } else {
     throw new InterventionCustomerIdentityError(
       403,
