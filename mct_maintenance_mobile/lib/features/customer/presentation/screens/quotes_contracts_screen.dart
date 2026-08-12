@@ -890,6 +890,7 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
 
             // Naviguer directement vers l'écran de paiement
             if (kDebugMode) debugPrint('➡️ Payment navigation: amount=$amountToPay, step=$paymentStep, order=${recentOrder['id']}');
+            if (!mounted) return;
             final paymentSuccess = await Navigator.push<bool>(
               context,
               MaterialPageRoute(
@@ -904,6 +905,7 @@ class _QuotesContractsScreenState extends State<QuotesContractsScreen>
 
             if (mounted) {
               await _loadQuotes();
+              if (!mounted) return;
               if (paymentSuccess == true && targetQuote != null) {
                 // Rediriger le client directement vers le devis en question
                 Navigator.push(

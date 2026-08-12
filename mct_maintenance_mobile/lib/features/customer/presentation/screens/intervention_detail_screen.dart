@@ -2812,9 +2812,9 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         await _refreshIntervention();
 
         // Fermer le dialog de notation
-        if (mounted) Navigator.of(dialogContext).pop();
+        if (context.mounted) Navigator.of(dialogContext).pop();
 
-        if (mounted) {
+        if (context.mounted) {
           SnackBarHelper.showWarning(
             context,
             'Cette intervention a déjà été évaluée',
@@ -2822,7 +2822,7 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         }
       } else {
         // Erreur normale - afficher l'erreur
-        if (mounted) {
+        if (context.mounted) {
           SnackBarHelper.showError(
             dialogContext,
             'Erreur: $e',

@@ -290,7 +290,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
             icon: const Icon(Icons.close),
             onPressed: () async {
               if (await _onWillPop()) {
-                if (mounted) Navigator.pop(context, false);
+                if (context.mounted) Navigator.pop(context, false);
               }
             },
           ),

@@ -105,7 +105,7 @@ class _TechnicianInterventionsScreenState
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         setState(() => _isLoading = false);
         SnackBarHelper.showError(context, e.toString());
       }

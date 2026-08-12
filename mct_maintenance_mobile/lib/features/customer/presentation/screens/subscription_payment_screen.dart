@@ -260,11 +260,11 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
 
       if (isPaid) {
         _stopPolling();
-        if (mounted && Navigator.of(dialogContext).canPop()) {
+        if (context.mounted && Navigator.of(dialogContext).canPop()) {
           Navigator.pop(dialogContext);
         }
         _showPaymentSuccess();
-      } else if (mounted) {
+      } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(

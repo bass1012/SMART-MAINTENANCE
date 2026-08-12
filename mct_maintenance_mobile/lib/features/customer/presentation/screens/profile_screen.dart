@@ -460,6 +460,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         // Recharger le profil pour afficher les nouvelles données
         await _loadUserProfile();
+        if (!mounted) return;
 
         setState(() {
           _isEditing = false;
@@ -467,16 +468,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _selectedImage = null; // Réinitialiser l'image sélectionnée
         });
 
-        if (context.mounted) {
-          SnackBarHelper.showSuccess(
-            context,
-            'Profil mis à jour avec succès',
-            emoji: '🎉',
-          );
+        SnackBarHelper.showSuccess(
+          context,
+          'Profil mis à jour avec succès',
+          emoji: '🎉',
+        );
 
-          // Retourner true pour indiquer que le profil a été mis à jour
-          Navigator.pop(context, true);
-        }
+        // Retourner true pour indiquer que le profil a été mis à jour
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -1451,7 +1450,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     newPassword: newPasswordController.text,
                   );
 
-                  if (mounted) {
+                  if (context.mounted) {
                     Navigator.pop(context);
                     SnackBarHelper.showSuccess(
                       context,
@@ -1460,7 +1459,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                   }
                 } catch (e) {
-                  if (mounted) {
+                  if (context.mounted) {
                     Navigator.pop(context);
                     SnackBarHelper.showError(context, e.toString());
                   }

@@ -580,6 +580,7 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
 
           setState(() => _isLoading = false);
 
+          if (!mounted) return;
           // Naviguer vers l'écran de paiement et attendre le résultat
           final paymentSuccess = await Navigator.push<bool>(
             context,

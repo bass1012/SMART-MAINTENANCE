@@ -425,7 +425,7 @@ class _ManagerMainScreenState extends State<ManagerMainScreen> {
                                 final authRepository =
                                     context.read<AuthRepository>();
                                 await authRepository.logout();
-                                if (mounted) {
+                                if (context.mounted) {
                                   Navigator.pushAndRemoveUntil(
                                     context,
                                     MaterialPageRoute(

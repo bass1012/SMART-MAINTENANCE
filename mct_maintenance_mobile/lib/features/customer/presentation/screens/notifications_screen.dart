@@ -75,7 +75,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       // En cas d'erreur, recharger pour avoir l'état correct
       if (mounted) {
         await _loadNotifications();
-        if (context.mounted) SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
+        if (!mounted) return;
+        SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
     }
   }
@@ -103,7 +104,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       // En cas d'erreur, recharger pour avoir l'état correct
       if (mounted) {
         await _loadNotifications();
-        if (context.mounted) SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
+        if (!mounted) return;
+        SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
     }
   }

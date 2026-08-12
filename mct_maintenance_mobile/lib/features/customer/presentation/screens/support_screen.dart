@@ -747,7 +747,7 @@ class _SupportScreenState extends State<SupportScreen>
                 setState(() {
                   _messages.clear();
                 });
-                if (mounted) {
+                if (context.mounted) {
                   SnackBarHelper.showSuccess(
                     context,
                     'Conversation supprimée avec succès',
@@ -755,7 +755,7 @@ class _SupportScreenState extends State<SupportScreen>
                   );
                 }
               } else {
-                if (mounted) {
+                if (context.mounted) {
                   SnackBarHelper.showError(
                     context,
                     'Erreur lors de la suppression de la conversation',

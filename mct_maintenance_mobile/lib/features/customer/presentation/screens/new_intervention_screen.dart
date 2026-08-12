@@ -434,7 +434,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
           _preferredTime = picked;
         });
       } else {
-        if (mounted) {
+        if (context.mounted) {
           SnackBarHelper.showError(context, errorMessage);
         }
       }
@@ -789,6 +789,7 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
     try {
       final authRepository = context.read<AuthRepository>();
       final interventionRepository = context.read<InterventionRepository>();
+      final subscriptionRepo = context.read<SubscriptionRepository>();
       
       // Récupérer l'ID du client depuis le token/profil
       final userData = await authRepository.getUserData();
@@ -947,7 +948,6 @@ class _NewInterventionScreenState extends State<NewInterventionScreen> {
 
       if (isAnnualOffer && !isUsingExistingSubscription) {
 
-        final subscriptionRepo = context.read<SubscriptionRepository>();
         createdIntervention = await subscriptionRepo.createMaintenanceSubscription(
           maintenanceOfferId: int.parse(_selectedMaintenanceOffer!),
           equipmentCount: int.tryParse(_equipmentCountController.text) ?? 1,

@@ -176,6 +176,7 @@ class _MaintenanceOffersScreenState extends State<MaintenanceOffersScreen>
           // Redirection vers login
           if (mounted) {
             await Future.delayed(const Duration(seconds: 1));
+            if (!mounted) return;
             Navigator.pushNamedAndRemoveUntil(
               context,
               '/login',

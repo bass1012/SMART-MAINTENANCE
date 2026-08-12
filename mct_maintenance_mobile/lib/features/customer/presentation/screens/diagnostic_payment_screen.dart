@@ -692,7 +692,7 @@ class _DiagnosticPaymentScreenState extends State<DiagnosticPaymentScreen> {
         }
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
         );
