@@ -233,7 +233,14 @@ const Intervention = sequelize.define('Intervention', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
-  paranoid: false // Désactive le soft delete pour éviter l'erreur deleted_at
+  paranoid: false, // Désactive le soft delete pour éviter l'erreur deleted_at
+  indexes: [
+    { fields: ['customer_id'] },
+    { fields: ['technician_id'] },
+    { fields: ['status'] },
+    { fields: ['scheduled_date'] },
+    { fields: ['subscription_id'] }
+  ]
 });
 
 module.exports = Intervention;

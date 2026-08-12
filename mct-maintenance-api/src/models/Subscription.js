@@ -94,8 +94,14 @@ Subscription.init({
     allowNull: true,
     field: 'promo_code'
   },
+  offer_snapshot: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    field: 'offer_snapshot',
+    comment: 'Conditions commerciales de l’offre figées à la souscription'
+  },
   payment_status: {
-    type: DataTypes.ENUM('pending', 'paid', 'failed'),
+    type: DataTypes.ENUM('pending', 'partial', 'paid', 'failed'),
     defaultValue: 'pending',
     field: 'payment_status'
   },
@@ -194,7 +200,12 @@ Subscription.init({
   createdAt: 'created_at',
   updatedAt: 'updated_at',
   deletedAt: 'deleted_at',
-  paranoid: true
+  paranoid: true,
+  indexes: [
+    { fields: ['customer_id'] },
+    { fields: ['status'] },
+    { fields: ['maintenance_offer_id'] }
+  ]
 });
 
 module.exports = Subscription;
