@@ -44,3 +44,17 @@ uploads/**/*
 !uploads/documents/.gitkeep
 !uploads/equipments/.gitkeep
 !uploads/products/.gitkeep
+
+# Fichiers de log à la racine (api_log.txt, test_log.txt, etc.)
+*.txt
+
+# Fichiers de tokens et secrets locaux
+*-token*.txt
+*-token*.json
+customer-token*
+
+# Fichiers de test/debug temporaires
+reset_*.js
+fix-*.js
+get-token.sh
+check-*.sh

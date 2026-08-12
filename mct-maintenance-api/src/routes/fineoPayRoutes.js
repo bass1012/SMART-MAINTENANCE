@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const fineoPayController = require('../controllers/payment/fineoPayController');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 
 /**
  * @swagger
@@ -98,6 +98,7 @@ router.post('/callback', fineoPayController.handleCallback);
  *       500:
  *         description: Erreur serveur
  */
+// Sécurité : le contrôleur doit vérifier que la transaction appartient à req.user.id (sauf admins)
 router.get('/transaction/:reference', authenticate, fineoPayController.checkTransactionStatus);
 
 /**
@@ -110,11 +111,14 @@ router.get('/transaction/:reference', authenticate, fineoPayController.checkTran
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Liste des transactions
+ *         description: Liste des transactions (admin/manager uniquement)
+ *       403:
+ *         description: Accès refusé — réservé aux administrateurs
  *       500:
  *         description: Erreur serveur
  */
-router.get('/transactions', authenticate, fineoPayController.listTransactions);
+// SÉCURITÉ : liste globale des transactions → accès réservé aux admins et managers uniquement
+router.get('/transactions', authenticate, authorize('admin', 'manager'), fineoPayController.listTransactions);
 
 /**
  * @swagger

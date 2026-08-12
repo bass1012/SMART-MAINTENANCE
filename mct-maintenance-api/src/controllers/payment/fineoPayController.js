@@ -24,7 +24,7 @@ const {
 // Sandbox: https://dev.fineopay.com/api/v1/business/dev
 // Production: https://fineopay.com/api/v1/business/prod
 const FINEOPAY_BASE_URL = process.env.FINEOPAY_BASE_URL || (
-  process.env.FINEOPAY_ENV === 'production' 
+  process.env.FINEOPAY_ENV === 'production'
     ? 'https://fineopay.com/api/v1/business/prod'
     : 'https://dev.fineopay.com/api/v1/business/dev'
 );
@@ -127,7 +127,7 @@ const createPaymentLink = async (req, res) => {
       const checkoutLink = response.data.data.checkoutLink;
       // Extraire l'ID du checkout link depuis l'URL (format: .../BUSINESS_CODE/CHECKOUT_ID/checkout)
       const checkoutLinkId = checkoutLink.split('/').slice(-2, -1)[0];
-      
+
       console.log(`✅ Lien de paiement FineoPay créé pour commande #${orderId}`);
       console.log(`🔑 Checkout ID: ${checkoutLinkId}`);
 
@@ -179,7 +179,7 @@ const createPaymentLink = async (req, res) => {
         success: false,
         errorMessage: response.data.message || 'Erreur inconnue'
       });
-      
+
       throw new Error(response.data.message || 'Erreur lors de la création du lien de paiement');
     }
 
@@ -193,7 +193,7 @@ const createPaymentLink = async (req, res) => {
 
     console.error(`❌ Erreur création lien FineoPay: ${error.message}`);
     console.error(`❌ Statut fournisseur: ${error.response?.status || 'indisponible'}`);
-    
+
     return res.status(500).json({
       success: false,
       message: 'Erreur lors de la création du lien de paiement',
@@ -220,7 +220,7 @@ const handleCallback = async (req, res) => {
   const sourceIp = req.ip || req.connection?.remoteAddress;
   const signature = req.headers['x-fineopay-signature'] || req.headers['x-signature'];
   let webhookEvent = null;
-  
+
   try {
     let verifiedWebhook;
     try {
@@ -373,12 +373,12 @@ const handleCallback = async (req, res) => {
         success: false,
         errorMessage: `Statut de paiement: ${status}`
       });
-      
+
       // 📱 Envoyer des notifications d'échec de paiement
       try {
         const notificationService = require('../../services/notificationService');
         const { Order, Quote, Intervention, CustomerProfile, Subscription } = require('../../models');
-        
+
         // Parser le syncRef pour identifier le type de paiement
         const syncRef = bodySyncRef || '';
         const shopOrderMatch = syncRef.match(/SHOP_ORDER_(\d+)/);
@@ -466,7 +466,7 @@ const handleCallback = async (req, res) => {
       } catch (notifError) {
         console.error('⚠️ Erreur envoi notification d\'échec:', notifError.message);
       }
-      
+
       return completeAndAcknowledge();
     }
 
@@ -492,18 +492,18 @@ const handleCallback = async (req, res) => {
     console.log(`📋 Traitement avec syncRef: ${syncRef}`);
 
     // Extraire l'ID de la commande depuis syncRef
-    
+
     // Vérifier si c'est une commande de devis (ORDER_xxx), une commande de boutique (SHOP_ORDER_xxx), une souscription (SUBSCRIPTION_xxx) ou un diagnostic (DIAGNOSTIC_xxx)
     let orderId;
     let isShopOrder = false;
     let isSubscription = false;
     let isDiagnostic = false;
-    
+
     const shopOrderMatch = syncRef.match(/^SHOP_ORDER_(\d+)$/);
     const quoteOrderMatch = syncRef.match(/^ORDER_(\d+)$/);
     const subscriptionMatch = syncRef.match(/^SUBSCRIPTION_(\d+)$/);
     const diagnosticMatch = syncRef.match(/^DIAGNOSTIC_(\d+)$/);
-    
+
     if (diagnosticMatch) {
       const interventionId = parseInt(diagnosticMatch[1]);
       isDiagnostic = true;
@@ -606,9 +606,9 @@ const handleCallback = async (req, res) => {
     const orderQuoteId = order.quoteId || order.quote_id;
     const orderPaymentStep = order.paymentStep ?? order.payment_step ?? 1;
     const orderPaymentType = order.paymentType || order.payment_type || 'full';
-    
+
     console.log(`📋 Callback debug - orderId: ${orderId}, quoteId: ${orderQuoteId}, paymentStep: ${orderPaymentStep}, paymentType: ${orderPaymentType}`);
-    
+
     const quote = orderQuoteId ? await Quote.findByPk(orderQuoteId) : null;
     // Priorité à l'Order.paymentType car c'est le choix actuel du client
     // Ne pas se fier au Quote.payment_type qui peut être obsolète
@@ -627,7 +627,7 @@ const handleCallback = async (req, res) => {
     if (orderQuoteId && quote) {
       // Note: Intervention, User sont déjà importés en haut du fichier
       const notificationService = require('../../services/notificationService');
-      
+
       let quoteUpdateData = {};
       if (isSplitPayment && paymentStep === 1) {
         // Premier paiement (50%) reçu
@@ -649,13 +649,13 @@ const handleCallback = async (req, res) => {
         console.log(`✅ Devis #${orderQuoteId} - Second paiement (50%) marqué comme payé via webhook - COMPLET`);
       } else {
         // Paiement intégral (non-split)
-        quoteUpdateData = { 
+        quoteUpdateData = {
           payment_status: 'paid',
           payment_type: 'full' // S'assurer que le type est bien 'full'
         };
         console.log(`✅ Devis #${orderQuoteId} marqué comme payé via webhook (paiement intégral)`);
       }
-      
+
       console.log(`✅ Devis #${orderQuoteId} mis à jour:`, quoteUpdateData); // nosemgrep: unsafe-formatstring
 
       // 📬 Notifier les admins de l'acceptation et de la planification APRÈS le paiement
@@ -677,7 +677,7 @@ const handleCallback = async (req, res) => {
         const intervention = await Intervention.findByPk(quote.intervention_id, {
           include: [{ model: User, as: 'technician' }]
         });
-        
+
         if (intervention) {
           console.log(`🔄 Intervention ${intervention.id} mise à jour: status = execution_confirmed (paiement différé via webhook)`);
 
@@ -708,7 +708,7 @@ const handleCallback = async (req, res) => {
               await schedulingService.autoAssignIntervention(intervention.id);
             } catch (err) {
               console.error(`⚠️ Assignation automatique échouée pour l'intervention ${intervention.id}: ${err.message}`);
-              
+
               // Notifier le client qu'on cherche une équipe
               if (intervention.customer && intervention.customer.user_id) {
                 await notificationService.create({
@@ -727,13 +727,13 @@ const handleCallback = async (req, res) => {
           }
         }
       }
-      
+
       // 🔧 Si exécution immédiate (execute_now = true), passer l'intervention en execution_confirmed après paiement
       if (quoteFinancialResult.executionActivated && quote && quote.execute_now === true && quote.intervention_id) {
         const intervention = await Intervention.findByPk(quote.intervention_id, {
           include: [{ model: User, as: 'technician' }]
         });
-        
+
         if (intervention) {
           console.log(`🔄 Intervention ${intervention.id} mise à jour: status = execution_confirmed (exécution immédiate via webhook)`);
 
@@ -764,7 +764,7 @@ const handleCallback = async (req, res) => {
               await schedulingService.autoAssignIntervention(intervention.id);
             } catch (err) {
               console.error(`⚠️ Assignation automatique échouée pour l'intervention ${intervention.id}: ${err.message}`);
-              
+
               // Notifier le client qu'on cherche une équipe
               if (intervention.customer && intervention.customer.user_id) {
                 await notificationService.create({
@@ -806,7 +806,7 @@ const handleCallback = async (req, res) => {
 
     // Envoyer une notification de paiement réussi au client
     const customer = order.quote?.intervention?.customer;
-    
+
     if (customer && customer.user_id) {
       await notificationService.create({
         userId: customer.user_id,
@@ -825,7 +825,7 @@ const handleCallback = async (req, res) => {
       console.log(`📲 Notification de paiement envoyée au client`);
 
       // 📱 Notifier les admins du paiement reçu
-      const customerName = customer.first_name ? 
+      const customerName = customer.first_name ?
         `${customer.first_name} ${customer.last_name || ''}`.trim() : 'Un client';
       await notificationService.notifyAdmins({
         type: 'payment_received',
@@ -849,12 +849,12 @@ const handleCallback = async (req, res) => {
     // Si c'est un devis de diagnostic, créer l'intervention standard
     if (quoteFinancialResult.executionActivated && quote.diagnosticReport && quote.intervention) {
       const technicianId = quote.diagnosticReport.technician_id;
-      
+
       if (technicianId) {
         // Calculer la date planifiée (2 jours ouvrables)
         let scheduledDate = new Date();
         scheduledDate.setDate(scheduledDate.getDate() + 2);
-        
+
         while (scheduledDate.getDay() === 6 || scheduledDate.getDay() === 0) {
           scheduledDate.setDate(scheduledDate.getDate() + 1);
         }
@@ -881,7 +881,7 @@ const handleCallback = async (req, res) => {
         if (quote.diagnosticReport.recommended_solution) {
           const followUpDate = new Date(scheduledDate);
           followUpDate.setDate(followUpDate.getDate() + 7);
-          
+
           while (followUpDate.getDay() === 0 || followUpDate.getDay() === 6) {
             followUpDate.setDate(followUpDate.getDate() + 1);
           }
@@ -984,6 +984,27 @@ const handleCallback = async (req, res) => {
 const checkTransactionStatus = async (req, res) => {
   try {
     const { reference } = req.params;
+    const user = req.user;
+
+    // SÉCURITÉ : vérifier que la transaction appartient à l'utilisateur,
+    // sauf si c'est un admin ou manager (qui peuvent tout voir).
+    if (user.role !== 'admin' && user.role !== 'manager') {
+      const payment = await Payment.findOne({ where: { reference } });
+      if (!payment) {
+        return res.status(404).json({
+          success: false,
+          message: 'Transaction introuvable'
+        });
+      }
+      // Vérifier que la transaction est liée à cet utilisateur
+      const isOwner = payment.customer_id === user.id || payment.user_id === user.id;
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          message: 'Accès refusé : cette transaction ne vous appartient pas'
+        });
+      }
+    }
 
     const response = await axios.get(
       `${FINEOPAY_BASE_URL}/transactions/${reference}`,
@@ -1080,63 +1101,10 @@ const handleSubscriptionPayment = async (subscriptionId, reference, amount, sour
     // l'outbox, créée dans la même transaction que l'écriture de paiement.
     console.log(`📤 Effets de la souscription ${subscriptionId} confiés à l’outbox pour ${reference}`);
     return;
-    if (paymentStep === 2) {
-      console.log(`💳 Second paiement détecté pour souscription #${subscriptionId}`);
-      return await handleSecondSubscriptionPayment(subscription, reference, amount, sourceIp);
-    }
-
-    // Si c'est un contrat programmé, utiliser le service d'activation
-    if (subscription.contract_type === 'scheduled') {
-      const contractSchedulingService = require('../../services/contractSchedulingService');
-      await contractSchedulingService.activateContractAfterPayment(subscriptionId, reference);
-      console.log(`✅ Contrat programmé #${subscriptionId} activé avec première intervention planifiée`);
-    } else {
-      console.log(`✅ Souscription #${subscriptionId} marquée comme payée et activée`);
-
-      // Notifier le client
-      const notificationService = require('../../services/notificationService');
-      
-      if (subscription.customer_id) {
-        await notificationService.create({
-          userId: subscription.customer_id,
-          type: 'payment_confirmed',
-          title: '✅ Souscription activée',
-          message: `Votre paiement de ${amount} FCFA a été confirmé. Votre souscription est maintenant active !`,
-          data: {
-            subscription_id: subscriptionId,
-            amount: amount,
-            reference: reference
-          },
-          priority: 'high'
-        });
-      }
-    }
-
-    // 📱 Notifier les admins du paiement souscription reçu
-    const notificationService = require('../../services/notificationService');
-    const customerProfile = subscription.customer;
-    const customerName = customerProfile ? 
-      `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() : 'Un client';
-    const offerName = subscription.offer?.title || 'abonnement';
-    await notificationService.notifyAdmins({
-      type: 'payment_received',
-      title: '💰 Paiement abonnement reçu',
-      message: `Paiement de ${amount} FCFA reçu de ${customerName} (${offerName})`,
-      data: {
-        subscriptionId,
-        amount: parseFloat(amount),
-        paymentType: 'subscription',
-        reference,
-        offerName
-      },
-      priority: 'medium',
-      actionUrl: `/dashboard`
-    });
-    console.log(`📲 Notification de paiement abonnement envoyée aux admins`);
 
   } catch (error) {
     console.error(`❌ Erreur traitement paiement souscription #${subscriptionId}:`, error); // nosemgrep: unsafe-formatstring
-    
+
     // Logger l'erreur
     await PaymentLog.create({
       eventType: 'payment_failed',
@@ -1163,7 +1131,7 @@ const handleSecondSubscriptionPayment = async (subscription, reference, amount, 
 
     // Notifier le client
     const notificationService = require('../../services/notificationService');
-    
+
     if (subscription.customer_id) {
       await notificationService.create({
         userId: subscription.customer_id,
@@ -1183,9 +1151,9 @@ const handleSecondSubscriptionPayment = async (subscription, reference, amount, 
 
     // 📱 Notifier les admins du second paiement reçu
     const customerProfile = subscription.customer;
-    const customerName = customerProfile ? 
+    const customerName = customerProfile ?
       `${customerProfile.first_name || ''} ${customerProfile.last_name || ''}`.trim() : 'Un client';
-    
+
     await notificationService.notifyAdmins({
       type: 'payment_received',
       title: '💰 Paiement final contrat reçu',
@@ -1199,12 +1167,12 @@ const handleSecondSubscriptionPayment = async (subscription, reference, amount, 
       priority: 'medium',
       actionUrl: `/dashboard`
     });
-    
+
     console.log(`📲 Notification second paiement envoyée aux admins`);
 
   } catch (error) {
     console.error(`❌ Erreur traitement second paiement souscription #${subscription.id}:`, error); // nosemgrep: unsafe-formatstring
-    
+
     // Logger l'erreur
     await PaymentLog.create({
       eventType: 'payment_failed',
@@ -1419,10 +1387,22 @@ const verifyPaymentStatus = async (req, res) => {
       // et le montant exacts. L'idempotence est assurée par le ledger transactionnel.
       const orderCreatedAt = new Date(order.createdAt);
       const orderAmount = parseFloat(order.totalAmount);
+      const firstAmount = quote?.first_payment_amount != null
+        ? parseFloat(quote.first_payment_amount)
+        : Math.ceil(orderAmount / 2);
+      const secondAmount = quote?.second_payment_amount != null
+        ? parseFloat(quote.second_payment_amount)
+        : (orderAmount - firstAmount);
 
       const matchingTransaction = transactions.find((transaction) => {
         const statusOk = transaction.status === 'success';
-        const amountOk = Math.round(Number(transaction.amount) * 100) === Math.round(orderAmount * 100);
+        const txAmount = Math.round(Number(transaction.amount) * 100);
+        const amountOk = txAmount > 0 && (
+          txAmount === Math.round(orderAmount * 100) ||
+          txAmount === Math.round(firstAmount * 100) ||
+          txAmount === Math.round(secondAmount * 100) ||
+          txAmount === Math.round(orderAmount * 0.5 * 100)
+        );
         const titleOk = (orderRef && transaction.payLink?.title?.includes(orderRef))
           || transaction.payLink?.title?.includes(`#${orderId}`);
         const syncRefOk = transaction.syncRef === syncRef;
@@ -1512,7 +1492,7 @@ const verifyPaymentStatus = async (req, res) => {
             sourceIp: req.ip,
             success: true,
             rawData: matchingTransaction,
-            metadata: { 
+            metadata: {
               canal: matchingTransaction.canal,
               clientPhone: matchingTransaction.clientAccountNumber
             }
@@ -1526,11 +1506,11 @@ const verifyPaymentStatus = async (req, res) => {
           if (orderQuoteIdVerify) {
             // Récupérer le devis avec ses informations
             const quote = quoteForStatus || await Quote.findByPk(orderQuoteIdVerify);
-            
+
             // Déterminer si c'est le premier ou second paiement (split payment)
             const paymentStep = order.paymentStep ?? order.payment_step ?? 0;
             const isSplitPayment = (order.paymentType || order.payment_type) === 'split' && paymentStep > 0;
-            
+
             let quoteUpdateData = {};
             if (isSplitPayment && paymentStep === 1) {
               // Premier paiement (50%) reçu
@@ -1552,13 +1532,13 @@ const verifyPaymentStatus = async (req, res) => {
               console.log(`✅ Devis #${orderQuoteIdVerify} - Second paiement (50%) marqué comme payé - COMPLET`);
             } else {
               // Paiement intégral (100%)
-              quoteUpdateData = { 
+              quoteUpdateData = {
                 payment_status: 'paid',
                 payment_type: 'full'
               };
               console.log(`✅ Devis #${orderQuoteIdVerify} marqué comme payé (100% intégral)`);
             }
-            
+
             await Quote.update(quoteUpdateData, { where: { id: orderQuoteIdVerify } });
 
             // 📬 Notifier les admins de l'acceptation et de la planification APRÈS le paiement
@@ -1580,11 +1560,11 @@ const verifyPaymentStatus = async (req, res) => {
               const intervention = await Intervention.findByPk(quote.intervention_id, {
                 include: [{ model: User, as: 'technician' }]
               });
-              
+
               if (intervention) {
                 await intervention.update({
                   status: 'execution_confirmed',
-                  intervention_type: 'execution',
+                  intervention_type: intervention.intervention_type || 'execution',
                   notes: `${intervention.notes || ''}\n\n[${new Date().toISOString()}] 📅 PAIEMENT REÇU - Exécution différée confirmée - Devis ${quote.reference}`
                 });
                 console.log(`🔄 Intervention ${intervention.id} mise à jour: status = execution_confirmed (paiement différé)`);
@@ -1611,13 +1591,13 @@ const verifyPaymentStatus = async (req, res) => {
                 }
               }
             }
-            
+
             // 🔧 Si exécution immédiate (execute_now = true), passer l'intervention en execution_confirmed après paiement
             if (quote && quote.execute_now === true && quote.intervention_id) {
               const intervention = await Intervention.findByPk(quote.intervention_id, {
                 include: [{ model: User, as: 'technician' }]
               });
-              
+
               if (intervention) {
                 await intervention.update({
                   status: 'execution_confirmed',
@@ -1653,7 +1633,7 @@ const verifyPaymentStatus = async (req, res) => {
 
           // Envoyer une notification au client (notificationService déjà importé plus haut)
           const customer = order.customer;
-          
+
           if (customer && customer.user_id) {
             await notificationService.create({
               userId: customer.user_id,
@@ -1713,7 +1693,7 @@ const verifyPaymentStatus = async (req, res) => {
 
     } catch (fineoError) {
       console.error(`❌ Erreur lors de la requête à FineoPay:`, fineoError.message);
-      
+
       // 📝 Logger l'erreur
       await PaymentLog.create({
         orderId,
@@ -1726,7 +1706,7 @@ const verifyPaymentStatus = async (req, res) => {
         success: false,
         errorMessage: fineoError.message
       });
-      
+
       // En cas d'erreur FineoPay, retourner le statut local
       return res.status(200).json({
         success: true,
@@ -1742,7 +1722,7 @@ const verifyPaymentStatus = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Erreur vérification paiement:', error);
-    
+
     // 📝 Logger l'erreur générale
     try {
       await PaymentLog.create({
@@ -1755,7 +1735,7 @@ const verifyPaymentStatus = async (req, res) => {
     } catch (logError) {
       console.error('❌ Erreur lors du logging:', logError.message);
     }
-    
+
     return res.status(500).json({
       success: false,
       message: 'Erreur lors de la vérification du paiement',
@@ -1810,7 +1790,17 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
     // Si premier paiement déjà fait, vérifier si le contrat est activé
     if (subscription.first_payment_status === 'paid') {
       console.log(`✅ Souscription #${subscriptionId} - Premier paiement déjà confirmé`);
-      
+
+      // Aucun appel passerelle n'est nécessaire pour un solde nul. L'état
+      // persistant reste toutefois la seule source autorisée de confirmation.
+      if (Number(secondPaymentAmount) <= 0 &&
+        subscription.second_payment_status !== 'paid') {
+        await subscription.update({
+          payment_status: 'paid',
+          second_payment_status: 'paid'
+        });
+      }
+
       // Si le contrat n'est pas encore activé malgré le paiement, l'activer maintenant
       if (subscription.status === 'pending_payment') {
         console.log(`⚠️ Contrat #${subscriptionId} non activé malgré paiement - Activation en cours...`);
@@ -1823,7 +1813,7 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
           console.error(`⚠️ Erreur activation contrat:`, activationError.message);
         }
       }
-      
+
       return res.status(200).json({
         success: true,
         data: {
@@ -1838,6 +1828,67 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
       });
     }
 
+    // ── Chemin 1 : référence directe fournie par le deep link ──────────────
+    // Le mobile passe ?reference=TRX... pour un lookup immédiat et fiable.
+    const directReference = req.query.reference;
+    if (directReference) {
+      console.log(`⚡ Référence directe reçue: ${directReference} — lookup FineoPay direct`);
+      try {
+        const txResponse = await axios.get(
+          `${FINEOPAY_BASE_URL}/transactions/${directReference}`,
+          {
+            headers: {
+              'businessCode': FINEOPAY_BUSINESS_CODE,
+              'apiKey': FINEOPAY_API_KEY
+            }
+          }
+        );
+        const tx = txResponse.data?.data?.transaction || txResponse.data?.data;
+        console.log(`📦 Transaction directe:`, JSON.stringify(tx));
+
+        if (tx && tx.status === 'success') {
+          console.log(`✅ Transaction directe confirmée: ${directReference}`);
+          const financialResult = await recordSubscriptionPayment({
+            subscriptionId,
+            reference: directReference,
+            amount: tx.amount,
+            sourceIp: req.ip
+          });
+          await subscription.reload();
+
+          if (subscription.contract_type === 'scheduled' && subscription.status === 'pending_payment') {
+            const contractSchedulingService = require('../../services/contractSchedulingService');
+            try {
+              await contractSchedulingService.activateContractAfterPayment(subscriptionId, directReference);
+              await subscription.reload();
+              console.log(`✅ Contrat #${subscriptionId} activé depuis référence directe`);
+            } catch (ae) {
+              console.error(`⚠️ Erreur activation depuis référence directe:`, ae.message);
+            }
+          }
+
+          return res.status(200).json({
+            success: true,
+            data: {
+              subscriptionId: subscription.id,
+              payment_status: subscription.payment_status,
+              status: subscription.status,
+              reference: directReference,
+              first_payment_status: subscription.first_payment_status,
+              first_payment_amount: firstPaymentAmount,
+              second_payment_status: subscription.second_payment_status || 'pending',
+              second_payment_amount: secondPaymentAmount,
+              duplicate: financialResult.duplicate
+            }
+          });
+        }
+      } catch (directErr) {
+        // Transaction pas encore visible via l'endpoint direct → fallback scan liste
+        console.log(`⚠️ Lookup direct échoué (${directErr.message}) — fallback scan liste`);
+      }
+    }
+
+    // ── Chemin 2 : scan de la liste de transactions ─────────────────────────
     // Chercher la transaction FineoPay
     const syncRef = `SUBSCRIPTION_${subscriptionId}`;
     console.log(`🔍 Recherche transaction FineoPay pour syncRef: ${syncRef}`);
@@ -1857,19 +1908,33 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
       const transactions = transactionsResponse.data.data?.transactions || [];
       console.log(`📊 ${transactions.length} transactions récupérées`);
 
-      // Pas de rapprochement par montant/date : le syncRef doit être exact.
-      const expectedAmount = subscription.first_payment_status === 'paid'
-        ? secondPaymentAmount
-        : firstPaymentAmount;
       const matchingTransaction = transactions.find((transaction) => {
         const statusOk = transaction.status === 'success';
-        const amountOk = Math.round(Number(transaction.amount) * 100) === Math.round(Number(expectedAmount) * 100);
-        const titleOk = transaction.payLink?.title?.includes(`SUBSCRIPTION_${subscriptionId}`)
-          || transaction.payLink?.title?.includes(`#${subscriptionId}`)
-          || (transaction.payLink?.title && transaction.payLink.title.toLowerCase().includes('abonnement'));
-        const syncRefOk = transaction.syncRef === syncRef;
-        return statusOk && amountOk && (titleOk || syncRefOk);
+        if (!statusOk) return false;
+
+        // Correspondance par syncRef
+        const syncRefOk = transaction.syncRef === syncRef || transaction.payLink?.syncRef === syncRef;
+        if (syncRefOk) return true;
+
+        // Correspondance par titre du paylink
+        const title = transaction.payLink?.title || '';
+        const titleOk = title.includes(`SUBSCRIPTION_${subscriptionId}`)
+          || title.includes(`#${subscriptionId}`)
+          || title.includes(`Contrat ${subscription.reference || subscriptionId}`)
+          || title.includes(`Contrat ${subscriptionId}`);
+        return titleOk;
       });
+
+
+      // Log pour diagnostic si non trouvée
+      if (!matchingTransaction) {
+        console.log(`⚠️ Transaction introuvable pour SUBSCRIPTION_${subscriptionId}. Transactions success:`,
+          transactions
+            .filter(t => t.status === 'success')
+            .map(t => ({ syncRef: t.syncRef, title: t.payLink?.title, amount: t.amount, status: t.status }))
+        );
+      }
+
 
       if (matchingTransaction && matchingTransaction.status === 'success') {
         console.log(`✅ Transaction trouvée: ${matchingTransaction.reference} (${matchingTransaction.amount} FCFA)`);
@@ -1881,6 +1946,21 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
           sourceIp: req.ip
         });
         await subscription.reload();
+
+        if (subscription.contract_type === 'scheduled' && subscription.status === 'pending_payment') {
+          const contractSchedulingService = require('../../services/contractSchedulingService');
+          try {
+            await contractSchedulingService.activateContractAfterPayment(
+              subscriptionId,
+              matchingTransaction.reference
+            );
+            await subscription.reload();
+            console.log(`✅ Contrat #${subscriptionId} activé depuis le polling`);
+          } catch (activationError) {
+            console.error(`⚠️ Erreur activation contrat depuis polling:`, activationError.message);
+          }
+        }
+
         return res.status(200).json({
           success: true,
           data: {
@@ -1893,80 +1973,6 @@ const verifySubscriptionPaymentStatus = async (req, res) => {
             second_payment_status: subscription.second_payment_status || 'pending',
             second_payment_amount: secondPaymentAmount,
             duplicate: financialResult.duplicate
-          }
-        });
-
-        // Mettre à jour les champs de paiement split
-        await subscription.update({
-          first_payment_status: 'paid',
-          first_payment_amount: firstPaymentAmount,
-          second_payment_amount: secondPaymentAmount,
-          payment_status: 'partial' // Paiement partiel (50%)
-        });
-
-        // Activer le contrat et créer la première intervention
-        const contractSchedulingService = require('../../services/contractSchedulingService');
-        try {
-          const activationResult = await contractSchedulingService.activateContractAfterPayment(
-            subscriptionId, 
-            matchingTransaction.reference
-          );
-          console.log(`✅ Contrat #${subscriptionId} activé, intervention #${activationResult.firstIntervention?.id} créée`);
-        } catch (activationError) {
-          console.error(`⚠️ Erreur activation contrat:`, activationError.message);
-        }
-
-        // Recharger la souscription après activation
-        await subscription.reload();
-
-        // Créer enregistrement Payment
-        await Payment.create({
-          subscriptionId: subscription.id,
-          amount: matchingTransaction.amount,
-          currency: 'XOF',
-          provider: 'fineopay',
-          paymentId: matchingTransaction.reference,
-          status: 'succeeded',
-          paymentStep: 1,
-          purpose: 'subscription',
-          syncRef: `SUBSCRIPTION_${subscription.id}`,
-          gatewayCheckoutId: subscription.checkout_link_id || null,
-          verifiedAt: new Date(),
-          paidAt: new Date(),
-          metadata: {
-            fineopay_reference: matchingTransaction.reference,
-            canal: matchingTransaction.canal,
-            clientPhone: matchingTransaction.clientAccountNumber,
-            payment_phase: 1,
-            payment_type: 'first_payment_50'
-          }
-        });
-
-        // Logger
-        await PaymentLog.create({
-          eventType: 'subscription_first_payment',
-          provider: 'fineopay',
-          fineopayReference: matchingTransaction.reference,
-          amount: matchingTransaction.amount,
-          paymentStatus: 'paid',
-          sourceIp: req.ip,
-          success: true,
-          metadata: { subscriptionId, type: 'subscription', payment_phase: 1 }
-        });
-
-        console.log(`✅ Premier paiement (50%) confirmé pour souscription #${subscriptionId}`);
-
-        return res.status(200).json({
-          success: true,
-          data: {
-            subscriptionId: subscription.id,
-            payment_status: 'paid', // Pour le mobile, signaler que le premier paiement est fait
-            status: 'active',
-            reference: matchingTransaction.reference,
-            first_payment_status: 'paid',
-            first_payment_amount: firstPaymentAmount,
-            second_payment_status: 'pending',
-            second_payment_amount: secondPaymentAmount
           }
         });
       }
@@ -2184,7 +2190,7 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
         // 📱 Envoyer les notifications
         const notificationService = require('../../services/notificationService');
         const customer = intervention.customer?.user;
-        
+
         if (customer) {
           const numAmount = parseFloat(matchingTransaction.amount || 0);
           const clientTitle = numAmount === 0 ? '✅ Demande d\'intervention confirmée' : '✅ Paiement d\'intervention confirmé';
@@ -2207,7 +2213,7 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
           });
           console.log(`📲 Notification de paiement d'intervention envoyée au client`);
         }
-        
+
         // Notifier le technicien
         if (intervention.technician_id) {
           await notificationService.create({
@@ -2224,9 +2230,9 @@ const verifyDiagnosticPaymentStatus = async (req, res) => {
           });
           console.log(`📲 Notification d'intervention envoyée au technicien`);
         }
-        
+
         // Notifier les admins et managers
-        const customerName = intervention.customer ? 
+        const customerName = intervention.customer ?
           `${intervention.customer.first_name || ''} ${intervention.customer.last_name || ''}`.trim() : 'Un client';
         const numAmount = parseFloat(matchingTransaction.amount || 0);
         const adminTitle = numAmount === 0 ? '📋 Demande d\'intervention reçue' : '💰 Paiement d\'intervention reçu';
@@ -2365,6 +2371,18 @@ const initializeDiagnosticPayment = async (req, res) => {
       console.log(`📌 Initialisation du 2ème paiement (solde 50%) de ${diagnosticFee} FCFA pour l'intervention #${interventionId}`);
     }
 
+    // Si le corps de la requête transmet un montant spécifique, s'assurer qu'il est cohérent avec l'intervention
+    if (req.body.amount) {
+      const reqAmountNum = parseFloat(req.body.amount);
+      if (Math.round(reqAmountNum * 100) !== Math.round(diagnosticFee * 100)) {
+        if (Math.round(reqAmountNum * 100) === Math.round(diagnosticFee * 0.5 * 100)) {
+          diagnosticFee = reqAmountNum;
+        } else {
+          console.warn(`⚠️ Montant reçu (${reqAmountNum} FCFA) != attendu (${diagnosticFee} FCFA) pour diagnostic #${interventionId} -> Ajustement automatique à ${diagnosticFee} FCFA`);
+        }
+      }
+    }
+
     // Construire l'URL de callback
     const callbackUrl = getCallbackUrl();
 
@@ -2475,6 +2493,30 @@ const initializeSubscriptionPayment = async (req, res) => {
       });
     }
 
+    // Vérification et réconciliation du montant d'après le contrat en base
+    const fullPrice = parseFloat(subscription.price || 0);
+    const firstAmount = parseFloat(subscription.first_payment_amount || Math.ceil(fullPrice / 2));
+    const secondAmount = parseFloat(subscription.second_payment_amount || Math.floor(fullPrice / 2));
+
+    let expectedAmount;
+    if (subscription.first_payment_status === 'paid' && subscription.second_payment_status !== 'paid') {
+      expectedAmount = secondAmount;
+    } else {
+      const isFullOption = (req.body.paymentOption || req.body.payment_option) === 'full';
+      expectedAmount = isFullOption ? fullPrice : firstAmount;
+    }
+
+    let finalAmount = expectedAmount;
+    if (amount) {
+      const reqAmountNum = parseFloat(amount);
+      if (Math.round(reqAmountNum * 100) === Math.round(expectedAmount * 0.5 * 100)) {
+        finalAmount = reqAmountNum; // Réduction parrainage 50%
+      } else if (Math.round(reqAmountNum * 100) !== Math.round(expectedAmount * 100)) {
+        console.warn(`⚠️ Montant reçu (${reqAmountNum} FCFA) != attendu (${expectedAmount} FCFA) pour contrat #${subscriptionId} -> Ajustement automatique à ${expectedAmount} FCFA`);
+        finalAmount = expectedAmount;
+      }
+    }
+
     // Construire l'URL de callback
     const callbackUrl = getCallbackUrl();
 
@@ -2484,7 +2526,7 @@ const initializeSubscriptionPayment = async (req, res) => {
       `${FINEOPAY_BASE_URL}/checkout-link`,
       {
         title: paymentTitle,
-        amount: parseFloat(amount),
+        amount: parseFloat(finalAmount),
         callbackUrl,
         ...(redirectUrl && { redirectUrl }),
         ...(autoRedirect !== undefined && { autoRedirect }),

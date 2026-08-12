@@ -11,6 +11,7 @@ const createRateLimiter = (prefix, windowMs, max, message) => {
   return rateLimit({
     windowMs,
     max,
+    validate: false,
     ...(process.env.REDIS_URL ? {
       store: createRedisRateLimitStore({ prefix, windowMs })
     } : {}),
@@ -47,36 +48,35 @@ const sensitiveLimiter = createRateLimiter(
   'Trop de requêtes sur cette route sensible, veuillez réessayer plus tard'
 );
 
-// Configuration CORS
+// Liste blanche explicite des origines CORS autorisées
+// Ne JAMAIS utiliser un miroir réfléchissant (origin || true) avec credentials:true
+// car tout site malveillant pourrait effectuer des requêtes authentifiées.
+const CORS_ALLOWED_ORIGINS = [
+  // Production
+  'https://dashboard.mct.ci',
+  'https://app.mct.ci',
+  // Sandbox / Staging
+  'https://dashboard.sandbox.mct.ci',
+  'https://sandbox.mct.ci',
+  // Développement local
+  'http://localhost:3001',
+  'http://localhost:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:3000',
+];
+
+// Configuration CORS sécurisée avec liste blanche
 const corsOptions = {
   origin: function (origin, callback) {
-    // En développement, autoriser toutes les origines
-    if (process.env.NODE_ENV === 'development') {
+    // Autoriser les requêtes sans origine (mobile natif, Postman, curl, etc.)
+    if (!origin) {
       return callback(null, true);
     }
-    
-    // Liste des origines autorisées en production
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:8080',
-      'https://mct-maintenance.com',
-      'https://admin.mct-maintenance.com',
-      'https://mobile.mct-maintenance.com',
-      'https://dashboard.sandbox.mct.ci',
-      'https://dashboard.mct.ci',
-      'https://api.sandbox.mct.ci',
-      process.env.FRONTEND_URL
-    ].filter(Boolean);
-    
-    // Autoriser les requêtes sans origin (mobile apps, Postman)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (CORS_ALLOWED_ORIGINS.includes(origin)) {
       return callback(null, true);
-    } else {
-      return callback(new Error('Not allowed by CORS'));
     }
+    // Bloquer toute origine non reconnue
+    return callback(new Error(`CORS : origine non autorisée — ${origin}`));
   },
   credentials: true,
   optionsSuccessStatus: 200,
@@ -87,26 +87,24 @@ const corsOptions = {
     'Content-Type',
     'Accept',
     'Authorization',
+    'authorization',
     'X-CSRF-Token',
-    'X-API-Key'
+    'X-API-Key',
+    'Cache-Control',
+    'Pragma'
+  ],
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Range',
+    'X-Content-Range',
+    'Authorization',
+    'authorization'
   ]
 };
 
-// Configuration Helmet avec options personnalisées
+// Configuration Helmet (désactivation de ContentSecurityPolicy car il s'agit d'une API REST/WebSocket consommée par des frontends distants)
 const helmetConfig = {
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.mct-maintenance.com"],
-      fontSrc: ["'self'", "https:", "data:"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
-    },
-  },
+  contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   crossOriginResourcePolicy: { policy: "cross-origin" },
