@@ -31,6 +31,10 @@ const PaymentLog = require('./PaymentLog');
 const PaymentWebhookEvent = require('./PaymentWebhookEvent');
 const OutboxEvent = require('./OutboxEvent');
 const Promotion = require('./Promotion');
+const ContactRequest = require('./ContactRequest');
+
+ContactRequest.belongsTo(CustomerProfile, { foreignKey: 'customerId', as: 'customer' });
+CustomerProfile.hasMany(ContactRequest, { foreignKey: 'customerId', as: 'contactRequests' });
 
 // Association CustomerProfile -> User
 const fs = require('fs');
@@ -207,5 +211,6 @@ module.exports = {
   EmailVerificationCode,
   Split,
   Promotion,
+  ContactRequest,
   RefundRequest: require('./RefundRequest')
 };
