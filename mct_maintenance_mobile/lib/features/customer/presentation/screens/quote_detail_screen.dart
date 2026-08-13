@@ -62,8 +62,11 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
 
 
   Future<void> _downloadQuotePDF(String quoteId) async {
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+
     showDialog(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: false,
       builder: (context) => const Center(
         child: CircularProgressIndicator(),
@@ -93,9 +96,12 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
       final file = File(filePath);
       await file.writeAsBytes(pdfBytes);
 
-      if (mounted) {
-        Navigator.pop(context); // Fermer le loader
+      // Fermer le loader via le Navigator racine
+      if (rootNavigator.canPop()) {
+        rootNavigator.pop();
+      }
 
+      if (mounted) {
         SnackBarHelper.showSuccess(
           context,
           'Devis PDF téléchargé: $fileName',
@@ -110,8 +116,10 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
         await OpenFile.open(filePath);
       }
     } catch (e) {
+      if (rootNavigator.canPop()) {
+        rootNavigator.pop();
+      }
       if (mounted) {
-        Navigator.pop(context); // Fermer le loader
         SnackBarHelper.showError(context, 'Erreur lors du téléchargement du PDF: $e');
       }
     }
