@@ -45,34 +45,33 @@ post_install do |installer|
       # Fix pour Firebase - Permettre les imports non-modulaires
       config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
 
-      # Fix simulateur Apple Silicon (Debug) :
-      # Generated.xcconfig exclut arm64 du simulateur (EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386 arm64)
-      # On override pour ne garder que i386, autorisant arm64 natif sur M1/M2/M3
+      # Fix simulateur Apple Silicon (Debug)
       if config.name == 'Debug'
         config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
       end
 
-      # Fix App Store (Release/Archive) :
-      # Exclure arm64 simulateur pour que objective_c.framework soit taggé IOS (pas IOSSIMULATOR)
-      # Et forcer la génération des symboles dSYM (DWARF-with-dSYM) pour tous les frameworks Pods
-      if config.name == 'Release'
+      # Fix App Store / Release (IPA & Archive) :
+      # Forcer DWARF-with-dSYM pour tous les frameworks Pods (objective_c, open_file_ios, etc.)
+      if config.name == 'Release' || config.name == 'Profile'
         config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
         config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
         config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+        config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'YES'
+        config.build_settings['DEPLOYMENT_POSTPROCESSING'] = 'YES'
       end
     end
   end
 
-  # Override aussi sur le projet Runner principal (Generated.xcconfig a priorité basse)
-  # Les build settings du projet Xcode ont priorité sur les xcconfig inclus
+  # Override aussi sur le projet Runner principal
   runner_project = installer.aggregate_targets.first.user_project
   runner_project.targets.select { |t| t.name == 'Runner' }.each do |target|
     target.build_configurations.each do |config|
       if config.name == 'Debug'
         config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
       end
-      if config.name == 'Release'
+      if config.name == 'Release' || config.name == 'Profile'
         config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
       end
     end
   end
