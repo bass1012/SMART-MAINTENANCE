@@ -2746,8 +2746,10 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       BuildContext dialogContext, int rating, String review) async {
     // Sauvegarder si un rating existait AVANT la soumission
     final hadRatingBefore = _intervention['rating'] != null;
-    // Capturer le repository AVANT les awaits (évite use_build_context_synchronously)
+    // Capturer le repository et le navigator AVANT les awaits
     final interventionRepository = context.read<InterventionRepository>();
+    final dialogNavigator = Navigator.of(dialogContext);
+    final messenger = ScaffoldMessenger.of(context);
 
     try {
       // Fermer le clavier
@@ -2770,13 +2772,13 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       );
 
       // Fermer le loader
-      if (context.mounted) Navigator.of(dialogContext).pop();
+      if (dialogNavigator.canPop()) dialogNavigator.pop();
 
       // Fermer le dialog de notation
-      if (context.mounted) Navigator.of(dialogContext).pop();
+      if (dialogNavigator.canPop()) dialogNavigator.pop();
 
       // Rafraîchir les données
-      if (context.mounted) {
+      if (mounted) {
         setState(() {
           _intervention['rating'] = rating;
           _intervention['review'] = review.trim();
@@ -2785,16 +2787,13 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
       await _refreshIntervention();
 
       // Afficher un message de succès
-      if (context.mounted) {
-        SnackBarHelper.showSuccess(
-          context,
-          'Merci pour votre évaluation !',
-          emoji: '⭐',
-        );
-      }
+      messenger.showSnackBar(const SnackBar(
+        content: Text('⭐ Merci pour votre évaluation !'),
+        backgroundColor: Colors.green,
+      ));
     } catch (e) {
       // Fermer le loader
-      if (context.mounted) Navigator.of(dialogContext).pop();
+      if (dialogNavigator.canPop()) dialogNavigator.pop();
 
       // Vérifier si le message d'erreur indique que c'est déjà évalué
       final errorMessage = e.toString().toLowerCase();
@@ -2812,22 +2811,20 @@ class _InterventionDetailScreenState extends State<InterventionDetailScreen> {
         await _refreshIntervention();
 
         // Fermer le dialog de notation
-        if (context.mounted) Navigator.of(dialogContext).pop();
+        if (dialogNavigator.canPop()) dialogNavigator.pop();
 
-        if (context.mounted) {
-          SnackBarHelper.showWarning(
-            context,
-            'Cette intervention a déjà été évaluée',
-          );
-        }
+        messenger.showSnackBar(const SnackBar(
+          content: Text('Cette intervention a déjà été évaluée'),
+          backgroundColor: Colors.orange,
+        ));
       } else {
         // Erreur normale - afficher l'erreur
-        if (context.mounted) {
-          SnackBarHelper.showError(
-            dialogContext,
-            'Erreur: $e',
-          );
-        }
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }

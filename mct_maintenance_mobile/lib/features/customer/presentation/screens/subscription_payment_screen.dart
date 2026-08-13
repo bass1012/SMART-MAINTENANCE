@@ -264,7 +264,7 @@ class _SubscriptionPaymentScreenState extends State<SubscriptionPaymentScreen> {
           Navigator.pop(dialogContext);
         }
         _showPaymentSuccess();
-      } else if (context.mounted) {
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(

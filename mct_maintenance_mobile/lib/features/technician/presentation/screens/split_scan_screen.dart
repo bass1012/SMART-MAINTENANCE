@@ -725,6 +725,7 @@ class _ManualSplitSelectionSheetState
 
     setState(() => _isLoading = true);
 
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final result = await _splitService.scanSplitForIntervention(
       interventionId: widget.interventionId,
       splitCode: _selectedSplit!.splitCode,
@@ -742,7 +743,7 @@ class _ManualSplitSelectionSheetState
       );
       widget.onSplitSelected(scanResult);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text(result?['message'] ?? 'Erreur lors de la sélection'),
           backgroundColor: Colors.red,

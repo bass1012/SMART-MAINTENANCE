@@ -105,7 +105,7 @@ class _TechnicianInterventionsScreenState
         });
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         setState(() => _isLoading = false);
         SnackBarHelper.showError(context, e.toString());
       }
@@ -525,14 +525,14 @@ class _TechnicianInterventionsScreenState
                                   context.read<InterventionRepository>();
                               await interventionRepository
                                   .acceptIntervention(intervention['id']);
-                              if (context.mounted) {
+                              if (mounted) {
                                 SnackBarHelper.showSuccess(
                                     context, 'Intervention acceptée',
                                     emoji: '✓');
                               }
                               _loadInterventions();
                             } catch (e) {
-                              if (context.mounted) {
+                              if (mounted) {
                                 SnackBarHelper.showError(context, e.toString());
                               }
                             }
@@ -576,14 +576,14 @@ class _TechnicianInterventionsScreenState
                                   context.read<InterventionRepository>();
                               await interventionRepository
                                   .markInterventionOnTheWay(intervention['id']);
-                              if (context.mounted) {
+                              if (mounted) {
                                 SnackBarHelper.showSuccess(
                                     context, 'En route vers le client',
                                     emoji: '🚗');
                               }
                               _loadInterventions();
                             } catch (e) {
-                              if (context.mounted) {
+                              if (mounted) {
                                 SnackBarHelper.showError(context, e.toString());
                               }
                             }
@@ -627,14 +627,14 @@ class _TechnicianInterventionsScreenState
                                   context.read<InterventionRepository>();
                               await interventionRepository
                                   .markInterventionArrived(intervention['id']);
-                              if (context.mounted) {
+                              if (mounted) {
                                 SnackBarHelper.showSuccess(
                                     context, 'Arrivée confirmée',
                                     emoji: '📍');
                               }
                               _loadInterventions();
                             } catch (e) {
-                              if (context.mounted) {
+                              if (mounted) {
                                 SnackBarHelper.showError(context, e.toString());
                               }
                             }
@@ -708,14 +708,14 @@ class _TechnicianInterventionsScreenState
                                     context.read<InterventionRepository>();
                                 await interventionRepository
                                     .startIntervention(intervention['id']);
-                                if (context.mounted) {
+                                if (mounted) {
                                   SnackBarHelper.showSuccess(
                                       context, 'Intervention démarrée',
                                       emoji: '🔧');
                                 }
                                 _loadInterventions();
                               } catch (e) {
-                                if (context.mounted) {
+                                if (mounted) {
                                   SnackBarHelper.showError(context, e.toString());
                                 }
                               }

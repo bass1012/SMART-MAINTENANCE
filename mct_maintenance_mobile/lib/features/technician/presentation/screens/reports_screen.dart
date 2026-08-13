@@ -37,6 +37,8 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
   }
 
   Future<void> _downloadReportPDF(Map<String, dynamic> report) async {
+    // Capturer le messenger AVANT tout await pour éviter use_build_context_synchronously
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       // Afficher un loader
       SnackBarHelper.showLoading(context, 'Téléchargement du rapport PDF...',
@@ -62,28 +64,34 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
       final file = File('${directory!.path}/$fileName');
       await file.writeAsBytes(pdfBytes);
 
-      // Masquer le loader
-      SnackBarHelper.hide(context);
-
-      // Afficher le succès
-      SnackBarHelper.showSuccess(
-        context,
-        'Rapport PDF téléchargé: $fileName',
-        emoji: '📄',
-        action: SnackBarAction(
-          label: 'Ouvrir',
-          textColor: Colors.white,
-          onPressed: () async {
-            await OpenFile.open(file.path);
-          },
-        ),
-      );
+      // Masquer le loader et afficher le succès
+      if (mounted) {
+        SnackBarHelper.hide(context);
+        SnackBarHelper.showSuccess(
+          context,
+          'Rapport PDF téléchargé: $fileName',
+          emoji: '📄',
+          action: SnackBarAction(
+            label: 'Ouvrir',
+            textColor: Colors.white,
+            onPressed: () async {
+              await OpenFile.open(file.path);
+            },
+          ),
+        );
+      }
 
       // Ouvrir automatiquement
       await OpenFile.open(file.path);
     } catch (e) {
-      SnackBarHelper.hide(context);
-      SnackBarHelper.showError(context, 'Erreur téléchargement: $e');
+      if (mounted) {
+        SnackBarHelper.hide(context);
+        SnackBarHelper.showError(context, 'Erreur téléchargement: $e');
+      } else {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Erreur téléchargement: $e')),
+        );
+      }
     }
   }
 

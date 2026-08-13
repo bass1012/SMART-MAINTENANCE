@@ -498,20 +498,24 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
                   return;
                 }
 
+                final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+
                 try {
                   await _authRepository.changePassword(
                     currentPassword: currentPasswordController.text,
                     newPassword: newPasswordController.text,
                   );
 
-                  if (mounted) {
-                    Navigator.pop(context);
-                    SnackBarHelper.showSuccess(
-                        context, 'Mot de passe modifié avec succès',
-                        emoji: '🔒');
-                  }
+                  nav.pop();
+                  messenger.showSnackBar(const SnackBar(
+                    content: Text('🔒 Mot de passe modifié avec succès'),
+                    backgroundColor: Colors.green,
+                  ));
                 } catch (e) {
-                  SnackBarHelper.showError(context, e.toString());
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -531,6 +535,9 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
     final lastNameController =
         TextEditingController(text: _user?.lastName ?? '');
     final phoneController = TextEditingController(text: _user?.phone ?? '');
+
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -592,14 +599,17 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
                 });
 
                 if (mounted) {
-                  Navigator.pop(context);
-                  _loadProfile(); // Recharger le profil
-                  SnackBarHelper.showSuccess(
-                      context, 'Profil mis à jour avec succès',
-                      emoji: '🎉');
+                  nav.pop();
+                  _loadProfile();
+                  messenger.showSnackBar(const SnackBar(
+                    content: Text('🎉 Profil mis à jour avec succès'),
+                    backgroundColor: Colors.green,
+                  ));
                 }
               } catch (e) {
-                SnackBarHelper.showError(context, e.toString());
+                messenger.showSnackBar(
+                  SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                );
               }
             },
             style: ElevatedButton.styleFrom(
@@ -613,7 +623,6 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
   }
 
   void _showSpecializationDialog() {
-    // Initialiser avec les spécialisations actuelles
     final specializations = {
       'Climatisation': _specializations.contains('Climatisation'),
       'Plomberie': _specializations.contains('Plomberie'),
@@ -622,6 +631,8 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
       'Réfrigération': _specializations.contains('Réfrigération'),
       'VMC': _specializations.contains('VMC'),
     };
+
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -659,29 +670,27 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
 
                 Navigator.pop(context);
 
-                // Sauvegarder via l'API
                 try {
                   await _authRepository.updateProfile({
                     'specialization': selected.join(', '),
                   });
 
-                  // Mettre à jour l'état local
                   if (mounted) {
                     setState(() {
                       _specializations = selected;
                     });
 
-                    SnackBarHelper.showSuccess(
-                        context,
-                        selected.isEmpty
-                            ? 'Spécialisations supprimées'
-                            : 'Spécialisations: ${selected.join(", ")}');
+                    messenger.showSnackBar(SnackBar(
+                      content: Text(selected.isEmpty
+                          ? '📋 Spécialisations supprimées'
+                          : '📋 Spécialisations: ${selected.join(", ")}'),
+                      backgroundColor: Colors.green,
+                    ));
                   }
                 } catch (e) {
-                  if (mounted) {
-                    SnackBarHelper.showError(
-                        context, 'Erreur lors de la sauvegarde: $e');
-                  }
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Erreur lors de la sauvegarde: $e'), backgroundColor: Colors.red),
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -848,13 +857,14 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
   }
 
   void _showWorkingHoursDialog() {
-    // Créer une copie profonde avec valeurs garanties
     final tempWorkingHours = Map<String, Map<String, dynamic>>.from(
         _workingHours.map((key, value) => MapEntry(key, {
               'enabled': value['enabled'] == true,
               'start': value['start']?.toString() ?? '08:00',
               'end': value['end']?.toString() ?? '18:00',
             })));
+
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -868,7 +878,6 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
                 icon: const Icon(Icons.copy_all, size: 20),
                 tooltip: 'Copier à tous',
                 onPressed: () {
-                  // Trouver le premier jour activé
                   final firstEnabled = tempWorkingHours.entries.firstWhere(
                       (e) => e.value['enabled'] == true,
                       orElse: () => tempWorkingHours.entries.first);
@@ -1024,13 +1033,15 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
                       _workingHours = tempWorkingHours;
                     });
 
-                    SnackBarHelper.showSuccess(context, 'Horaires mis à jour',
-                        emoji: '⏰');
+                    messenger.showSnackBar(const SnackBar(
+                      content: Text('⏰ Horaires mis à jour'),
+                      backgroundColor: Colors.green,
+                    ));
                   }
                 } catch (e) {
-                  if (mounted) {
-                    SnackBarHelper.showError(context, e.toString());
-                  }
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -1057,6 +1068,8 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
       'Port-Bouët': _serviceAreas.contains('Port-Bouët'),
       'Attécoubé': _serviceAreas.contains('Attécoubé'),
     };
+
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -1105,17 +1118,17 @@ class _TechnicianSettingsScreenState extends State<TechnicianSettingsScreen> {
                       _serviceAreas = selected;
                     });
 
-                    SnackBarHelper.showSuccess(
-                        context,
-                        selected.isEmpty
-                            ? 'Zones supprimées'
-                            : 'Zones: ${selected.join(", ")}',
-                        emoji: '📍');
+                    messenger.showSnackBar(SnackBar(
+                      content: Text(selected.isEmpty
+                          ? '📍 Zones supprimées'
+                          : '📍 Zones: ${selected.join(", ")}'),
+                      backgroundColor: Colors.green,
+                    ));
                   }
                 } catch (e) {
-                  if (mounted) {
-                    SnackBarHelper.showError(context, e.toString());
-                  }
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(

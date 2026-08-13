@@ -195,10 +195,12 @@ class _SplashScreenState extends State<SplashScreen>
           final role = userData['role']?.toString().toLowerCase() ?? '';
 
           // Rediriger selon le rôle
-          if (role.contains('technician') || role.contains('technicien')) {
-            Navigator.pushReplacementNamed(context, '/technician');
-          } else {
-            Navigator.pushReplacementNamed(context, '/client');
+          if (mounted) {
+            if (role.contains('technician') || role.contains('technicien')) {
+              Navigator.pushReplacementNamed(context, '/technician');
+            } else {
+              Navigator.pushReplacementNamed(context, '/client');
+            }
           }
         } else {
           // Pas de données utilisateur, aller au login ou onboarding

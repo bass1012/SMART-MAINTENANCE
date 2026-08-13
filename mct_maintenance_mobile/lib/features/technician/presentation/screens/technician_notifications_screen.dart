@@ -56,6 +56,7 @@ class _TechnicianNotificationsScreenState
   }
 
   Future<void> _markAsRead(int notificationId) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       if (!mounted) return;
       // Mise à jour optimiste de l'interface
@@ -75,12 +76,16 @@ class _TechnicianNotificationsScreenState
       // En cas d'erreur, recharger pour avoir l'état correct
       if (mounted) {
         await _loadNotifications();
-        SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Erreur lors de la mise à jour'),
+        backgroundColor: Colors.red,
+      ));
     }
   }
 
   Future<void> _markAllAsRead() async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       if (!mounted) return;
       // Mise à jour optimiste de l'interface
@@ -94,17 +99,19 @@ class _TechnicianNotificationsScreenState
       // Appel API
       await _notificationRepository.markAllAsRead();
 
-      if (mounted) {
-        SnackBarHelper.showSuccess(
-            context, 'Toutes les notifications marquées comme lues',
-            emoji: '✓');
-      }
+      messenger.showSnackBar(const SnackBar(
+        content: Text('✓ Toutes les notifications marquées comme lues'),
+        backgroundColor: Colors.green,
+      ));
     } catch (e) {
       // En cas d'erreur, recharger pour avoir l'état correct
       if (mounted) {
         await _loadNotifications();
-        SnackBarHelper.showError(context, 'Erreur lors de la mise à jour');
       }
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Erreur lors de la mise à jour'),
+        backgroundColor: Colors.red,
+      ));
     }
   }
 

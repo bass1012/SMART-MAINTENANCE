@@ -106,11 +106,12 @@ class _TechnicianMessagesScreenState extends State<TechnicianMessagesScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Actualiser',
             onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
               await _loadConversations();
-              if (mounted) {
-                SnackBarHelper.showSuccess(context, 'Messages actualisés',
-                    emoji: '✅');
-              }
+              messenger.showSnackBar(const SnackBar(
+                content: Text('✅ Messages actualisés'),
+                backgroundColor: Colors.green,
+              ));
             },
           ),
           IconButton(
