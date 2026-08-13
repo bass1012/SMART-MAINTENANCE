@@ -10,7 +10,7 @@ dotenv.config(); // Charger les variables d'environnement depuis .env
 const path = require('path');
 const fs = require('fs');
 const { testConnection, syncDatabase } = require('./config/database');
-const { connectRedis, disconnectRedis } = require('./config/redis');
+const { connectRedis, disconnectRedis, getRedisStatus } = require('./config/redis');
 const { setupSwagger } = require('./config/swagger');
 const notificationService = require('./services/notificationService');
 const fcmService = require('./services/fcmService');
@@ -140,20 +140,22 @@ app.get(['/live', '/api/live', '/health', '/api/health'], (req, res) => {
   });
 });
 
-// Readiness check (vérification de la connectivité base de données)
+// Readiness check (vérification de la connectivité base de données et redis)
 app.get(['/ready', '/api/ready'], async (req, res) => {
   try {
     await sequelize.authenticate();
     res.status(200).json({
       status: 'READY',
       timestamp: new Date().toISOString(),
-      database: 'connected'
+      database: 'connected',
+      redis: getRedisStatus()
     });
   } catch (error) {
     res.status(503).json({
       status: 'NOT_READY',
       timestamp: new Date().toISOString(),
       database: 'disconnected',
+      redis: getRedisStatus(),
       error: error.message
     });
   }

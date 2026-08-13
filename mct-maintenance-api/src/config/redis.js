@@ -133,10 +133,18 @@ const createRedisRateLimitStore = ({ prefix, windowMs }) => ({
   }
 });
 
+const getRedisStatus = () => {
+  if (sharedClient && sharedClient.isOpen) return 'connected';
+  if (!redisUrl && !isProduction) return 'memory_fallback';
+  if (activeClient === memoryClient) return 'memory_fallback';
+  return 'disconnected';
+};
+
 module.exports = {
   MemoryCache,
   connectRedis,
   disconnectRedis,
   createRedisRateLimitStore,
+  getRedisStatus,
   cache
 };
