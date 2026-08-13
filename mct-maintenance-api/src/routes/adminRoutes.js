@@ -1465,6 +1465,110 @@ router.get('/referrals', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/admin/system/logs
+ * Lit et retourne les derniers logs système (Winston / PM2)
+ */
+router.get('/system/logs', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { type = 'combined', lines = 100, level = 'all', search = '' } = req.query;
+    const maxLines = Math.max(1, Math.min(1000, parseInt(lines, 10) || 100));
+
+    // Déterminer le fichier de log à lire
+    const primaryPath = type === 'error'
+      ? '/var/log/smartmaintenance/api-error.log'
+      : '/var/log/smartmaintenance/api-out.log';
+
+    const fallbackPath = type === 'error'
+      ? path.join(process.cwd(), 'logs', 'error.log')
+      : path.join(process.cwd(), 'logs', 'combined.log');
+
+    let targetFilePath = null;
+    if (fs.existsSync(primaryPath)) {
+      targetFilePath = primaryPath;
+    } else if (fs.existsSync(fallbackPath)) {
+      targetFilePath = fallbackPath;
+    }
+
+    if (!targetFilePath) {
+      return res.json({
+        success: true,
+        type,
+        total: 0,
+        returned: 0,
+        logs: [],
+        message: 'Aucun fichier de journalisation système trouvé'
+      });
+    }
+
+    const fileContent = fs.readFileSync(targetFilePath, 'utf8');
+    const rawLines = fileContent.split('\n').filter(line => line.trim().length > 0);
+
+    const parsedLogs = [];
+    for (let i = rawLines.length - 1; i >= 0; i--) {
+      const rawLine = rawLines[i];
+      let logObj = null;
+
+      if (rawLine.startsWith('{') && rawLine.endsWith('}')) {
+        try {
+          logObj = JSON.parse(rawLine);
+        } catch (e) {
+          logObj = null;
+        }
+      }
+
+      if (!logObj) {
+        const matchDate = rawLine.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\+\d{2}:\d{2})?)/);
+        const timestamp = matchDate ? matchDate[1] : new Date().toISOString();
+        const logLevel = rawLine.toLowerCase().includes('error') || rawLine.toLowerCase().includes('500')
+          ? 'error'
+          : rawLine.toLowerCase().includes('warn')
+          ? 'warn'
+          : 'info';
+
+        logObj = {
+          timestamp,
+          level: logLevel,
+          message: rawLine
+        };
+      }
+
+      if (level !== 'all' && logObj.level !== level) {
+        continue;
+      }
+
+      if (search && search.trim()) {
+        const query = search.trim().toLowerCase();
+        const jsonStr = JSON.stringify(logObj).toLowerCase();
+        if (!jsonStr.includes(query)) {
+          continue;
+        }
+      }
+
+      parsedLogs.push(logObj);
+      if (parsedLogs.length >= maxLines) {
+        break;
+      }
+    }
+
+    res.json({
+      success: true,
+      type,
+      total: rawLines.length,
+      returned: parsedLogs.length,
+      logs: parsedLogs
+    });
+  } catch (error) {
+    console.error('❌ Erreur lecture logs système:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la lecture des fichiers de logs'
+    });
+  }
+});
+
 module.exports = router;
 
 
