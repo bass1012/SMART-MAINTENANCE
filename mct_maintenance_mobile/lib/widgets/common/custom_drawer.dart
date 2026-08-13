@@ -332,8 +332,11 @@ class _CustomDrawerState extends State<CustomDrawer> {
           ),
         ),
         onPressed: () async {
-          // Afficher une boîte de dialogue de confirmation
+          // Capturer le Navigator et le repository AVANT tout await
+          // pour éviter use_build_context_synchronously si le widget est démonté
           final authRepository = context.read<AuthRepository>();
+          final nav = Navigator.of(context);
+
           final shouldLogout = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
@@ -356,7 +359,6 @@ class _CustomDrawerState extends State<CustomDrawer> {
           );
 
           if (shouldLogout == true) {
-            final nav = Navigator.of(context);
             try {
               await FCMService().clearOnLogout();
               await authRepository.logout();

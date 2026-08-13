@@ -1397,28 +1397,30 @@ router.get('/referrals', async (req, res, next) => {
       ];
     }
 
+    // Une seule requête SQL : parrains + filleuls via include (élimine le N+1)
     const { count, rows: referrerProfiles } = await CustomerProfile.findAndCountAll({
       where: referrerWhere,
       limit: limitNum,
       offset,
       order: [['created_at', 'DESC']],
+      subQuery: false,
       include: [
         {
           model: User,
           as: 'user',
           attributes: ['id', 'email', 'phone']
+        },
+        {
+          model: CustomerProfile,
+          as: 'referredCustomers',
+          required: false,
+          include: [{ model: User, as: 'user', attributes: ['id', 'email', 'phone'] }]
         }
       ]
     });
 
-    // Charger les filleuls pour chaque parrain
-    const referrersData = await Promise.all(referrerProfiles.map(async (referrer) => {
-      const filleuls = await CustomerProfile.findAll({
-        where: { referred_by_id: referrer.id },
-        include: [{ model: User, as: 'user', attributes: ['id', 'email', 'phone'] }],
-        order: [['created_at', 'DESC']]
-      });
-
+    const referrersData = referrerProfiles.map(referrer => {
+      const filleuls = referrer.referredCustomers || [];
       return {
         id: referrer.id,
         user_id: referrer.user_id,
@@ -1440,7 +1442,7 @@ router.get('/referrals', async (req, res, next) => {
           joined_at: f.created_at
         }))
       };
-    }));
+    });
 
     const totalReferredCount = await CustomerProfile.count({
       where: { referred_by_id: { [Op.ne]: null } }
@@ -1473,8 +1475,11 @@ router.get('/system/logs', async (req, res) => {
   try {
     const fs = require('fs');
     const path = require('path');
+    const { execFileSync } = require('child_process');
     const { type = 'combined', lines = 100, level = 'all', search = '' } = req.query;
     const maxLines = Math.max(1, Math.min(1000, parseInt(lines, 10) || 100));
+    // Multiplier par 10 pour absorber les lignes filtrées (niveau, search)
+    const tailLines = maxLines * 10;
 
     // Déterminer le fichier de log à lire
     const primaryPath = type === 'error'
@@ -1503,8 +1508,17 @@ router.get('/system/logs', async (req, res) => {
       });
     }
 
-    const fileContent = fs.readFileSync(targetFilePath, 'utf8');
-    const rawLines = fileContent.split('\n').filter(line => line.trim().length > 0);
+    // Lire uniquement la queue du fichier via tail (économise la RAM)
+    // Fallback fs.readFileSync si tail n'est pas disponible (ex: Windows)
+    let rawLines;
+    try {
+      const tailOutput = execFileSync('tail', ['-n', String(tailLines), targetFilePath], { encoding: 'utf8', timeout: 5000 });
+      rawLines = tailOutput.split('\n').filter(line => line.trim().length > 0);
+    } catch (_tailErr) {
+      // Fallback : lecture complète si tail indisponible
+      const fileContent = fs.readFileSync(targetFilePath, 'utf8');
+      rawLines = fileContent.split('\n').filter(line => line.trim().length > 0).slice(-tailLines);
+    }
 
     const parsedLogs = [];
     for (let i = rawLines.length - 1; i >= 0; i--) {
@@ -1520,7 +1534,7 @@ router.get('/system/logs', async (req, res) => {
       }
 
       if (!logObj) {
-        const matchDate = rawLine.match(/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\+\d{2}:\d{2})?)/);
+        const matchDate = rawLine.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\+\d{2}:\d{2})?)/);
         const timestamp = matchDate ? matchDate[1] : new Date().toISOString();
         const logLevel = rawLine.toLowerCase().includes('error') || rawLine.toLowerCase().includes('500')
           ? 'error'
@@ -1570,6 +1584,7 @@ router.get('/system/logs', async (req, res) => {
 });
 
 module.exports = router;
+
 
 
 
