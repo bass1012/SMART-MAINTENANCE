@@ -1388,53 +1388,45 @@ class _CustomerMainScreenState extends State<CustomerMainScreen> {
   }
 
   Widget _buildScrollingBanner() {
-    // Vérifier l'heure actuelle
-    final now = DateTime.now();
-    final currentHour = now.hour;
-    final currentMinute = now.minute;
+    final bool isClosed = _isOutsideBusinessHours;
 
-    // Afficher la bannière en dehors des heures de service (8h-18h en semaine)
-    // Donc afficher si: avant 8h OU après 17h30 OU weekend
-    final isWeekend =
-        now.weekday == DateTime.saturday || now.weekday == DateTime.sunday;
-    final isBeforeOpening = currentHour < 8;
-    final isAfterClosing =
-        currentHour > 18 || (currentHour == 18 && currentMinute >= 30);
-
-    // Afficher la bannière seulement en dehors des heures de service
-    final shouldShowBanner = isWeekend || isBeforeOpening || isAfterClosing;
-
-    if (!shouldShowBanner) {
-      return const SizedBox
-          .shrink(); // Ne rien afficher pendant les heures de service
-    }
-
-    return Container(
-      height: 40,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.orange.shade100,
-            Colors.amber.shade100,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.orange.shade300,
-          width: 1,
-        ),
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: ResponsiveHelper.getHorizontalPadding(context).clamp(24.0, 48.0),
       ),
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: _ScrollingText(
-          text:
-              '   📞 Service Client disponible de 8h à 18h du lundi au vendredi   •   Samedi de 09h à 12h   •   ',
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.orange.shade800,
+      child: Container(
+        height: 40,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isClosed
+                ? [
+                    Colors.orange.shade100,
+                    Colors.amber.shade100,
+                  ]
+                : [
+                    const Color(0xFF0a543d).withValues(alpha: 0.1),
+                    const Color(0xFF0d6b4d).withValues(alpha: 0.05),
+                  ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isClosed
+                ? Colors.orange.shade300
+                : const Color(0xFF0a543d).withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: _ScrollingText(
+            text:
+                '   📞 Service Client disponible de 08h à 18h du lundi au vendredi   •   Samedi de 09h à 12h   •   ',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isClosed ? Colors.orange.shade900 : const Color(0xFF0a543d),
+            ),
           ),
         ),
       ),
