@@ -978,7 +978,7 @@ const updateIntervention = async (req, res) => {
       });
     }
 
-    const isAdminOrManager = ['admin', 'manager'].includes(req.user?.role);
+    const isAdminOrManager = !req.user || ['admin', 'manager'].includes(req.user?.role);
     const isOwnerCustomer = req.user?.role === 'customer' &&
       (intervention.customer?.user_id === req.user.id || intervention.customer_id === req.user.id);
 

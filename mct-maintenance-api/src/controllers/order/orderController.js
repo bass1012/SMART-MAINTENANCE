@@ -1,4 +1,4 @@
-const { Order, User, Product, OrderItem, CustomerProfile, Payment } = require('../../models');
+const { Order, User, Product, OrderItem, CustomerProfile, Payment, Intervention, DiagnosticReport, Quote } = require('../../models');
 const Promotion = require('../../models/Promotion');
 const Subscription = require('../../models/Subscription');
 const MaintenanceOffer = require('../../models/MaintenanceOffer');
@@ -23,7 +23,32 @@ const getAllOrders = async (req, res, next) => {
     // Si l'utilisateur n'est pas admin/manager, il ne voit que ses propres commandes
     const role = req.user ? req.user.role : null;
     const userId = req.user ? req.user.id : null;
-    if (userId && (mine === 'true' || (role !== 'admin' && role !== 'manager'))) {
+    if (userId && role === 'technician') {
+      const technicianInterventions = await Intervention.findAll({
+        where: { technician_id: userId },
+        attributes: ['id']
+      });
+      const interventionIds = technicianInterventions.map(i => i.id);
+
+      const technicianDiagnostics = await DiagnosticReport.findAll({
+        where: { technician_id: userId },
+        attributes: ['id']
+      });
+      const diagnosticIds = technicianDiagnostics.map(d => d.id);
+
+      const technicianQuotes = await Quote.findAll({
+        where: {
+          [Op.or]: [
+            { intervention_id: { [Op.in]: interventionIds } },
+            { diagnostic_report_id: { [Op.in]: diagnosticIds } }
+          ]
+        },
+        attributes: ['id']
+      });
+      const quoteIds = technicianQuotes.map(q => q.id);
+
+      where.quoteId = { [Op.in]: quoteIds };
+    } else if (userId && (mine === 'true' || (role !== 'admin' && role !== 'manager'))) {
       // Trouver le CustomerProfile de l'utilisateur
       const customerProfile = await CustomerProfile.findOne({ where: { user_id: userId } });
       if (customerProfile) {
@@ -89,10 +114,13 @@ const getAllOrders = async (req, res, next) => {
     });
     res.status(200).json({
       success: true,
-      count,
-      totalPages: Math.ceil(count / limit),
-      currentPage: parseInt(page),
-      data: mappedOrders
+      data: {
+        orders: mappedOrders,
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / limit)
+      }
     });
   } catch (error) {
     console.error('Error fetching orders:', error);
@@ -132,6 +160,16 @@ const getOrderById = async (req, res, next) => {
         success: false,
         message: 'Commande non trouvée'
       });
+    }
+
+    if (req.user && req.user.role !== 'admin' && req.user.role !== 'manager') {
+      const customerProfile = await CustomerProfile.findOne({ where: { user_id: req.user.id } });
+      if (!customerProfile || order.customerId !== customerProfile.id) {
+        return res.status(404).json({
+          success: false,
+          message: 'Commande non trouvée'
+        });
+      }
     }
 
     res.status(200).json({
@@ -243,20 +281,43 @@ const createOrder = async (req, res, next) => {
     }
     
     // Appliquer la réduction promo si présente
-    const finalAmount = promo_discount ? totalAmount - promo_discount : totalAmount;
-    
+    let calculatedPromoDiscount = parseFloat(promo_discount || 0);
+    let promoId = promo_id || null;
+
+    if (promo_code && calculatedPromoDiscount === 0) {
+      const promotion = await Promotion.findOne({
+        where: { code: promo_code, isActive: true },
+        transaction
+      });
+      if (promotion) {
+        promoId = promotion.id;
+        if (promotion.type === 'percentage') {
+          calculatedPromoDiscount = (totalAmount * promotion.value) / 100;
+        } else if (promotion.type === 'fixed') {
+          calculatedPromoDiscount = Math.min(totalAmount, promotion.value);
+        }
+        if (typeof promotion.increment === 'function') {
+          await promotion.increment('usageCount', { by: 1, transaction });
+        }
+      }
+    }
+
+    const finalAmount = Math.max(0, totalAmount - calculatedPromoDiscount);
+    const isFreeOrder = finalAmount === 0;
+
     // Créer la commande
     const order = await Order.create({
       customerId,
       totalAmount: finalAmount,
-      status: 'pending',
+      status: isFreeOrder ? 'paid' : 'pending',
+      paymentStatus: isFreeOrder ? 'paid' : 'pending',
       shippingAddress: shippingAddress || shipping_address,
       paymentMethod: paymentMethod || payment_method,
       notes,
       reference: `CMD-${Date.now()}`,
       promoCode: promo_code || null,
-      promoDiscount: promo_discount || 0,
-      promoId: promo_id || null
+      promoDiscount: calculatedPromoDiscount,
+      promoId: promoId
     }, { transaction });
     
     // Ajouter les articles de la commande avec l'ID de la commande
@@ -277,22 +338,34 @@ const createOrder = async (req, res, next) => {
     }));
     
     // Créer un enregistrement Payment pour la commande
-    const { Payment } = require('../../models');
-    const paymentProvider = paymentMethod === 'cash' ? 'cash' : 
-                           paymentMethod === 'Carte bancaire' ? 'stripe' :
-                           paymentMethod === 'Orange Money' ? 'orange_money' :
-                           paymentMethod === 'MTN Money' ? 'mtn_money' :
-                           paymentMethod === 'Moov Money' ? 'moov_money' :
-                           paymentMethod === 'Wave' ? 'wave' : 'cash';
-    
-    await Payment.create({
-      orderId: order.id,
-      amount: finalAmount,
-      currency: 'XOF',
-      provider: paymentProvider,
-      status: 'pending',
-      paymentMethod: paymentMethod || payment_method || 'cash'
-    }, { transaction });
+    if (isFreeOrder) {
+      await Payment.create({
+        orderId: order.id,
+        amount: 0,
+        currency: 'XOF',
+        provider: 'free',
+        status: 'succeeded',
+        paymentId: `FREE-ORDER-${order.id}`,
+        paymentMethod: paymentMethod || payment_method || 'cash',
+        metadata: { settlement: 'free', gateway_called: false }
+      }, { transaction });
+    } else {
+      const paymentProvider = paymentMethod === 'cash' ? 'cash' : 
+                             paymentMethod === 'Carte bancaire' ? 'stripe' :
+                             paymentMethod === 'Orange Money' ? 'orange_money' :
+                             paymentMethod === 'MTN Money' ? 'mtn_money' :
+                             paymentMethod === 'Moov Money' ? 'moov_money' :
+                             paymentMethod === 'Wave' ? 'wave' : 'cash';
+      
+      await Payment.create({
+        orderId: order.id,
+        amount: finalAmount,
+        currency: 'XOF',
+        provider: paymentProvider,
+        status: 'pending',
+        paymentMethod: paymentMethod || payment_method || 'cash'
+      }, { transaction });
+    }
     
     console.log('✅ Payment record created for order');
     
@@ -463,6 +536,14 @@ const updateOrder = async (req, res, next) => {
   let committed = false;
   
   try {
+    if (req.user && req.user.role !== 'admin' && req.user.role !== 'manager') {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé. Seuls les administrateurs peuvent modifier une commande.'
+      });
+    }
+
     const { status, notes, shipping_address, payment_method, items, tracking_url } = req.body;
     
     const order = await Order.findByPk(req.params.id, {

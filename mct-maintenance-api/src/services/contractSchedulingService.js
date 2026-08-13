@@ -29,6 +29,8 @@ class ContractSchedulingService {
     const {
       customer_id,
       maintenance_offer_id = null,
+      installation_service_id = null,
+      repair_service_id = null,
       equipment_description = null,
       equipment_model = null,
       equipment_count = 1,
@@ -76,6 +78,18 @@ class ContractSchedulingService {
     const numericPrice = parseFloat(price || 0);
     const isFreePrice = numericPrice === 0;
 
+    // Récupérer l'offre de maintenance (optionnel)
+    const maintenanceOffer = maintenance_offer_id 
+      ? await MaintenanceOffer.findByPk(maintenance_offer_id)
+      : null;
+
+    if (maintenance_offer_id && maintenanceOffer && maintenanceOffer.isActive === false) {
+      throw new Error('Cette offre de maintenance est inactive');
+    }
+
+    const firstPaymentAmount = isFreePrice ? 0 : Math.ceil(numericPrice / 2);
+    const secondPaymentAmount = isFreePrice ? 0 : (numericPrice - firstPaymentAmount);
+
     // Créer la souscription en attente de paiement
     const subscription = await Subscription.create({
       customer_id: userId,
@@ -97,17 +111,14 @@ class ContractSchedulingService {
       start_date: startDate,
       end_date: endDate,
       price: numericPrice,
+      first_payment_amount: firstPaymentAmount,
+      second_payment_amount: secondPaymentAmount,
       payment_status: isFreePrice ? 'paid' : 'pending',
       first_payment_status: isFreePrice ? 'paid' : 'pending',
-      second_payment_status: isFreePrice ? 'paid' : null
+      second_payment_status: isFreePrice ? 'paid' : 'pending'
     });
 
     console.log(`✅ Souscription #${subscription.id} créée (en attente de paiement)`);
-
-    // Récupérer l'offre de maintenance (optionnel)
-    const maintenanceOffer = maintenance_offer_id 
-      ? await MaintenanceOffer.findByPk(maintenance_offer_id)
-      : null;
 
     // Ne PAS créer l'intervention maintenant - elle sera créée après le paiement
 
@@ -186,18 +197,28 @@ class ContractSchedulingService {
 
     const price = parseFloat(subscription.price || 0);
     const firstPaymentAmount = subscription.first_payment_amount || Math.ceil(price / 2);
-    const secondPaymentAmount = subscription.second_payment_amount || Math.floor(price / 2);
+    const secondPaymentAmount = subscription.second_payment_amount !== undefined && subscription.second_payment_amount !== null
+      ? subscription.second_payment_amount
+      : Math.floor(price / 2);
 
-    // Mettre à jour le statut du contrat
-    await subscription.update({
+    const isFullyPaid = secondPaymentAmount <= 0;
+
+    const updatePayload = {
       status: 'active',
-      payment_status: 'partial',
+      payment_status: isFullyPaid ? 'paid' : 'partial',
       first_payment_status: 'paid',
       first_payment_amount: firstPaymentAmount,
       second_payment_amount: secondPaymentAmount,
       payment_reference: paymentReference,
       payment_date: new Date()
-    });
+    };
+
+    if (isFullyPaid) {
+      updatePayload.second_payment_status = 'paid';
+    }
+
+    // Mettre à jour le statut du contrat
+    await subscription.update(updatePayload);
 
     console.log(`✅ Contrat #${subscriptionId} activé, intervention #${firstIntervention.id} créée`);
 

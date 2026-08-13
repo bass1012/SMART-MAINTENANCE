@@ -31,16 +31,31 @@ try {
  * @param {Transaction} transaction - Transaction Sequelize (optionnelle)
  * @returns {Promise<Object>} - Résultat de la suppression avec statistiques
  */
-const deleteCustomerCompletely = async (customerId, transaction = null) => {
-  const shouldCommit = !transaction;
-  const t = transaction || await User.sequelize.transaction();
+const deleteCustomerCompletely = async (target, transaction = null) => {
+  let targetProfileId = null;
+  let targetUserId = null;
+  let rawId = null;
+  let passedTransaction = transaction;
+
+  if (typeof target === 'object' && target !== null) {
+    if (target.customerProfileId !== undefined) targetProfileId = target.customerProfileId;
+    if (target.userId !== undefined) targetUserId = target.userId;
+    if (target.customerId !== undefined) rawId = target.customerId;
+    if (target.transaction && !passedTransaction) passedTransaction = target.transaction;
+  } else {
+    rawId = target;
+  }
+
+  const shouldCommit = !passedTransaction;
+  const t = passedTransaction || await User.sequelize.transaction();
   
   try {
-    console.log(`🗑️  Suppression complète du client ID: ${customerId}`);
+    const displayId = targetProfileId ? `profile #${targetProfileId}` : (targetUserId ? `user #${targetUserId}` : rawId);
+    console.log(`🗑️  Suppression complète du client ID: ${displayId}`);
     
     // Statistiques de suppression
     const stats = {
-      customerId,
+      customerId: rawId || targetProfileId || targetUserId,
       deletedItems: {
         user: 0,
         customerProfile: 0,
@@ -59,29 +74,40 @@ const deleteCustomerCompletely = async (customerId, transaction = null) => {
       message: ''
     };
 
-    // 1. Trouver le User et CustomerProfile
-    // L'ID peut être un User.id ou un CustomerProfile.id
-    let user = await User.findByPk(customerId, { transaction: t });
-    let customerProfile;
-    
-    if (!user) {
-      // Essayer de trouver par CustomerProfile.id
-      customerProfile = await CustomerProfile.findByPk(customerId, { transaction: t });
+    let user = null;
+    let customerProfile = null;
+
+    if (targetProfileId) {
+      customerProfile = await CustomerProfile.findByPk(targetProfileId, { transaction: t });
       if (customerProfile) {
         user = await User.findByPk(customerProfile.user_id, { transaction: t });
+      }
+    } else if (targetUserId) {
+      user = await User.findByPk(targetUserId, { transaction: t });
+      if (user) {
+        customerProfile = await CustomerProfile.findOne({
+          where: { user_id: user.id },
+          transaction: t
+        });
+      }
+    } else if (rawId !== null && rawId !== undefined) {
+      // Par défaut pour un ID numérique, chercher CustomerProfile en premier
+      customerProfile = await CustomerProfile.findByPk(rawId, { transaction: t });
+      if (customerProfile) {
+        user = await User.findByPk(customerProfile.user_id, { transaction: t });
+      } else {
+        user = await User.findByPk(rawId, { transaction: t });
+        if (user) {
+          customerProfile = await CustomerProfile.findOne({
+            where: { user_id: user.id },
+            transaction: t
+          });
+        }
       }
     }
     
     if (!user) {
-      throw new Error(`Client non trouvé avec l'ID: ${customerId}`);
-    }
-
-    // Si on n'a pas encore le profile, le chercher
-    if (!customerProfile) {
-      customerProfile = await CustomerProfile.findOne({
-        where: { user_id: user.id },
-        transaction: t
-      });
+      throw new Error(`Client non trouvé avec l'ID: ${JSON.stringify(target)}`);
     }
 
     console.log(`👤 Client trouvé: ${user.email} (${user.first_name} ${user.last_name})`);
@@ -239,7 +265,7 @@ const deleteCustomerCompletely = async (customerId, transaction = null) => {
 
     // 7. Supprimer les NOTIFICATIONS
     const notificationsCount = await Notification.destroy({
-      where: { user_id: customerId },
+      where: { user_id: user.id },
       transaction: t
     });
     stats.deletedItems.notifications = notificationsCount;
