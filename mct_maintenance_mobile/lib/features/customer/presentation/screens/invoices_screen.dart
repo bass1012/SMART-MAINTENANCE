@@ -95,14 +95,30 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         final String rawStatus = item['status']?.toString() ?? 'pending';
         final String status = _mapInvoiceStatus(rawStatus, date);
 
-        // Déterminer le numéro de facture selon le type
+        // Déterminer le numéro de facture selon le type et assainir la référence
         String invoiceNumber;
+        final String rawRef = (item['reference'] ?? itemId).toString().trim();
+
         if (type == 'quote_second_payment') {
-          invoiceNumber = 'SOL-${item['reference'] ?? itemId}';
+          if (rawRef.startsWith('SOL-')) {
+            invoiceNumber = rawRef;
+          } else if (rawRef.startsWith('DEV-')) {
+            invoiceNumber = rawRef.replaceFirst('DEV-', 'SOL-');
+          } else {
+            invoiceNumber = 'SOL-$rawRef';
+          }
         } else if (type.startsWith('quote')) {
-          invoiceNumber = 'DEV-${item['reference'] ?? itemId}';
+          if (rawRef.startsWith('DEV-')) {
+            invoiceNumber = rawRef;
+          } else {
+            invoiceNumber = 'DEV-$rawRef';
+          }
         } else {
-          invoiceNumber = 'CMD-${item['reference'] ?? itemId}';
+          if (rawRef.startsWith('CMD-')) {
+            invoiceNumber = rawRef;
+          } else {
+            invoiceNumber = 'CMD-$rawRef';
+          }
         }
 
         return Invoice(
