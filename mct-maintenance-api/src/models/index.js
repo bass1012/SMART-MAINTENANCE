@@ -32,6 +32,7 @@ const PaymentWebhookEvent = require('./PaymentWebhookEvent');
 const OutboxEvent = require('./OutboxEvent');
 const Promotion = require('./Promotion');
 const ContactRequest = require('./ContactRequest');
+const SupportTicket = require('./SupportTicket');
 
 ContactRequest.belongsTo(CustomerProfile, { foreignKey: 'customerId', as: 'customer' });
 CustomerProfile.hasMany(ContactRequest, { foreignKey: 'customerId', as: 'contactRequests' });
@@ -197,6 +198,9 @@ Order.hasMany(Payment, { foreignKey: 'orderId', as: 'payments' });
 Subscription.hasMany(Payment, { foreignKey: 'subscriptionId', as: 'payments' });
 Intervention.hasMany(Payment, { foreignKey: 'interventionId', as: 'payments' });
 
+User.hasMany(SupportTicket, { foreignKey: 'assigned_agent_id', as: 'assignedTickets' });
+SupportTicket.belongsTo(User, { foreignKey: 'assigned_agent_id', as: 'assignedAgent' });
+
 // Export the sequelize instance for transactions
 module.exports = {
   ...models,
@@ -214,5 +218,6 @@ module.exports = {
   Split,
   Promotion,
   ContactRequest,
+  SupportTicket,
   RefundRequest: require('./RefundRequest')
 };

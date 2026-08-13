@@ -164,6 +164,8 @@ router.get('/conversations', authenticate, async (req, res) => {
     }
 
     const { Sequelize } = require('sequelize');
+    const { SupportTicket } = require('../models');
+    const { includesClosed } = req.query;
     
     // Récupérer tous les clients qui ont envoyé au moins un message
     const conversations = await ChatMessage.findAll({
@@ -193,14 +195,55 @@ router.get('/conversations', authenticate, async (req, res) => {
       order: [[Sequelize.literal('last_message_date'), 'DESC']]
     });
 
-    console.log('📊 [Chat] Conversations récupérées:', conversations.map(c => ({
-      sender_id: c.sender_id,
-      unread_count: c.get('unread_count')
-    })));
+    // Récupérer tous les tickets de support enregistrés
+    const tickets = await SupportTicket.findAll({
+      include: [
+        {
+          model: User,
+          as: 'assignedAgent',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    const conversationsWithTickets = conversations.map(c => {
+      const convData = c.toJSON();
+      const customerUserId = c.sender_id;
+
+      // Trouver le ticket actif (non clos) ou le dernier ticket pour ce client
+      const activeTicket = tickets.find(t => t.customerId === customerUserId && t.status !== 'closed')
+        || tickets.find(t => t.customerId === customerUserId);
+
+      convData.ticket = activeTicket ? {
+        id: activeTicket.id,
+        status: activeTicket.status,
+        assignedAgentId: activeTicket.assignedAgentId,
+        assignedAgentName: activeTicket.assignedAgent
+          ? `${activeTicket.assignedAgent.first_name || ''} ${activeTicket.assignedAgent.last_name || ''}`.trim() || activeTicket.assignedAgent.email
+          : null,
+        category: activeTicket.category,
+        resolutionNotes: activeTicket.resolutionNotes,
+        closedAt: activeTicket.closedAt
+      } : {
+        status: 'unassigned',
+        assignedAgentId: null,
+        assignedAgentName: null
+      };
+
+      return convData;
+    });
+
+    const isClosedMode = includesClosed === 'true' || includesClosed === true;
+    const finalConversations = isClosedMode
+      ? conversationsWithTickets.filter(c => c.ticket.status === 'closed')
+      : conversationsWithTickets.filter(c => c.ticket.status !== 'closed');
+
+    console.log(`📊 [Chat] ${finalConversations.length} conversation(s) récupérée(s) (mode clôturé: ${isClosedMode})`);
 
     res.json({
       success: true,
-      data: conversations
+      data: finalConversations
     });
   } catch (error) {
     console.error('Erreur récupération conversations:', error);
@@ -413,14 +456,38 @@ router.post('/conversations/:userId/assign', authenticate, async (req, res, next
     const assignedAgentId = req.user.id;
     const assignedAgentName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Agent';
 
-    console.log(`📌 [Chat] Conversation avec l'utilisateur ${targetUserId} attribuée à l'agent ${assignedAgentId} (${assignedAgentName})`);
+    const { SupportTicket } = require('../models');
+
+    // Trouver ou créer le ticket de support pour cet utilisateur
+    let ticket = await SupportTicket.findOne({
+      where: {
+        customerId: targetUserId,
+        status: { [Op.ne]: 'closed' }
+      }
+    });
+
+    if (!ticket) {
+      ticket = await SupportTicket.create({
+        customerId: targetUserId,
+        assignedAgentId,
+        status: 'in_progress'
+      });
+    } else {
+      await ticket.update({
+        assignedAgentId,
+        status: 'in_progress'
+      });
+    }
+
+    console.log(`📌 [Chat] Ticket #${ticket.id} pour l'utilisateur ${targetUserId} attribué à l'agent ${assignedAgentId} (${assignedAgentName})`);
 
     const io = require('../services/socketService').getIO();
     if (io) {
       io.emit('chat:conversation_assigned', {
         targetUserId,
         assignedAgentId,
-        assignedAgentName
+        assignedAgentName,
+        ticketId: ticket.id
       });
     }
 
@@ -430,7 +497,8 @@ router.post('/conversations/:userId/assign', authenticate, async (req, res, next
       data: {
         targetUserId,
         assignedAgentId,
-        assignedAgentName
+        assignedAgentName,
+        ticket
       }
     });
   } catch (error) {
@@ -453,8 +521,34 @@ router.post('/conversations/:userId/close', authenticate, async (req, res, next)
 
     const targetUserId = parseInt(req.params.userId, 10);
     const { category, notes } = req.body;
+    const { SupportTicket } = require('../models');
 
-    console.log(`🔒 [Chat] Conversation ${targetUserId} clôturée par ${req.user.id} - Catégorie: ${category}`);
+    let ticket = await SupportTicket.findOne({
+      where: {
+        customerId: targetUserId,
+        status: { [Op.ne]: 'closed' }
+      }
+    });
+
+    if (!ticket) {
+      ticket = await SupportTicket.create({
+        customerId: targetUserId,
+        assignedAgentId: req.user.id,
+        status: 'closed',
+        category: category || 'Support Général',
+        resolutionNotes: notes || '',
+        closedAt: new Date()
+      });
+    } else {
+      await ticket.update({
+        status: 'closed',
+        category: category || ticket.category || 'Support Général',
+        resolutionNotes: notes || ticket.resolutionNotes,
+        closedAt: new Date()
+      });
+    }
+
+    console.log(`🔒 [Chat] Ticket #${ticket.id} clôturé pour l'utilisateur ${targetUserId} par ${req.user.id} - Catégorie: ${category}`);
 
     const io = require('../services/socketService').getIO();
     if (io) {
@@ -462,7 +556,8 @@ router.post('/conversations/:userId/close', authenticate, async (req, res, next)
         targetUserId,
         closedByAgentId: req.user.id,
         category,
-        notes
+        notes,
+        ticketId: ticket.id
       });
     }
 
@@ -472,7 +567,8 @@ router.post('/conversations/:userId/close', authenticate, async (req, res, next)
       data: {
         targetUserId,
         category,
-        notes
+        notes,
+        ticket
       }
     });
   } catch (error) {
