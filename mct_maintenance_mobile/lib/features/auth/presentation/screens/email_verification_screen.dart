@@ -55,6 +55,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       setState(() {
         if (_resendCountdown > 0) {
           _resendCountdown--;

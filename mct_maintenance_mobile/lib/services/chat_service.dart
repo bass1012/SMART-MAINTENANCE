@@ -289,15 +289,6 @@ class ChatService {
       if (kDebugMode) debugPrint('⚠️ Chat déconnecté du serveur');
       _isConnected = false;
       _connectionController.add(false);
-
-      // Tenter une reconnexion après un court délai
-      Future.delayed(const Duration(seconds: 2), () {
-        if (_socket != null && !_socket!.connected) {
-          if (kDebugMode)
-            debugPrint('🔄 Tentative de reconnexion automatique...');
-          _socket!.connect();
-        }
-      });
     });
 
     // Dans socket_io_client 3.x, onConnectError et onConnectTimeout sont remplacés par des événements

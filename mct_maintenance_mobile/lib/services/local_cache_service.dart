@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -16,12 +17,23 @@ class LocalCacheService {
   LocalCacheService._internal();
 
   Database? _database;
+  Completer<Database>? _dbInitCompleter;
 
   /// Accès à la base de données
   Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    if (_database != null && _database!.isOpen) return _database!;
+    if (_dbInitCompleter != null) return _dbInitCompleter!.future;
+
+    _dbInitCompleter = Completer<Database>();
+    try {
+      _database = await _initDatabase();
+      _dbInitCompleter!.complete(_database);
+      return _database!;
+    } catch (e) {
+      _dbInitCompleter!.completeError(e);
+      _dbInitCompleter = null;
+      rethrow;
+    }
   }
 
   /// Initialiser la base de données SQLite
