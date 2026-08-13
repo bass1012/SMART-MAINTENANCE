@@ -233,8 +233,9 @@ app.use('/api/activities', activityRoutes);
 app.use('/api/sms', smsWebhookRoutes); // Webhooks HSMS.ci
 app.use('/api/splits', require('./routes/splitRoutes')); // Gestion des splits (QR code)
 app.use('/api/config', require('./routes/configRoutes')); // Configuration serveur administrable (tarifs, garanties, contacts, contrats)
+app.use('/api/contact-requests', require('./routes/contactRequestRoutes')); // Demandes de contact et rappel
 
-console.log('✅ Routes mounted: /api/users, /api/config available');
+console.log('✅ Routes mounted: /api/users, /api/config, /api/contact-requests available');
 
 // Error handling middleware
 app.use(rateLimitErrorHandler);
