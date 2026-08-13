@@ -1,3 +1,20 @@
+# Audit & Hardening de Cybersécurité SMART MAINTENANCE — 13 août 2026
+
+- [x] **1. Audit Backend Express (`mct-maintenance-api`)**
+  - [x] Audit des middlewares d'authentification JWT & vérification BOLA/IDOR sur les routes sensibles (devis, factures, profils via `resourceOwnershipPolicy.js`)
+  - [x] Vérification de la sanitisation des requêtes ORM/SQL et validation des types MIME et signatures Magic Bytes des uploads (`fileSignatureValidation.js`)
+  - [x] Vérification du Rate-Limiting (`authLimiter`, `generalLimiter`, `sensitiveLimiter`) et de la protection brute-force
+  - [x] Audit de la sécurité des callbacks/webhooks de paiement et intégrité des montants calculés côté serveur
+- [x] **2. Audit App Mobile Flutter (`mct_maintenance_mobile`)**
+  - [x] Vérification de l'étanchéité de `flutter_secure_storage` (`encryptedSharedPreferences: true`) et absence d'informations sensibles dans les logs
+  - [x] Validation des connexions sécurisées HTTPS / WSS
+- [x] **3. Hardening & Rapport de Synthèse**
+  - [x] Confirmation de la conformité de l'architecture (OWASP Top 10, NIST CSF 2.0 & MITRE F3)
+  - [x] Validation des tests backend et mobile (`flutter analyze` 0 erreur)
+  - [x] Mise à jour de `tasks/lessons.md`
+
+---
+
 # Correction de l'animation du Splash Screen (`splash_screen.dart`) — 2 août 2026
 
 - [x] Séparer l'animation d'entrée du logo/titre/footer (`_entryController.forward()`) de l'animation des bulles de chargement (`_loadingDotsController.repeat()`).
