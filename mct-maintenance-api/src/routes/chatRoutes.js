@@ -396,4 +396,198 @@ router.delete('/conversation/:userId', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/chat/conversations/:userId/assign
+ * Attribuer la conversation à l'agent connecté
+ */
+router.post('/conversations/:userId/assign', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'technician') {
+      return res.status(403).json({
+        success: false,
+        error: 'Accès réservé aux administrateurs'
+      });
+    }
+
+    const targetUserId = parseInt(req.params.userId, 10);
+    const assignedAgentId = req.user.id;
+    const assignedAgentName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Agent';
+
+    console.log(`📌 [Chat] Conversation avec l'utilisateur ${targetUserId} attribuée à l'agent ${assignedAgentId} (${assignedAgentName})`);
+
+    const io = require('../services/socketService').getIO();
+    if (io) {
+      io.emit('chat:conversation_assigned', {
+        targetUserId,
+        assignedAgentId,
+        assignedAgentName
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Conversation attribuée à ${assignedAgentName}`,
+      data: {
+        targetUserId,
+        assignedAgentId,
+        assignedAgentName
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/chat/conversations/:userId/close
+ * Clôturer une conversation support
+ */
+router.post('/conversations/:userId/close', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'technician') {
+      return res.status(403).json({
+        success: false,
+        error: 'Accès réservé aux administrateurs'
+      });
+    }
+
+    const targetUserId = parseInt(req.params.userId, 10);
+    const { category, notes } = req.body;
+
+    console.log(`🔒 [Chat] Conversation ${targetUserId} clôturée par ${req.user.id} - Catégorie: ${category}`);
+
+    const io = require('../services/socketService').getIO();
+    if (io) {
+      io.emit('chat:conversation_closed', {
+        targetUserId,
+        closedByAgentId: req.user.id,
+        category,
+        notes
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Conversation clôturée avec succès`,
+      data: {
+        targetUserId,
+        category,
+        notes
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/chat/customer-360/:userId
+ * Récupérer les données Fiche Client 360°
+ */
+router.get('/customer-360/:userId', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'technician') {
+      return res.status(403).json({
+        success: false,
+        error: 'Accès réservé aux administrateurs'
+      });
+    }
+
+    const targetUserId = parseInt(req.params.userId, 10);
+    const { User, CustomerProfile, Subscription, Equipment, Intervention, Quote, MaintenanceOffer } = require('../models');
+
+    const user = await User.findByPk(targetUserId, {
+      attributes: ['id', 'first_name', 'last_name', 'email', 'phone', 'role', 'created_at']
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'Utilisateur non trouvé'
+      });
+    }
+
+    const customerProfile = await CustomerProfile.findOne({
+      where: { user_id: targetUserId }
+    });
+
+    const profileId = customerProfile ? customerProfile.id : null;
+
+    // Subscriptions
+    let subscriptions = [];
+    if (Subscription) {
+      subscriptions = await Subscription.findAll({
+        where: {
+          [Op.or]: [
+            { customer_id: targetUserId },
+            ...(profileId ? [{ customer_id: profileId }] : [])
+          ]
+        },
+        include: MaintenanceOffer ? [{ model: MaintenanceOffer, as: 'offer' }] : [],
+        order: [['created_at', 'DESC']],
+        limit: 10
+      });
+    }
+
+    // Equipments
+    let equipments = [];
+    if (Equipment) {
+      equipments = await Equipment.findAll({
+        where: {
+          [Op.or]: [
+            { customer_id: targetUserId },
+            ...(profileId ? [{ customer_id: profileId }] : [])
+          ]
+        },
+        order: [['created_at', 'DESC']],
+        limit: 10
+      });
+    }
+
+    // Interventions
+    let interventions = [];
+    if (Intervention && profileId) {
+      interventions = await Intervention.findAll({
+        where: {
+          [Op.or]: [
+            { customer_id: profileId },
+            { customer_id: targetUserId }
+          ]
+        },
+        order: [['created_at', 'DESC']],
+        limit: 5,
+        include: [{ model: User, as: 'technician', attributes: ['id', 'first_name', 'last_name'] }]
+      });
+    }
+
+    // Unpaid / Pending Quotes
+    let unpaidQuotes = [];
+    if (Quote && profileId) {
+      unpaidQuotes = await Quote.findAll({
+        where: {
+          customer_id: profileId,
+          status: { [Op.in]: ['pending', 'sent', 'partially_paid'] }
+        },
+        order: [['created_at', 'DESC']],
+        limit: 5
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user,
+        customerProfile,
+        subscriptions,
+        equipments,
+        interventions,
+        unpaidQuotes
+      }
+    });
+  } catch (error) {
+    console.error('Erreur Fiche Client 360°:', error);
+    next(error);
+  }
+});
+
 module.exports = router;
