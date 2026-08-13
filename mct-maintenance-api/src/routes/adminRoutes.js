@@ -1357,6 +1357,114 @@ router.get('/backoffice/navigation', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/referrals
+ * Récupère les parrains et leurs filleuls pour le dashboard admin
+ */
+router.get('/referrals', async (req, res, next) => {
+  try {
+    const { search, page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Obtenir la liste distincte des IDs de parrains ayant au moins 1 filleul
+    const referrersQuery = await CustomerProfile.findAll({
+      where: { referred_by_customer_id: { [Op.ne]: null } },
+      attributes: ['referred_by_customer_id'],
+      group: ['referred_by_customer_id']
+    });
+    const referrerCustomerIds = referrersQuery.map(r => r.referred_by_customer_id).filter(Boolean);
+
+    // Clause de filtrage pour les parrains
+    const referrerWhere = {
+      [Op.or]: [
+        { id: { [Op.in]: referrerCustomerIds } },
+        { referral_code: { [Op.ne]: null } }
+      ]
+    };
+
+    if (search && search.trim()) {
+      const searchPattern = `%${search.trim()}%`;
+      referrerWhere[Op.and] = [
+        {
+          [Op.or]: [
+            { first_name: { [Op.iLike]: searchPattern } },
+            { last_name: { [Op.iLike]: searchPattern } },
+            { referral_code: { [Op.iLike]: searchPattern } }
+          ]
+        }
+      ];
+    }
+
+    const { count, rows: referrerProfiles } = await CustomerProfile.findAndCountAll({
+      where: referrerWhere,
+      limit: limitNum,
+      offset,
+      order: [['created_at', 'DESC']],
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'phone']
+        }
+      ]
+    });
+
+    // Charger les filleuls pour chaque parrain
+    const referrersData = await Promise.all(referrerProfiles.map(async (referrer) => {
+      const filleuls = await CustomerProfile.findAll({
+        where: { referred_by_customer_id: referrer.id },
+        include: [{ model: User, as: 'user', attributes: ['id', 'email', 'phone'] }],
+        order: [['created_at', 'DESC']]
+      });
+
+      return {
+        id: referrer.id,
+        user_id: referrer.user_id,
+        first_name: referrer.first_name || '',
+        last_name: referrer.last_name || '',
+        referral_code: referrer.referral_code || '',
+        email: referrer.user ? referrer.user.email : null,
+        phone: referrer.user ? referrer.user.phone : null,
+        created_at: referrer.created_at,
+        referrals_count: filleuls.length,
+        referrals: filleuls.map(f => ({
+          id: f.id,
+          user_id: f.user_id,
+          first_name: f.first_name || '',
+          last_name: f.last_name || '',
+          referral_code: f.referral_code || null,
+          email: f.user ? f.user.email : null,
+          phone: f.user ? f.user.phone : null,
+          joined_at: f.created_at
+        }))
+      };
+    }));
+
+    const totalReferredCount = await CustomerProfile.count({
+      where: { referred_by_customer_id: { [Op.ne]: null } }
+    });
+
+    res.json({
+      success: true,
+      data: referrersData,
+      stats: {
+        total_referrers: referrerCustomerIds.length,
+        total_referred: totalReferredCount
+      },
+      pagination: {
+        total: count,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(count / limitNum) || 1
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
 
 

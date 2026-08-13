@@ -85,6 +85,19 @@ const CustomerProfile = sequelize.define('CustomerProfile', {
         sms: false
       }
     }
+  },
+  referral_code: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    unique: true
+  },
+  referred_by_customer_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'customer_profiles',
+      key: 'id'
+    }
   }
 }, {
   tableName: 'customer_profiles',

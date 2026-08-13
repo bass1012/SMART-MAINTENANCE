@@ -50,6 +50,8 @@ User.hasOne(CustomerProfile, { foreignKey: 'user_id', as: 'customerProfile' });
 User.hasOne(TechnicianProfile, { foreignKey: 'user_id', as: 'technicianProfile' });
 TechnicianProfile.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 CustomerProfile.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+CustomerProfile.belongsTo(CustomerProfile, { foreignKey: 'referred_by_customer_id', as: 'referrer' });
+CustomerProfile.hasMany(CustomerProfile, { foreignKey: 'referred_by_customer_id', as: 'referredCustomers' });
 // ...existing code...
 User.hasMany(Equipment, { foreignKey: 'customer_id', as: 'equipments' });
 
