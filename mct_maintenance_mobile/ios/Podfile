@@ -54,9 +54,11 @@ post_install do |installer|
 
       # Fix App Store (Release/Archive) :
       # Exclure arm64 simulateur pour que objective_c.framework soit taggé IOS (pas IOSSIMULATOR)
+      # Et forcer la génération des symboles dSYM (DWARF-with-dSYM) pour tous les frameworks Pods
       if config.name == 'Release'
         config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
         config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
+        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
       end
     end
   end
