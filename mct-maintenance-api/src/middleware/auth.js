@@ -249,10 +249,31 @@ const requireRole = (...allowedRoles) => (req, res, next) => {
   next();
 };
 
+/**
+ * Middleware combiné : autorise les rôles listés OU l'utilisateur qui accède
+ * à sa propre ressource (req.params.id correspond à req.user.id).
+ * Usage : authorizeOrSelf('admin', 'manager')
+ * Doit être utilisé APRÈS authenticate (req.user doit être défini).
+ */
+const authorizeOrSelf = (...allowedRoles) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Non authentifié' });
+  }
+  const isSelf = String(req.params.id) === String(req.user.id);
+  if (isSelf || allowedRoles.includes(req.user.role)) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    message: `Accès refusé — rôle requis : ${allowedRoles.join(' ou ')} ou accès à sa propre ressource`
+  });
+};
+
 module.exports = {
   authenticate,
   authorize,
   adminOnly,
+  authorizeOrSelf,
   requireRole,
   optionalAuth,
   refreshToken,
