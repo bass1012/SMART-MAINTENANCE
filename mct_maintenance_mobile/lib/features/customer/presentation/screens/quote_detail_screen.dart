@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:mct_maintenance_mobile/models/quote_contract_model.dart';
 import 'package:mct_maintenance_mobile/features/customer/domain/repositories/contract_repository.dart';
 import 'package:provider/provider.dart';
@@ -109,11 +109,11 @@ class _QuoteDetailScreenState extends State<QuoteDetailScreen> {
           action: SnackBarAction(
             label: 'Ouvrir',
             textColor: Colors.white,
-            onPressed: () => OpenFile.open(filePath),
+            onPressed: () => OpenFilex.open(filePath),
           ),
         );
 
-        await OpenFile.open(filePath);
+        await OpenFilex.open(filePath);
       }
     } catch (e) {
       if (rootNavigator.canPop()) {

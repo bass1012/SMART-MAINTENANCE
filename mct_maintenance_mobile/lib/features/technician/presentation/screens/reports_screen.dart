@@ -11,7 +11,7 @@ import 'package:mct_maintenance_mobile/features/technician/presentation/screens/
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:intl/intl.dart';
 
 class TechnicianReportsScreen extends StatefulWidget {
@@ -75,14 +75,14 @@ class _TechnicianReportsScreenState extends State<TechnicianReportsScreen> {
             label: 'Ouvrir',
             textColor: Colors.white,
             onPressed: () async {
-              await OpenFile.open(file.path);
+              await OpenFilex.open(file.path);
             },
           ),
         );
       }
 
       // Ouvrir automatiquement
-      await OpenFile.open(file.path);
+      await OpenFilex.open(file.path);
     } catch (e) {
       if (mounted) {
         SnackBarHelper.hide(context);

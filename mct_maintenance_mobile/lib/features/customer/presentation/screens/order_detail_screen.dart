@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:mct_maintenance_mobile/features/customer/domain/repositories/shop_repository.dart';
 import 'package:mct_maintenance_mobile/features/customer/domain/repositories/payment_repository.dart';
 import 'package:provider/provider.dart';
@@ -766,12 +766,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           action: SnackBarAction(
             label: 'Ouvrir',
             textColor: Colors.white,
-            onPressed: () => OpenFile.open(filePath),
+            onPressed: () => OpenFilex.open(filePath),
           ),
         );
 
         // Ouvrir automatiquement le fichier
-        await OpenFile.open(filePath);
+        await OpenFilex.open(filePath);
       }
     } catch (e) {
       if (mounted) {

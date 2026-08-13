@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mct_maintenance_mobile/features/customer/domain/repositories/payment_repository.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'payment_screen.dart';
 
 class InvoicesScreen extends StatefulWidget {
@@ -909,12 +909,12 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           action: SnackBarAction(
             label: 'Ouvrir',
             textColor: Colors.white,
-            onPressed: () => OpenFile.open(filePath),
+            onPressed: () => OpenFilex.open(filePath),
           ),
         );
 
         // Ouvrir automatiquement le fichier
-        await OpenFile.open(filePath);
+        await OpenFilex.open(filePath);
       }
     } catch (e) {
       if (mounted) {
