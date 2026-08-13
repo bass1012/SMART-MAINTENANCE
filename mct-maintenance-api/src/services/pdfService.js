@@ -81,7 +81,10 @@ const generateInvoiceHTML = (order) => {
   // Charger le logo en base64
   let logoBase64 = '';
   try {
-    const logoPath = path.join(__dirname, '../../public/logo-maintenance.png');
+    let logoPath = path.join(__dirname, '../../public/logo_smart.png');
+    if (!fsSync.existsSync(logoPath)) {
+      logoPath = path.join(__dirname, '../../public/logo-maintenance.png');
+    }
     if (fsSync.existsSync(logoPath)) {
       const logoBuffer = fsSync.readFileSync(logoPath);
       logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
@@ -485,7 +488,10 @@ const generateInvoicePDF = async (order) => new Promise((resolve, reject) => {
   doc.on('error', reject);
 
   try {
-    const logoPath = path.join(__dirname, '../../public/logo-maintenance.png');
+    let logoPath = path.join(__dirname, '../../public/logo_smart.png');
+    if (!fsSync.existsSync(logoPath)) {
+      logoPath = path.join(__dirname, '../../public/logo-maintenance.png');
+    }
     if (fsSync.existsSync(logoPath)) {
       doc.image(logoPath, 50, 45, { fit: [95, 55] });
     }

@@ -22,7 +22,10 @@ const generateQuotePdf = async (req, res) => {
     doc.pipe(res);
 
     // Path to Logo
-    let logoPath = path.join(__dirname, '../../../public/logo-maintenance.png');
+    let logoPath = path.join(__dirname, '../../../public/logo_smart.png');
+    if (!fs.existsSync(logoPath)) {
+      logoPath = path.join(__dirname, '../../../public/logo-maintenance.png');
+    }
     let hasLogo = fs.existsSync(logoPath);
 
     // 1. Header Logo (Shifted to Left)
