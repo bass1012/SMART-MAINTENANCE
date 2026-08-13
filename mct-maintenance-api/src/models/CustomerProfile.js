@@ -91,9 +91,10 @@ const CustomerProfile = sequelize.define('CustomerProfile', {
     allowNull: true,
     unique: true
   },
-  referred_by_customer_id: {
+  referred_by_id: {
     type: DataTypes.INTEGER,
     allowNull: true,
+    field: 'referred_by_id',
     references: {
       model: 'customer_profiles',
       key: 'id'

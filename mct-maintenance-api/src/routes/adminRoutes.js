@@ -1370,11 +1370,11 @@ router.get('/referrals', async (req, res, next) => {
 
     // Obtenir la liste distincte des IDs de parrains ayant au moins 1 filleul
     const referrersQuery = await CustomerProfile.findAll({
-      where: { referred_by_customer_id: { [Op.ne]: null } },
-      attributes: ['referred_by_customer_id'],
-      group: ['referred_by_customer_id']
+      where: { referred_by_id: { [Op.ne]: null } },
+      attributes: ['referred_by_id'],
+      group: ['referred_by_id']
     });
-    const referrerCustomerIds = referrersQuery.map(r => r.referred_by_customer_id).filter(Boolean);
+    const referrerCustomerIds = referrersQuery.map(r => r.referred_by_id).filter(Boolean);
 
     // Clause de filtrage pour les parrains
     const referrerWhere = {
@@ -1414,7 +1414,7 @@ router.get('/referrals', async (req, res, next) => {
     // Charger les filleuls pour chaque parrain
     const referrersData = await Promise.all(referrerProfiles.map(async (referrer) => {
       const filleuls = await CustomerProfile.findAll({
-        where: { referred_by_customer_id: referrer.id },
+        where: { referred_by_id: referrer.id },
         include: [{ model: User, as: 'user', attributes: ['id', 'email', 'phone'] }],
         order: [['created_at', 'DESC']]
       });
@@ -1443,7 +1443,7 @@ router.get('/referrals', async (req, res, next) => {
     }));
 
     const totalReferredCount = await CustomerProfile.count({
-      where: { referred_by_customer_id: { [Op.ne]: null } }
+      where: { referred_by_id: { [Op.ne]: null } }
     });
 
     res.json({
