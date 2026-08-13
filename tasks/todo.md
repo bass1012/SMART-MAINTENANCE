@@ -1642,3 +1642,181 @@ flutter build ipa
 3. Unifier l'identité client et fiabiliser la synchronisation hors ligne. [TERMINÉ]
 4. Formaliser la machine d'état, industrialiser migrations, tests et CI. [TERMINÉ]
 5. Renforcer l'observabilité, puis poursuivre la refactorisation et les améliorations produit. [TERMINÉ]
+
+---
+
+# Audit de préparation au déploiement — 13 août 2026
+
+## Verdict actuel
+
+**NO-GO pour un déploiement public en production.**
+
+Un déploiement interne sur le sandbox reste techniquement envisageable uniquement après la fermeture des blocages P0, la reconstruction des artefacts et des smoke tests complets. Ne lancer aucun déploiement global avec `deploy/deploy.sh` tant que les critères de sortie ci-dessous ne sont pas tous vérifiés.
+
+## Plan de stabilisation avant déploiement
+
+1. Fermer les vulnérabilités Socket.IO et d'accès aux fichiers.
+2. Assainir et valider le système de migrations sur une copie de préproduction.
+3. Rendre le dépôt et les dépendances entièrement reproductibles.
+4. Corriger la chaîne de déploiement, PM2, Redis, Nginx et les health checks.
+5. Finaliser les fonctionnalités récentes actuellement déconnectées.
+6. Produire et vérifier de nouveaux artefacts dashboard, Android et iOS.
+7. Exécuter les tests, smoke tests et contrôles de sécurité avant décision GO/NO-GO finale.
+
+## P0 — Sécurité bloquante
+
+- [ ] **Authentifier toutes les connexions Socket.IO avant l'événement `connection`.** (EN COURS)
+  - [ ] Brancher `socketAuth` avec `io.use(...)` dans `src/app.js`.
+  - [ ] Supprimer l'authentification des notifications fondée sur un simple `userId` fourni par le client.
+  - [ ] Dériver l'identifiant et le rôle exclusivement du JWT validé et de la base.
+  - [ ] Vérifier la propriété dans `mark_read` et utiliser l'utilisateur authentifié dans `mark_all_read`.
+  - [ ] Unifier l'authentification du chat et des notifications pour interdire toute socket anonyme.
+  - [ ] Ajouter des tests négatifs : socket sans token, token révoqué, usurpation d'utilisateur.
+  - [ ] Critère de clôture : aucun client non authentifié ne peut rejoindre `user:<id>` ou `role:<role>`, lire une notification tierce ou modifier son état.
+
+- [ ] **Supprimer le contournement Nginx des fichiers protégés.** (EN COURS)
+  - [ ] Restreindre Nginx aux seuls répertoires publics (`avatars`, `products`, `equipments`, `qrcodes`).
+  - [ ] Faire transiter les photos d'intervention et documents par les routes Express authentifiées (`/api/media/...`).
+  - [ ] Tester anonymement et avec deux comptes différents l'accès aux photos, rapports et documents.
+  - [ ] Critère de clôture : les médias sensibles retournent 401/404 hors périmètre et restent accessibles au propriétaire ou au rôle autorisé.
+
+- [ ] **Faire tourner et protéger les secrets locaux et historiques.**
+  - [ ] Révoquer et renouveler les secrets DB, JWT, SMTP, FineoPay, Stripe, SMS/HSMS et Redis potentiellement exposés.
+  - [ ] Retirer les `.env`, tokens et fichiers sensibles du dépôt et purger l'historique si nécessaire.
+  - [ ] Supprimer ou protéger `customer-token.txt`, `deploy/.env.production` et `deploy/.env.sandbox` avec des permissions strictes.
+  - [ ] Injecter les secrets depuis le serveur ou un coffre, jamais depuis les artefacts ou le dépôt.
+  - [ ] Ajouter un scanner de secrets bloquant dans la CI.
+  - [ ] Critère de clôture : scan propre, anciennes clés révoquées et aucun secret lisible par les autres utilisateurs du système.
+
+## P0 — Migrations et intégrité des données
+
+- [ ] **Séparer les migrations versionnées des scripts historiques ou ponctuels.**
+  - [ ] Définir une liste explicite de migrations exécutables au lieu de charger tous les fichiers `.js` du dossier.
+  - [ ] Archiver hors du chemin du runner les scripts SQLite, scripts de diagnostic et migrations destructives historiques.
+  - [ ] Auditer particulièrement les scripts capables de supprimer/recréer `orders`, `order_items` ou les tables de compétences.
+  - [ ] Interdire dans une migration l'import de la connexion Sequelize globale ; utiliser uniquement le `queryInterface` transmis par le runner.
+  - [ ] Faire remonter toute erreur : aucun `catch` de migration ne doit avaler l'échec.
+  - [ ] Rendre `migrate:status` réellement non mutatif ; il ne doit pas créer `migration_history`.
+  - [ ] Exécuter chaque migration dans une transaction lorsque le dialecte le permet et enregistrer l'historique dans la même transaction.
+  - [ ] Critère de clôture : une migration échouée provoque un rollback et n'est jamais inscrite comme exécutée.
+
+- [ ] **Valider les migrations sur une copie réelle de préproduction avant production.**
+  - [ ] Créer et vérifier une sauvegarde PostgreSQL restaurable.
+  - [ ] Auditer `migration_history` et le schéma réel avant toute exécution.
+  - [ ] Appliquer dans l'ordre les migrations ledger, webhook, outbox, notifications, identité client, offres, contacts, parrainage, compétences et promotions.
+  - [ ] Vérifier doublons financiers, lignes ambiguës/orphelines, contraintes uniques et clés étrangères.
+  - [ ] Tester un rollback documenté ou une restauration complète depuis la sauvegarde.
+  - [ ] Critère de clôture : zéro migration inattendue, zéro ligne ambiguë/orpheline et schéma conforme aux modèles Sequelize.
+
+## P1 — Dépôt, dépendances et CI reproductibles
+
+- [ ] **Remettre l'arbre Git dans un état livrable.**
+  - [ ] Examiner puis versionner ou écarter explicitement tous les nouveaux modèles, contrôleurs, routes, services, migrations et tests backend.
+  - [ ] Examiner et figer les modifications du dashboard avant livraison.
+  - [ ] Corriger la déclaration du dashboard : ajouter un `.gitmodules` valide ou convertir le gitlink en dossier normal versionné.
+  - [ ] Vérifier qu'un clone propre récupère le backend, le dashboard et le mobile sans fichiers locaux implicites.
+  - [ ] Critère de clôture : clone propre reproductible et `git status` propre avant création de l'artefact.
+
+- [ ] **Versionner et synchroniser les lockfiles.**
+  - [ ] Retirer `mct-maintenance-api/package-lock.json` de l'ignore et le versionner.
+  - [ ] Régénérer le lockfile backend depuis le manifeste validé et résoudre les divergences Nodemailer/SQLite ainsi que les dépendances extraneous.
+  - [ ] Utiliser `npm ci --omit=dev` sur le serveur au lieu de `npm install --production`.
+  - [ ] Choisir un seul lockfile/gestionnaire pour le dashboard.
+  - [ ] Épingler les versions Node et Flutter utilisées par la CI et la production.
+  - [ ] Aligner la contrainte Dart déclarée avec la version réellement exigée par `pubspec.lock`.
+  - [ ] Remplacer les dépendances Flutter déclarées avec `any` par des versions bornées.
+  - [ ] Critère de clôture : `npm ci`, `flutter pub get --enforce-lockfile` et les builds réussissent depuis un clone vierge.
+
+- [ ] **Étendre la CI à toutes les applications.**
+  - [ ] Ajouter build, typecheck et tests du dashboard.
+  - [ ] Conserver syntaxe, lint et tests backend avec une base de test isolée.
+  - [ ] Faire échouer la CI sur les avertissements Flutter retenus comme bloquants.
+  - [ ] Ajouter tests de migration PostgreSQL, scanner de secrets et vérification des fichiers non suivis requis par le build.
+  - [ ] Critère de clôture : pipeline complet vert sur le commit exact destiné au déploiement.
+
+## P1 — Infrastructure et procédure de déploiement
+
+- [ ] **Remplacer le déploiement direct actuel par une procédure sûre.**
+  - [ ] Ajouter un préflight : arbre Git propre, variables obligatoires présentes, lockfiles valides et tests verts.
+  - [ ] Effectuer une sauvegarde vérifiée avant les migrations.
+  - [ ] Exécuter les migrations contrôlées avant la bascule applicative.
+  - [ ] Déployer dans un répertoire de release versionné, puis basculer par lien symbolique ou mécanisme équivalent.
+  - [ ] Utiliser `pm2 reload` progressif avec vérification de chaque worker, pas un redémarrage aveugle.
+  - [ ] Contrôler `/live`, `/ready`, Socket.IO, outbox et workers après la bascule.
+  - [ ] Revenir automatiquement à la release précédente si les contrôles échouent.
+  - [ ] Ne plus utiliser une connexion SSH permanente en `root` ; employer un utilisateur de déploiement à privilèges limités.
+  - [ ] Critère de clôture : exercice complet sauvegarde → migration → déploiement → smoke test → rollback réussi sur préproduction.
+
+- [ ] **Corriger PM2 et l'arrêt gracieux.**
+  - [ ] Soit envoyer `process.send('ready')` après connexion DB/Redis et démarrage HTTP, soit retirer `wait_ready`.
+  - [ ] Fermer réellement le serveur HTTP, Socket.IO, les clients Redis Socket.IO, Sequelize, cron et outbox avant `process.exit`.
+  - [ ] Vérifier qu'un reload ne perd pas de requêtes et ne crée pas de doubles jobs.
+  - [ ] Critère de clôture : PM2 ne boucle pas au démarrage et chaque worker devient prêt dans le délai configuré.
+
+- [ ] **Rendre Redis obligatoire et vérifiable en production.**
+  - [ ] Ajouter `REDIS_URL` à l'environnement de production réellement injecté.
+  - [ ] Corriger `/ready` pour retourner 503 si Redis est indisponible en production.
+  - [ ] Tester blacklist JWT, rate limiting, rooms Socket.IO et révocation avec plusieurs workers PM2.
+  - [ ] Critère de clôture : perte de Redis retire l'instance du trafic et aucune sécurité ne bascule silencieusement en mémoire.
+
+- [ ] **Finaliser Nginx et TLS.**
+  - [ ] Activer HTTPS avec certificats valides et redirection HTTP → HTTPS.
+  - [ ] Ajouter des règles distinctes pour API, WebSocket, médias publics et médias protégés.
+  - [ ] Vérifier les limites d'upload, timeouts, headers de sécurité et taille des réponses.
+  - [ ] Critère de clôture : test TLS valide et aucun contenu sensible servi directement par Nginx.
+
+## P1 — Fonctionnalités récentes à raccorder
+
+- [ ] **Finaliser les demandes de contact.**
+  - [ ] Importer et exporter `ContactRequest` dans `src/models/index.js`.
+  - [ ] Monter `contactRequestRoutes` dans `src/app.js`.
+  - [ ] Appliquer et vérifier la migration de création de table.
+  - [ ] Tester création publique, liste back-office, modification, autorisations et demande de suppression de compte.
+  - [ ] Ne pas retourner un faux succès lorsque ni la persistance DB ni l'email n'ont fonctionné.
+
+- [ ] **Finaliser les offres de maintenance et abonnements annuels.**
+  - [ ] Aligner `MaintenanceOffer.js` avec les colonnes des migrations récentes.
+  - [ ] Raccorder `maintenanceOfferService` et `annualSubscriptionService` aux routes/contrôleurs réels.
+  - [ ] Tester anciennes offres, nouvelles offres, options payantes, remises annuelles et rétrocompatibilité.
+
+- [ ] **Corriger les routes administrateur de maintenance.**
+  - [ ] Remplacer `authorize(['admin'])` par le contrat attendu `authorize('admin')`.
+  - [ ] Ajouter des tests admin autorisé, manager/technicien/client refusés selon la politique retenue.
+
+## P1 — Dashboard et applications mobiles
+
+- [ ] **Définir de vraies cibles sandbox et production.**
+  - [ ] Remplacer l'URL production Flutter actuellement identique au sandbox par le domaine de production réel.
+  - [ ] Fournir un `.env.production` dashboard pointant vers l'API et le Socket.IO de production réels.
+  - [ ] Empêcher un build production si l'URL contient `sandbox`, `localhost` ou une IP privée.
+  - [ ] Vérifier les callbacks FineoPay, deep links, Firebase/APNs et CORS pour chaque environnement.
+
+- [ ] **Revalider le dashboard.**
+  - [ ] Produire un build frais depuis le commit figé.
+  - [ ] Exécuter typecheck, tests et smoke tests de toutes les nouvelles pages.
+  - [ ] Vérifier les demandes de contact, logs système, parrainage, santé système, chat et notifications.
+  - [ ] Vérifier la construction des URLs QR afin d'éviter `/api/uploads/...` si l'API retourne `/uploads/...`.
+  - [ ] Vérifier la session avec token expiré ou altéré et supprimer les logs de configuration inutiles en production.
+
+- [ ] **Revalider Flutter avant publication.**
+  - [ ] Ramener `flutter analyze` à un résultat conforme au gate CI ; audit du 13 août : 37 avertissements et 423 informations.
+  - [ ] Exécuter les tests unitaires et les 11 scénarios `integration_test` sur appareils/simulateurs représentatifs.
+  - [ ] Tester offline → online, redémarrage, photos manquantes, conflits et doubles soumissions.
+  - [ ] Ne pas publier l'AAB existant, antérieur aux dernières modifications ; produire un nouvel AAB signé.
+  - [ ] Produire et vérifier une archive iOS Release/IPA actuelle.
+  - [ ] Documenter l'injection reproductible des signatures Android, Firebase et paramètres `dart-define` dans la CI.
+  - [ ] Désactiver en release les essais automatiques vers `10.0.2.2` et `localhost` dans `ServiceApiService`.
+
+## Gate finale GO / NO-GO
+
+- [ ] Tous les blocages P0 sont fermés et couverts par des tests négatifs.
+- [ ] Arbre Git propre, commit/tag de release identifié et clone propre reproductible.
+- [ ] CI complète verte : backend, dashboard, Flutter, migrations et scan de secrets.
+- [ ] Sauvegarde PostgreSQL restaurée avec succès sur préproduction.
+- [ ] Toutes les migrations appliquées et auditées sur préproduction sans ambiguïté ni perte de données.
+- [ ] Redis validé avec plusieurs workers et `/ready` retourne 503 en cas de dépendance critique indisponible.
+- [ ] Nginx/TLS validés et médias sensibles inaccessibles anonymement.
+- [ ] Smoke tests réussis : authentification, rôles, interventions, rapports, uploads, chat, notifications, devis, paiements 50/50, remboursements, contrats et documents.
+- [ ] Dashboard, AAB Android et archive iOS reconstruits depuis le même commit de release avec les vraies URLs de production.
+- [ ] Procédure de rollback testée et temps de restauration documenté.
+- [ ] Décision finale signée : **GO production** uniquement lorsque toutes les cases précédentes sont cochées avec une preuve datée.

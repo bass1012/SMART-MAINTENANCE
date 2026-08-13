@@ -55,6 +55,8 @@ app.set('trust proxy', 1);
 const server = http.createServer(app); // nosemgrep: using-http-server - requis pour Socket.IO; en production, nginx gère le TLS
 const PORT = process.env.PORT || 3000;
 
+const { authenticateSocket } = require('./middleware/socketAuth');
+
 // Initialiser Socket.IO avec CORS
 const io = new Server(server, {
   cors: corsOptions,
@@ -62,6 +64,9 @@ const io = new Server(server, {
   transports: ['websocket', 'polling'],
   allowEIO3: true
 });
+
+// Authentifier toutes les connexions Socket.IO au niveau de la poignée de main
+io.use(authenticateSocket);
 
 // Connecter Socket.IO à Redis pour le mode cluster PM2
 const { createAdapter } = require('@socket.io/redis-adapter');

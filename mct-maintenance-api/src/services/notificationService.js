@@ -18,40 +18,70 @@ class NotificationService {
     io.on('connection', (socket) => {
       console.log(`🔌 Client connecté: ${socket.id}`);
 
-      // Authentifier l'utilisateur
-      socket.on('authenticate', (userId) => {
-        if (userId) {
-          this.connectedUsers.set(userId, socket.id);
-          socket.userId = userId;
-          console.log(`✅ Utilisateur ${userId} authentifié sur socket ${socket.id}`);
+      // Sécurité : Auto-rejoindre les rooms depuis l'utilisateur authentifié par le middleware socketAuth
+      const authenticatedUser = socket.data?.user;
+      const authenticatedUserId = socket.data?.userId || (authenticatedUser ? authenticatedUser.id : null);
+      const authenticatedUserRole = socket.data?.userRole || (authenticatedUser ? authenticatedUser.role : null);
+
+      if (authenticatedUserId) {
+        this.connectedUsers.set(authenticatedUserId, socket.id);
+        socket.userId = authenticatedUserId;
+        socket.join(`user:${authenticatedUserId}`);
+        if (authenticatedUserRole) {
+          socket.join(`role:${authenticatedUserRole}`);
+        }
+        console.log(`✅ Utilisateur #${authenticatedUserId} (${authenticatedUserRole}) authentifié et connecté sur socket ${socket.id}`);
+      }
+
+      // Événement d'authentification rétro-compatible
+      socket.on('authenticate', async (userId) => {
+        // Ignorer l'usurpation si l'utilisateur est déjà authentifié par JWT
+        const effectiveUserId = authenticatedUserId || userId;
+        if (effectiveUserId) {
+          this.connectedUsers.set(effectiveUserId, socket.id);
+          socket.userId = effectiveUserId;
+          socket.join(`user:${effectiveUserId}`);
           
-          // Rejoindre une room spécifique à l'utilisateur
-          socket.join(`user:${userId}`);
-          
-          // Rejoindre une room pour son rôle
-          User.findByPk(userId).then(user => {
-            if (user) {
-              socket.join(`role:${user.role}`);
-              console.log(`✅ Utilisateur ${userId} a rejoint la room role:${user.role}`);
+          if (!authenticatedUserRole) {
+            const u = await User.findByPk(effectiveUserId);
+            if (u) {
+              socket.join(`role:${u.role}`);
             }
-          });
+          }
         }
       });
 
-      // Marquer une notification comme lue
+      // Marquer une notification comme lue (vérification de propriété)
       socket.on('mark_read', async (notificationId) => {
         try {
-          await this.markAsRead(notificationId);
-          socket.emit('notification_read', { notificationId });
+          const userId = socket.userId || socket.data?.userId;
+          if (!userId) return;
+
+          const notification = await Notification.findByPk(notificationId);
+          if (!notification) return;
+
+          // Seul le destinataire ou un administrateur/manager peut marquer comme lue
+          const isOwner = Number(notification.user_id) === Number(userId);
+          const isAdminOrManager = ['admin', 'manager'].includes(socket.data?.userRole || socket.data?.user?.role);
+
+          if (isOwner || isAdminOrManager) {
+            await this.markAsRead(notificationId);
+            socket.emit('notification_read', { notificationId });
+          } else {
+            console.warn(`⚠️ Tentative non autorisée de mark_read sur notification #${notificationId} par user #${userId}`);
+          }
         } catch (error) {
           console.error('❌ Erreur mark_read:', error);
         }
       });
 
-      // Marquer toutes les notifications comme lues
-      socket.on('mark_all_read', async (userId) => {
+      // Marquer toutes les notifications comme lues (pour l'utilisateur connecté uniquement)
+      socket.on('mark_all_read', async (requestedUserId) => {
         try {
-          await this.markAllAsRead(userId);
+          const effectiveUserId = socket.userId || socket.data?.userId || requestedUserId;
+          if (!effectiveUserId) return;
+
+          await this.markAllAsRead(effectiveUserId);
           socket.emit('all_notifications_read');
         } catch (error) {
           console.error('❌ Erreur mark_all_read:', error);
@@ -60,9 +90,10 @@ class NotificationService {
 
       // Déconnexion
       socket.on('disconnect', () => {
-        if (socket.userId) {
-          this.connectedUsers.delete(socket.userId);
-          console.log(`🔌 Utilisateur ${socket.userId} déconnecté`);
+        const userId = socket.userId || socket.data?.userId;
+        if (userId) {
+          this.connectedUsers.delete(userId);
+          console.log(`🔌 Utilisateur ${userId} déconnecté`);
         }
       });
     });
