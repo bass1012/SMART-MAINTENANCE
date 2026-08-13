@@ -563,8 +563,13 @@ class ViewReportScreen extends StatelessWidget {
           } else if (str.startsWith('/uploads/')) {
             imageUrls.add('${AppConfig.baseUrl}$str');
           } else if (str.startsWith('/')) {
-            // path absolu - vérifier si c'est un upload ou un fichier local
-            if (File(str).existsSync()) {
+            // Fichier local ou chemin serveur relatif
+            if (!str.startsWith('/uploads/') &&
+                (str.startsWith('/data/') ||
+                    str.startsWith('/storage/') ||
+                    str.startsWith('/var/') ||
+                    str.startsWith('/Users/') ||
+                    str.startsWith('/private/'))) {
               imageUrls.add(str);
             } else {
               imageUrls.add('${AppConfig.baseUrl}$str');
@@ -632,8 +637,11 @@ class ViewReportScreen extends StatelessWidget {
               final url = uniqueUrls[index];
               final isLocalFile = !url.startsWith('http://') &&
                   !url.startsWith('https://') &&
-                  !url.startsWith('/uploads/') &&
-                  File(url).existsSync();
+                  (url.startsWith('/data/') ||
+                      url.startsWith('/storage/') ||
+                      url.startsWith('/var/') ||
+                      url.startsWith('/Users/') ||
+                      url.startsWith('/private/'));
 
               return Padding(
                 padding: const EdgeInsets.only(right: 12),
