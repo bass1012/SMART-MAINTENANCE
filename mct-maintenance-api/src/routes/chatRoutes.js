@@ -210,10 +210,14 @@ router.get('/conversations', authenticate, async (req, res) => {
     const conversationsWithTickets = conversations.map(c => {
       const convData = c.toJSON();
       const customerUserId = c.sender_id;
+      const customerProfileId = c.sender?.customerProfile?.id;
 
       // Trouver le ticket actif (non clos) ou le dernier ticket pour ce client
-      const activeTicket = tickets.find(t => t.customerId === customerUserId && t.status !== 'closed')
-        || tickets.find(t => t.customerId === customerUserId);
+      const activeTicket = tickets.find(t =>
+        (t.customerId === customerProfileId || t.customerId === customerUserId) && t.status !== 'closed'
+      ) || tickets.find(t =>
+        (t.customerId === customerProfileId || t.customerId === customerUserId)
+      );
 
       convData.ticket = activeTicket ? {
         id: activeTicket.id,
@@ -269,13 +273,11 @@ router.get('/conversation/:userId', authenticate, async (req, res) => {
     }
 
     // Récupérer la conversation entre l'admin et ce client spécifique
-    // - Messages envoyés PAR le client (sender_id = userId)
-    // - Messages envoyés par les admins À ce client (sender_role = 'admin' AND recipient_id = userId)
     const messages = await ChatMessage.findAll({
       where: {
         [Op.or]: [
-          { sender_id: parseInt(userId) },                         // Messages du client
-          { sender_role: 'admin', recipient_id: parseInt(userId) } // Messages des admins POUR ce client
+          { sender_id: parseInt(userId) },
+          { sender_role: 'admin', recipient_id: parseInt(userId) }
         ]
       },
       include: [
@@ -344,9 +346,7 @@ router.get('/unread-count', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Admin voit tous les messages non lus des clients
-    // Client voit ses messages non lus
-    const whereClause = req.user.role === 'admin' || req.user.role === 'technician'
+    const whereClause = req.user.role === 'admin' || req.user.role !== 'customer'
       ? { is_read: false, sender_role: 'customer' }
       : { is_read: false, sender_id: { [require('sequelize').Op.ne]: userId } };
 
@@ -372,9 +372,6 @@ router.delete('/history', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Supprimer tous les messages de l'utilisateur
-    // - Messages envoyés par l'utilisateur (sender_id = userId)
-    // - Messages reçus par l'utilisateur (recipient_id = userId)
     const deletedCount = await ChatMessage.destroy({
       where: {
         [Op.or]: [
@@ -383,8 +380,6 @@ router.delete('/history', authenticate, async (req, res) => {
         ]
       }
     });
-
-    console.log(`🗑️ [Chat] ${deletedCount} message(s) supprimé(s) pour l'utilisateur ${userId}`);
 
     res.json({
       success: true,
@@ -403,7 +398,6 @@ router.delete('/history', authenticate, async (req, res) => {
 // Supprimer une conversation spécifique (admin uniquement)
 router.delete('/conversation/:userId', authenticate, async (req, res) => {
   try {
-    // Vérifier que l'utilisateur est admin
     if (req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -411,9 +405,8 @@ router.delete('/conversation/:userId', authenticate, async (req, res) => {
       });
     }
 
-    const targetUserId = parseInt(req.params.userId);
+    const targetUserId = parseInt(req.params.userId, 10);
 
-    // Supprimer tous les messages liés à cet utilisateur
     const deletedCount = await ChatMessage.destroy({
       where: {
         [Op.or]: [
@@ -422,8 +415,6 @@ router.delete('/conversation/:userId', authenticate, async (req, res) => {
         ]
       }
     });
-
-    console.log(`🗑️ [Chat] Admin ${req.user.id} a supprimé ${deletedCount} message(s) de l'utilisateur ${targetUserId}`);
 
     res.json({
       success: true,
@@ -456,19 +447,32 @@ router.post('/conversations/:userId/assign', authenticate, async (req, res, next
     const assignedAgentId = req.user.id;
     const assignedAgentName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'Agent';
 
-    const { SupportTicket } = require('../models');
+    const { SupportTicket, CustomerProfile, User } = require('../models');
 
-    // Trouver ou créer le ticket de support pour cet utilisateur
+    // Trouver ou créer le profil client pour dériver customer_id (clé étrangère de support_tickets)
+    let customerProfile = await CustomerProfile.findOne({ where: { user_id: targetUserId } });
+    if (!customerProfile) {
+      const user = await User.findByPk(targetUserId);
+      customerProfile = await CustomerProfile.create({
+        user_id: targetUserId,
+        first_name: user?.first_name || 'Client',
+        last_name: user?.last_name || `#${targetUserId}`
+      });
+    }
+
+    const customerProfileId = customerProfile.id;
+
+    // Trouver ou créer le ticket de support pour ce profil client
     let ticket = await SupportTicket.findOne({
       where: {
-        customerId: targetUserId,
+        customerId: [customerProfileId, targetUserId],
         status: { [Op.ne]: 'closed' }
       }
     });
 
     if (!ticket) {
       ticket = await SupportTicket.create({
-        customerId: targetUserId,
+        customerId: customerProfileId,
         assignedAgentId,
         status: 'in_progress'
       });
@@ -479,7 +483,7 @@ router.post('/conversations/:userId/assign', authenticate, async (req, res, next
       });
     }
 
-    console.log(`📌 [Chat] Ticket #${ticket.id} pour l'utilisateur ${targetUserId} attribué à l'agent ${assignedAgentId} (${assignedAgentName})`);
+    console.log(`📌 [Chat] Ticket #${ticket.id} (customer_id: ${customerProfileId}) pour l'utilisateur ${targetUserId} attribué à l'agent ${assignedAgentId} (${assignedAgentName})`);
 
     const io = require('../services/socketService').getIO();
     if (io) {
@@ -521,18 +525,30 @@ router.post('/conversations/:userId/close', authenticate, async (req, res, next)
 
     const targetUserId = parseInt(req.params.userId, 10);
     const { category, notes } = req.body;
-    const { SupportTicket } = require('../models');
+    const { SupportTicket, CustomerProfile, User } = require('../models');
+
+    let customerProfile = await CustomerProfile.findOne({ where: { user_id: targetUserId } });
+    if (!customerProfile) {
+      const user = await User.findByPk(targetUserId);
+      customerProfile = await CustomerProfile.create({
+        user_id: targetUserId,
+        first_name: user?.first_name || 'Client',
+        last_name: user?.last_name || `#${targetUserId}`
+      });
+    }
+
+    const customerProfileId = customerProfile.id;
 
     let ticket = await SupportTicket.findOne({
       where: {
-        customerId: targetUserId,
+        customerId: [customerProfileId, targetUserId],
         status: { [Op.ne]: 'closed' }
       }
     });
 
     if (!ticket) {
       ticket = await SupportTicket.create({
-        customerId: targetUserId,
+        customerId: customerProfileId,
         assignedAgentId: req.user.id,
         status: 'closed',
         category: category || 'Support Général',
@@ -548,7 +564,7 @@ router.post('/conversations/:userId/close', authenticate, async (req, res, next)
       });
     }
 
-    console.log(`🔒 [Chat] Ticket #${ticket.id} clôturé pour l'utilisateur ${targetUserId} par ${req.user.id} - Catégorie: ${category}`);
+    console.log(`🔒 [Chat] Ticket #${ticket.id} (customer_id: ${customerProfileId}) clôturé pour l'utilisateur ${targetUserId} par ${req.user.id}`);
 
     const io = require('../services/socketService').getIO();
     if (io) {
