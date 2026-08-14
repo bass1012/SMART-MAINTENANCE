@@ -401,6 +401,100 @@ router.get('/dashboard/quick-stats', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/dashboard/pending-callbacks
+ * Récupère les demandes de rappel en attente (status 'pending' ou 'in_progress')
+ */
+router.get('/dashboard/pending-callbacks', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const callbacks = await ContactRequest.findAll({
+      where: {
+        status: { [Op.in]: ['pending', 'in_progress'] }
+      },
+      limit,
+      order: [['created_at', 'DESC']],
+      include: [
+        {
+          model: CustomerProfile,
+          as: 'customer',
+          attributes: ['id', 'first_name', 'last_name'],
+          include: [
+            {
+              model: User,
+              as: 'user',
+              attributes: ['email']
+            }
+          ]
+        }
+      ]
+    });
+
+    res.json({
+      success: true,
+      data: callbacks
+    });
+  } catch (error) {
+    console.error('❌ Erreur récupération pending-callbacks:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des demandes de rappel',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PATCH /api/admin/dashboard/callbacks/:id/resolve
+ * Met à jour le statut et la note de résolution d'une demande de rappel
+ */
+router.patch('/dashboard/callbacks/:id/resolve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status = 'resolved', notes, resolutionNotes } = req.body;
+
+    const callback = await ContactRequest.findByPk(id);
+    if (!callback) {
+      return res.status(404).json({
+        success: false,
+        message: 'Demande de rappel non trouvée'
+      });
+    }
+
+    const targetNotes = (notes || resolutionNotes || '').trim();
+
+    if (status === 'resolved' && !targetNotes) {
+      return res.status(400).json({
+        success: false,
+        message: 'Un commentaire de résolution expliquant l’action réalisée est obligatoire pour clore la demande.'
+      });
+    }
+
+    callback.status = status;
+    if (targetNotes) {
+      callback.resolutionNotes = targetNotes;
+      callback.message = callback.message
+        ? `${callback.message}\n\n[Action/Résolution]: ${targetNotes}`
+        : `[Action/Résolution]: ${targetNotes}`;
+    }
+
+    await callback.save();
+
+    res.json({
+      success: true,
+      message: 'Demande de rappel mise à jour avec succès',
+      data: callback
+    });
+  } catch (error) {
+    console.error('❌ Erreur résolution callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la mise à jour de la demande de rappel',
+      error: error.message
+    });
+  }
+});
+
 // Analytics & Reporting routes
 router.get('/analytics/stats', analyticsController.getGlobalStats);
 router.get('/analytics/technicians', analyticsController.getTechnicianPerformance);
