@@ -13,6 +13,22 @@ import 'services/location_tracking_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Intercepter les erreurs de rendu UI
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    if (kDebugMode) {
+      debugPrint('❌ Flutter UI Error: ${details.exceptionAsString()}');
+    }
+  };
+
+  // Intercepter les erreurs asynchrones hors boucle UI
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    if (kDebugMode) {
+      debugPrint('❌ Unhandled Async Error: $error\n$stack');
+    }
+    return true; // Empêcher le crash brutal de l'application
+  };
+
   // Initialiser le service de Deep Link pour FineoPay
   DeepLinkService().initialize();
 

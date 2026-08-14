@@ -1,3 +1,20 @@
+# Implémentation des 3 Compétences de Stabilité & Résilience SMART MAINTENANCE — 14 août 2026
+
+- [x] **1. Skill `smart-resilience-and-stability` (Backend & Socket.IO)**
+  - [x] Vérification et renforcement de la gestion des `uncaughtException` et `unhandledRejection` dans `src/server.js` / `src/app.js`
+  - [x] Audit du Graceful Shutdown (`SIGTERM`/`SIGINT`) et fermeture propre des pools DB/Redis/Socket.IO
+  - [x] Validation des délais de timeout Socket.IO pour la résilience réseau mobile (3G/4G)
+- [x] **2. Skill `smart-flutter-offline-resilience` (Mobile Flutter)**
+  - [x] Implémentation du Handler d'erreurs globales Flutter (`FlutterError.onError` & `PlatformDispatcher.onError` dans `main.dart`)
+  - [x] Audit de la libération des ressources (`dispose()`, `Timer.cancel()`, `mounted` guards)
+  - [x] Validation de l'isolation SQLite et sérialisation des accès hors-ligne (`LocalCacheService`)
+- [x] **3. Skill `smart-observability-and-monitoring` (Performance & Pool DB)**
+  - [x] Audit et optimisation du pool de connexions Sequelize PostgreSQL dans `src/config/database.js`
+  - [x] Verification de la gestion des requêtes lentes et de la queue de tâches Outbox (`outboxWorker.js`)
+  - [x] Validation complète avec `flutter analyze` (0 erreur) et `npm test` (196/196 passés)
+
+---
+
 # Audit & Hardening de Cybersécurité SMART MAINTENANCE — 13 août 2026
 
 - [x] **1. Audit Backend Express (`mct-maintenance-api`)**

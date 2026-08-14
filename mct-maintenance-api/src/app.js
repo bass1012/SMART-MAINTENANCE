@@ -287,21 +287,49 @@ const startServer = async () => {
 
 startServer();
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  cronService.stopAllJobs();
-  await outboxWorker.stop();
-  await disconnectRedis();
-  process.exit(0);
+// Graceful shutdown & Gestion des erreurs globales
+const gracefulShutdown = async (signal) => {
+  console.log(`⚠️ ${signal} reçu, fermeture propre du serveur...`);
+  try {
+    cronService.stopAllJobs();
+    await outboxWorker.stop();
+
+    if (io) {
+      io.close();
+      console.log('🔌 Connexions Socket.IO fermées');
+    }
+
+    await disconnectRedis();
+
+    const { sequelize } = require('./config/database');
+    await sequelize.close();
+    console.log('💾 Pool de connexions base de données fermé');
+
+    server.close(() => {
+      console.log('🛑 Serveur HTTP arrêté proprement');
+      process.exit(0);
+    });
+
+    // Forcer la fermeture si le serveur HTTP met plus de 10s à se fermer
+    setTimeout(() => {
+      console.error('⚠️ Arrêt forcé après délai d\'attente');
+      process.exit(1);
+    }, 10000);
+  } catch (err) {
+    console.error('❌ Erreur lors de la fermeture propre:', err.message);
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ CRITIQUE: Unhandled Rejection capturée:', reason);
 });
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully');
-  cronService.stopAllJobs();
-  await outboxWorker.stop();
-  await disconnectRedis();
-  process.exit(0);
+process.on('uncaughtException', (error) => {
+  console.error('❌ CRITIQUE: Uncaught Exception capturée:', error);
 });
 
 module.exports = app;
