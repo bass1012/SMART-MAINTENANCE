@@ -826,13 +826,13 @@ router.get('/reports/:interventionId/download', async (req, res, next) => {
       },
       include: [
         {
-          model: User,
+          model: CustomerProfile,
           as: 'customer',
-          attributes: ['id', 'email', 'first_name', 'last_name', 'phone'],
+          attributes: ['id', 'first_name', 'last_name'],
           include: [{
-            model: CustomerProfile,
-            as: 'customerProfile',
-            attributes: ['first_name', 'last_name']
+            model: User,
+            as: 'user',
+            attributes: ['id', 'email', 'phone', 'first_name', 'last_name']
           }]
         }
       ]
@@ -886,13 +886,14 @@ router.get('/reports/:interventionId/download', async (req, res, next) => {
     };
 
     // Enrichir customer
-    const customer = intervention.customer;
-    const customerName = customer ? 
-      (customer.customerProfile ? 
-        `${customer.customerProfile.first_name} ${customer.customerProfile.last_name}` :
-        `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || customer.email
+    const customerProfile = intervention.customer;
+    const customerUser = customerProfile?.user;
+    const customerName = customerProfile ? 
+      (customerProfile.first_name && customerProfile.last_name ? 
+        `${customerProfile.first_name} ${customerProfile.last_name}` :
+        (customerUser ? `${customerUser.first_name || ''} ${customerUser.last_name || ''}`.trim() || customerUser.email : 'Client')
       ) : 'Client inconnu';
-    const customerPhone = customer?.phone || 'Non renseigné';
+    const customerPhone = customerUser?.phone || 'Non renseigné';
 
     // Générer HTML du rapport
     const html = ` // nosemgrep: raw-html-format
