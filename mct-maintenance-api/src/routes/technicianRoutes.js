@@ -893,6 +893,7 @@ router.get('/reports/:interventionId/download', async (req, res, next) => {
         `${customerProfile.first_name} ${customerProfile.last_name}` :
         (customerUser ? `${customerUser.first_name || ''} ${customerUser.last_name || ''}`.trim() || customerUser.email : 'Client')
       ) : 'Client inconnu';
+    const customerEmail = customerUser?.email || 'Non renseigné';
     const customerPhone = customerUser?.phone || 'Non renseigné';
 
     // Générer HTML du rapport
@@ -983,7 +984,7 @@ router.get('/reports/:interventionId/download', async (req, res, next) => {
     <div class="info-section">
       <h3>👤 Informations Client</h3>
       <div class="info-row"><span class="label">Nom:</span> ${escapeHtml(customerName) /* nosemgrep: raw-html-format */}</div>
-      <div class="info-row"><span class="label">Email:</span> ${(escapeHtml(customer?.email) || 'Non renseigné') /* nosemgrep: raw-html-format */}</div>
+      <div class="info-row"><span class="label">Email:</span> ${escapeHtml(customerEmail) /* nosemgrep: raw-html-format */}</div>
       <div class="info-row"><span class="label">Téléphone:</span> ${escapeHtml(customerPhone) /* nosemgrep: raw-html-format */}</div>
     </div>
   </div>
