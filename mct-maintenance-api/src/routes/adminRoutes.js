@@ -5,7 +5,7 @@ const technicianController = require('../controllers/technician/technicianContro
 
 const router = express.Router();
 const { Op } = require('sequelize');
-const { User, CustomerProfile, TechnicianProfile, Intervention, Order, Subscription, MaintenanceOffer, InstallationService, RepairService, Complaint, SystemConfig, sequelize } = require('../models');
+const { User, CustomerProfile, TechnicianProfile, Intervention, Order, Subscription, MaintenanceOffer, InstallationService, RepairService, Complaint, SystemConfig, ContactRequest, sequelize } = require('../models');
 
 // All admin routes require authentication and admin/manager role
 router.use(authenticate);
@@ -370,6 +370,13 @@ router.get('/dashboard/quick-stats', async (req, res) => {
       }
     });
 
+    // Demandes de rappel en attente (pending ou in_progress)
+    const pendingContactRequests = await ContactRequest.count({
+      where: {
+        status: { [Op.in]: ['pending', 'in_progress'] }
+      }
+    });
+
     res.json({
       success: true,
       data: {
@@ -380,7 +387,8 @@ router.get('/dashboard/quick-stats', async (req, res) => {
         },
         openComplaints,
         pendingOrders,
-        newCustomers
+        newCustomers,
+        pendingContactRequests
       }
     });
   } catch (error) {
