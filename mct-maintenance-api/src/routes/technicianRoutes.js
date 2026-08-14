@@ -974,16 +974,17 @@ router.get('/reports/:interventionId/download', async (req, res, next) => {
     }
 
     // Section 4: Mesures Techniques (Diagnostic)
-    if (reportData.pression || reportData.freon || reportData.tension || reportData.intensite) {
+    if (reportData.pression || reportData.freon || reportData.tension || reportData.intensite || reportData.puissance) {
       doc.fillColor('#0a543d').font('Helvetica-Bold').fontSize(12).text('RELEVÉS TECHNIQUES', 40, y);
       doc.moveTo(40, y + 16).lineTo(555, y + 16).lineWidth(1).stroke('#0a543d');
       y += 25;
       doc.rect(40, y, 515, 40).fillAndStroke('#f5f5f5', '#e0e0e0');
       doc.fillColor('#333333').font('Helvetica').fontSize(9);
-      doc.text(`Pression : ${reportData.pression || 'N/A'}`, 50, y + 14);
-      doc.text(`Fréon : ${reportData.freon || 'N/A'}`, 170, y + 14);
-      doc.text(`Tension : ${reportData.tension || 'N/A'}`, 290, y + 14);
-      doc.text(`Intensité : ${reportData.intensite || 'N/A'}`, 410, y + 14);
+      doc.text(`Pression : ${reportData.pression || 'N/A'}`, 48, y + 14);
+      doc.text(`Fréon : ${reportData.freon || 'N/A'}`, 145, y + 14);
+      doc.text(`Puissance : ${reportData.puissance || 'N/A'}`, 245, y + 14);
+      doc.text(`Tension : ${reportData.tension || 'N/A'}`, 355, y + 14);
+      doc.text(`Intensité : ${reportData.intensite || 'N/A'}`, 455, y + 14);
       y += 55;
     }
 
