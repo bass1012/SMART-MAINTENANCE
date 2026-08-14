@@ -896,142 +896,104 @@ router.get('/reports/:interventionId/download', async (req, res, next) => {
     const customerEmail = customerUser?.email || 'Non renseigné';
     const customerPhone = customerUser?.phone || 'Non renseigné';
 
-    // Générer HTML du rapport
-    const html = ` // nosemgrep: raw-html-format
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 40px;
-      color: #333;
-    }
-    .header {
-      text-align: center;
-      border-bottom: 3px solid #0a543d;
-      padding-bottom: 20px;
-      margin-bottom: 30px;
-    }
-    h1 { color: #0a543d; margin-bottom: 10px; }
-    .info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 30px;
-    }
-    .info-section {
-      background: #f5f5f5;
-      padding: 15px;
-      border-radius: 8px;
-    }
-    .info-section h3 {
-      color: #0a543d;
-      margin-top: 0;
-      margin-bottom: 10px;
-      font-size: 16px;
-    }
-    .info-row {
-      margin-bottom: 8px;
-    }
-    .label {
-      font-weight: bold;
-      color: #555;
-    }
-    .section {
-      margin-bottom: 25px;
-    }
-    .section h2 {
-      color: #0a543d;
-      border-bottom: 2px solid #0a543d;
-      padding-bottom: 8px;
-      margin-bottom: 15px;
-    }
-    .description-box {
-      background: #f9f9f9;
-      padding: 15px;
-      border-left: 4px solid #0a543d;
-      border-radius: 4px;
-      margin-bottom: 15px;
-    }
-    .footer {
-      text-align: center;
-      margin-top: 50px;
-      padding-top: 20px;
-      border-top: 1px solid #ddd;
-      color: #888;
-      font-size: 12px;
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>RAPPORT D'INTERVENTION</h1>
-    <p style="font-size: 18px; color: #666;">MCT Maintenance</p>
-  </div>
+    // Générer le PDF binaire natif avec PDFKit
+    const PDFDocument = require('pdfkit');
+    const path = require('path');
+    const fs = require('fs');
 
-  <div class="info-grid">
-    <div class="info-section">
-      <h3>📋 Informations Intervention</h3>
-      <div class="info-row"><span class="label">Référence:</span> #${Number(intervention.id) /* nosemgrep: raw-html-format */}</div>
-      <div class="info-row"><span class="label">Titre:</span> ${escapeHtml(intervention.title) /* nosemgrep: raw-html-format */}</div>
-      <div class="info-row"><span class="label">Adresse:</span> ${(escapeHtml(intervention.address) || 'Non spécifiée') /* nosemgrep: raw-html-format */}</div>
-      <div class="info-row"><span class="label">Date:</span> ${new Date(intervention.report_submitted_at).toLocaleDateString('fr-FR') /* nosemgrep: raw-html-format */}</div>
-      <div class="info-row"><span class="label">Durée:</span> ${(Number(reportData.duration) || 0) /* nosemgrep: raw-html-format */} minutes</div>
-    </div>
+    const doc = new PDFDocument({ 
+      margin: 40, 
+      size: 'A4',
+      bufferPages: true
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="rapport-${intervention.id}.pdf"`);
+    doc.pipe(res);
 
-    <div class="info-section">
-      <h3>👤 Informations Client</h3>
-      <div class="info-row"><span class="label">Nom:</span> ${escapeHtml(customerName) /* nosemgrep: raw-html-format */}</div>
-      <div class="info-row"><span class="label">Email:</span> ${escapeHtml(customerEmail) /* nosemgrep: raw-html-format */}</div>
-      <div class="info-row"><span class="label">Téléphone:</span> ${escapeHtml(customerPhone) /* nosemgrep: raw-html-format */}</div>
-    </div>
-  </div>
+    // Path to Logo
+    let logoPath = path.join(__dirname, '../../public/logo_smart.png');
+    if (!fs.existsSync(logoPath)) {
+      logoPath = path.join(__dirname, '../../public/logo-maintenance.png');
+    }
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 40, 30, { fit: [120, 55] });
+    }
 
-  <div class="section">
-    <h2>🔧 Travail Effectué</h2>
-    <div class="description-box">
-      ${escapeHtml(reportData.work_description) || 'Aucune description'}
-    </div>
-  </div>
+    // Entête du document
+    doc.font('Helvetica-Bold').fontSize(16).fillColor('#0a543d')
+       .text('RAPPORT D\'INTERVENTION', 180, 35, { align: 'right' });
+    doc.font('Helvetica').fontSize(10).fillColor('#666666')
+       .text('MCT Maintenance - Service Professionnel', 180, 56, { align: 'right' });
 
-  ${reportData.observations ? `
-  <div class="section">
-    <h2>📝 Observations</h2>
-    <div class="description-box">
-      ${escapeHtml(reportData.observations)}
-    </div>
-  </div>
-  ` : ''}
+    doc.moveTo(40, 95).lineTo(555, 95).lineWidth(2).stroke('#0a543d');
 
-  ${reportData.materials_used && Array.isArray(reportData.materials_used) && reportData.materials_used.length > 0 ? `
-  <div class="section">
-    <h2>🛠️ Matériel Utilisé</h2>
-    <ul>
-      ${reportData.materials_used.map(m => `<li>${(escapeHtml(m) || 'Item') /* nosemgrep: raw-html-format */}</li>`).join('')}
-    </ul>
-  </div>
-  ` : ''}
+    // Section 1: Encadrés Informations (Intervention & Client)
+    let y = 110;
 
-  ${reportData.photos_count > 0 ? `
-  <div class="section">
-    <h2>📸 Photos Jointes</h2>
-    <p>${Number(reportData.photos_count) /* nosemgrep: raw-html-format */} photo(s) disponible(s)</p>
-  </div>
-  ` : ''}
+    // Encadré Intervention (Gauche)
+    doc.rect(40, y, 250, 110).fillAndStroke('#f5f5f5', '#e0e0e0');
+    doc.fillColor('#0a543d').font('Helvetica-Bold').fontSize(11).text('INFORMATIONS INTERVENTION', 50, y + 10);
+    doc.fillColor('#333333').font('Helvetica').fontSize(9);
+    doc.text(`Rapport N° : #${intervention.id}`, 50, y + 28);
+    doc.text(`Titre : ${intervention.title || 'Intervention'}`, 50, y + 42, { width: 230 });
+    doc.text(`Adresse : ${intervention.address || 'Non spécifiée'}`, 50, y + 56, { width: 230 });
+    const dateStr = intervention.report_submitted_at ? new Date(intervention.report_submitted_at).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR');
+    doc.text(`Date : ${dateStr}`, 50, y + 70);
+    doc.text(`Durée : ${reportData.duration || 0} min`, 50, y + 84);
 
-  <div class="footer">
-    <p>MCT Maintenance - Service de maintenance professionnel</p>
-    <p>Rapport généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}</p>
-  </div>
-</body>
-</html>
-    `;
+    // Encadré Client (Droite)
+    doc.rect(305, y, 250, 110).fillAndStroke('#f5f5f5', '#e0e0e0');
+    doc.fillColor('#0a543d').font('Helvetica-Bold').fontSize(11).text('INFORMATIONS CLIENT', 315, y + 10);
+    doc.fillColor('#333333').font('Helvetica').fontSize(9);
+    doc.text(`Nom : ${customerName}`, 315, y + 28, { width: 230 });
+    doc.text(`Email : ${customerEmail}`, 315, y + 42, { width: 230 });
+    doc.text(`Téléphone : ${customerPhone}`, 315, y + 56, { width: 230 });
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="rapport-${intervention.id}.html"`);
-    res.send(html);
+    y += 125;
+
+    // Section 2: Travail Effectué
+    doc.fillColor('#0a543d').font('Helvetica-Bold').fontSize(12).text('TRAVAIL EFFECTUÉ', 40, y);
+    doc.moveTo(40, y + 16).lineTo(555, y + 16).lineWidth(1).stroke('#0a543d');
+    y += 25;
+    doc.rect(40, y, 515, 60).fillAndStroke('#fafafa', '#e0e0e0');
+    doc.fillColor('#333333').font('Helvetica').fontSize(9)
+       .text(reportData.work_description || 'Aucune description fournie', 50, y + 10, { width: 495 });
+
+    y += 75;
+
+    // Section 3: Observations
+    if (reportData.observations) {
+      doc.fillColor('#0a543d').font('Helvetica-Bold').fontSize(12).text('OBSERVATIONS & RECOMMANDATIONS', 40, y);
+      doc.moveTo(40, y + 16).lineTo(555, y + 16).lineWidth(1).stroke('#0a543d');
+      y += 25;
+      doc.rect(40, y, 515, 50).fillAndStroke('#fafafa', '#e0e0e0');
+      doc.fillColor('#333333').font('Helvetica').fontSize(9)
+         .text(reportData.observations, 50, y + 10, { width: 495 });
+      y += 65;
+    }
+
+    // Section 4: Mesures Techniques (Diagnostic)
+    if (reportData.pression || reportData.freon || reportData.tension || reportData.intensite) {
+      doc.fillColor('#0a543d').font('Helvetica-Bold').fontSize(12).text('RELEVÉS TECHNIQUES', 40, y);
+      doc.moveTo(40, y + 16).lineTo(555, y + 16).lineWidth(1).stroke('#0a543d');
+      y += 25;
+      doc.rect(40, y, 515, 40).fillAndStroke('#f5f5f5', '#e0e0e0');
+      doc.fillColor('#333333').font('Helvetica').fontSize(9);
+      doc.text(`Pression : ${reportData.pression || 'N/A'}`, 50, y + 14);
+      doc.text(`Fréon : ${reportData.freon || 'N/A'}`, 170, y + 14);
+      doc.text(`Tension : ${reportData.tension || 'N/A'}`, 290, y + 14);
+      doc.text(`Intensité : ${reportData.intensite || 'N/A'}`, 410, y + 14);
+      y += 55;
+    }
+
+    // Footer
+    const pageHeight = doc.page.height;
+    doc.moveTo(40, pageHeight - 50).lineTo(555, pageHeight - 50).lineWidth(0.5).stroke('#cccccc');
+    doc.fillColor('#888888').font('Helvetica').fontSize(8)
+       .text(`MCT Maintenance • Rapport d'intervention généré le ${new Date().toLocaleDateString('fr-FR')}`, 40, pageHeight - 40, { align: 'center' });
+
+    doc.end();
 
     console.log(`✅ PDF rapport ${interventionId} téléchargé`);
   } catch (error) {
